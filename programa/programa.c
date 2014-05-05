@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <commons/config.h>
 
-#define IP "127.0.0.1"
+#define IP "127.0.0.1" //Esto hay que cargarlo por archivo de config, que esta en la variable de entorno ANSISOP_CONFIG
 #define PUERTO "6667"
 
 
@@ -23,37 +23,35 @@ int tamanioArchivo(FILE *archivo);
 int main(int argc, char *argv[])
 {
 	struct addrinfo hints;
-	struct addrinfo *serverInfo;
+	struct addrinfo *kernelInfo;
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 
-	/*t_config *config=config_create("programa.conf"); 	el arch de config se saca de la variable de entorno ANSISOP_CONFIG, lo cual ni idea
+	/*t_config *config=config_create("ubicacion?"); 	Para leer el arch de config
 	int ipKernel = config_get_int_value(config, "IP");
 	int puertoKernel = config_get_int_value(config, "Puerto");*/
 
-	getaddrinfo(IP, PUERTO, &hints, &serverInfo); 	//Carga los datos de la conexion
-	int serversocket = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
+	getaddrinfo(IP, PUERTO, &hints, &kernelInfo); 	//Carga los datos de la conexion
+	int socketKernel = socket(kernelInfo->ai_family, kernelInfo->ai_socktype, kernelInfo->ai_protocol);
 
-	if(connect(serversocket, serverInfo->ai_addr, serverInfo->ai_addrlen)==-1){
-		printf("Error:No se pudo conectar con el kernel");
+	if(connect(socketKernel, kernelInfo->ai_addr, kernelInfo->ai_addrlen)==-1){
+		printf("Error:No se pudo conectar con el kernel \n");
 		exit(1);
 	}
-	freeaddrinfo(serverInfo); 						//Ya no se necesita la info
+	freeaddrinfo(kernelInfo); 						//Ya no se necesita la info
 
-	char rutaInterprete[80];
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript = tamanioArchivo(scriptAProcesar);
 	char script[tamanioScript];
 	int i=0;
 
-	fgets(rutaInterprete,80,scriptAProcesar);
 	while(!feof(scriptAProcesar))
-		script[i++]=fgetc(scriptAProcesar);
+	script[i++]=fgetc(scriptAProcesar);
 
-	send(serversocket, script, tamanioScript, 0);
+	send(socketKernel, script, tamanioScript, 0);
 
-	close(serversocket);
+	close(socketKernel);
 	fclose(scriptAProcesar);
 	return 0;
 }
