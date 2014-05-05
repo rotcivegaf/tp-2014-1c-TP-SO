@@ -16,8 +16,9 @@
 
 #define IP "127.0.0.1"
 #define PUERTO "6667"
-#define CARACTXLINEA 100
 
+
+int tamanioArchivo(FILE *archivo);
 
 int main(int argc, char *argv[])
 {
@@ -33,21 +34,35 @@ int main(int argc, char *argv[])
 
 	getaddrinfo(IP, PUERTO, &hints, &serverInfo); 	//Carga los datos de la conexion
 	int serversocket = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
-	connect(serversocket, serverInfo->ai_addr, serverInfo->ai_addrlen);
+
+	if(connect(serversocket, serverInfo->ai_addr, serverInfo->ai_addrlen)==-1){
+		printf("Error:No se pudo conectar con el kernel");
+		exit(1);
+	}
 	freeaddrinfo(serverInfo); 						//Ya no se necesita la info
 
-	char linea[CARACTXLINEA];
+	char rutaInterprete[80];
 	FILE *scriptAProcesar = fopen(argv[1],"r");
+	int tamanioScript = tamanioArchivo(scriptAProcesar);
+	char script[tamanioScript];
+	int i=0;
 
-	fgets(linea,CARACTXLINEA,scriptAProcesar);		//Para que no tome la primera
-	while(!feof(scriptAProcesar)){
-		fgets(linea,CARACTXLINEA,scriptAProcesar);
-		send(serversocket, linea, strlen(linea) + 1, 0);
-	}
+	fgets(rutaInterprete,80,scriptAProcesar);
+	while(!feof(scriptAProcesar))
+		script[i++]=fgetc(scriptAProcesar);
+
+	send(serversocket, script, tamanioScript, 0);
 
 	close(serversocket);
 	fclose(scriptAProcesar);
 	return 0;
+}
+
+int tamanioArchivo(FILE *archivo){
+	fseek(archivo, 0L, SEEK_END);
+	int tamanio = ftell(archivo);
+	fseek(archivo,0L, SEEK_SET);
+	return tamanio;
 }
 
 
