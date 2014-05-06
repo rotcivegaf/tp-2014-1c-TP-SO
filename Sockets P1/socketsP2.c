@@ -17,7 +17,7 @@
 #define IP INADDR_ANY  //INADDR_ANY guarda mi IP (ESTO DEBERIA SER UNA VARIABLE GLOBAL DE TODO EL SIST PORQUE ES EL IP DEL PROCESO AL QUE ME VOY A CONECTAR)
 #define PUERTO 3550  //El puerto al que me voy a conectar (idem)
 
-int main(){
+/*int main(){
 
 	int descriptorSocket;
 	struct sockaddr_in cliente;
@@ -36,6 +36,6 @@ int main(){
 
 
 
-}
+}*/
 
 

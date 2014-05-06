@@ -12,22 +12,22 @@
 #include <errno.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netdb.h>
 #include <sys/un.h>
+#include <netdb.h>
+#include <unistd.h>
 
 #define PUERTO 3550  //El puerto que será abierto
 #define BACKLOG 2 //Es la cantidad de conexiones permitidas
 #define IP INADDR_ANY  //INADDR_ANY guarda mi IP
+#define BUFFERSIZE 100 //tamaño de lo que se recibe
 
 int main (){
 
 
 	int descriptorSocket; // aca se guarda el descriptor que va a devolver la funcion socket
-	struct sockaddr_in servidor;	//estructura p guardar info del socket creado
-	int tamanio;	// tamaño de la estructura de la conexion entrate
-	int descriptorSocketCliente; //aca se guarda la info de la conexion entrante
-	char buffer[tamanio];
-	int n; //cantidad de bytes leidos en READ
+	struct sockaddr_in servidor,cliente;	//estructura p guardar info de las conexiones
+	int descriptorSocketCliente;
+	char buffer[BUFFERSIZE];
 
 	// SOCKET crea el socket y me devuelve su direcion o '-1' si da error
 	descriptorSocket =socket(AF_INET, SOCK_STREAM, 0);	//crea el socket y me devuelve su direcion o '-1' si da error
@@ -36,8 +36,8 @@ int main (){
 	exit(1);
 	}
 
-	servidor.sin_family = AF_UNIX;
-	servidor.sin_addr= IP;
+	servidor.sin_family = AF_UNSPEC;
+	servidor.sin_addr.s_addr= IP;
 	memset(&servidor.sin_zero, 0, sizeof servidor.sin_zero[8]); //memset inicializa el vector con ceros
 	servidor.sin_port= htons(PUERTO); //asigno un puerto
 
@@ -54,17 +54,14 @@ int main (){
 	   }
 
 	// ACCEPT las coneciones de clientes al sistema operativo
-	tamanio=sizeof(struct sockaddr_in);
-	if ((descriptorSocketCliente=accept(descriptorSocket,(struct sockaddr *)&servidor,&tamanio))<0)
-	{
-		printf("error en accept()\n");
-		exit(0);
-	}
+	socklen_t sin_size = sizeof(struct sockaddr_in);
+	descriptorSocketCliente=accept(descriptorSocket,(struct sockaddr *)&cliente,&sin_size);
+
 
 	//READ recibe datos a travez del descriptor de socket
-	if ((n=read(descriptorSocket, buffer, tamanio))<0)
+	if ((recv(descriptorSocket, (void *) buffer, BUFFERSIZE,0))<0)
 	{
-		printf("error en read()\n");
+		printf("error en recv()\n");
 		exit(0);
 	}
 
@@ -72,11 +69,8 @@ int main (){
 	int b=0;
 
 	//CLOSE cierra el socket
-	if (close(descriptorSocket)!=0)
-	{
-		printf("error en close()\n");
-		exit(0);
-	}
+	close(descriptorSocket);
+	close(descriptorSocketCliente);
 
 	if (a>0){
 		b=2*a;
