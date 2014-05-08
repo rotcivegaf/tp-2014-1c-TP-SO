@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <commons/string.h>
+#include <commons/config.h>
 
 #define MAX 50
 
@@ -13,35 +14,29 @@ void algoritmo(char *modo);
 void compactar();
 void dump();
 
+void *ptrMemoria;
 
 int main()
 {
-	FILE *archConfig;
-	char cadTamanio[10];
-	char modo[10];
-	long tamanio;
+
 	char **arrayComando;
 	char entrada[100];
 	int a;
+	void *ptrConfig;
 
-	archConfig = fopen("umv_config.txt","r");
+	extern void *ptrMemoria;
 
-	while (feof(archConfig) == 0)
-		{
-		fgets (cadTamanio, MAX, archConfig);
-		fgets (modo,MAX,archConfig);
-		}
+	ptrConfig = config_create("umv_config.txt");
 
-	tamanio = atoi(cadTamanio);
-	encabezado(tamanio, modo);
-	fclose(archConfig);
+	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
+
+	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
 
 	printf("UMV >> ");
 	fgets(entrada, MAX, stdin);
-
-	arrayComando = string_get_string_as_array(entrada);
+	arrayComando =  string_get_string_as_array(entrada);
 	a = clasificarComando(arrayComando[0]);
-
+	printf("%s ---- %d",arrayComando[0],a);
 
 	while (a != 6)
 	{
@@ -65,10 +60,10 @@ int main()
 				printf("Comando desconocido");
 				break;
 			}
+
 		printf("\nUMV >> ");
 		fgets(entrada, MAX, stdin);
-
-		arrayComando = string_get_string_as_array(entrada);
+		arrayComando =  string_get_string_as_array(entrada);
 		a = clasificarComando(arrayComando[0]);
 	}
 	return 0;
@@ -83,9 +78,15 @@ int clasificarComando (char *comando)
 	if (!strcmp(comando,"algoritmo")) a=3;
 	if (!strcmp(comando,"compactacion")) a=4;
 	if (!strcmp(comando,"dump")) a=5;
-	if (!strcmp(comando,"exit")) a=6;
+	if (!strcmp(comando,"exit"))
+		{
+		a=6;
+		free(ptrMemoria);
+		}
+	printf("%d",a);
 	return a;
 }
+
 
 void operacion(int proceso, int base, int offset, int tamanio)
 {
