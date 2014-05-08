@@ -1,0 +1,2 @@
+tamanio=26214400
+modo=WorstFit
