@@ -34,9 +34,10 @@ int main()
 
 	printf("UMV >> ");
 	fgets(entrada, MAX, stdin);
+	printf("%s",entrada);
 	arrayComando =  string_get_string_as_array(entrada);
 	a = clasificarComando(arrayComando[0]);
-	printf("%s",arrayComando[0]);
+	printf("\n%s--%s\n",arrayComando[0],arrayComando[1]);
 
 	while (a != 6)
 	{
