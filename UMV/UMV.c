@@ -36,7 +36,7 @@ int main()
 	fgets(entrada, MAX, stdin);
 	arrayComando =  string_get_string_as_array(entrada);
 	a = clasificarComando(arrayComando[0]);
-	printf("%s ---- %d",arrayComando[0],a);
+	printf("%s",arrayComando[0]);
 
 	while (a != 6)
 	{
