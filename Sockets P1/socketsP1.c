@@ -15,19 +15,22 @@
 #include <sys/un.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
-#define PUERTO 3550  //El puerto que será abierto
-#define BACKLOG 2 //Es la cantidad de conexiones permitidas
-#define IP INADDR_ANY  //INADDR_ANY guarda mi IP
-#define BUFFERSIZE 100 //tamaño de lo que se recibe
 
-int main (){
+#define PUERTO 6667  //El puerto que será abierto
+#define BACKLOG 1 //Es la cantidad de conexiones permitidas
+#define IP "127.0.0.1"
+#define BUFFERSIZE 1024 //tamaño de lo que se recibe
+
+int srvBasico (){
 
 
 	int descriptorSocket; // aca se guarda el descriptor que va a devolver la funcion socket
 	struct sockaddr_in servidor,cliente;	//estructura p guardar info de las conexiones
 	int descriptorSocketCliente;
 	char buffer[BUFFERSIZE];
+	int readSize; //tamanio de lo que llega
 
 	// SOCKET crea el socket y me devuelve su direcion o '-1' si da error
 	descriptorSocket =socket(AF_INET, SOCK_STREAM, 0);	//crea el socket y me devuelve su direcion o '-1' si da error
@@ -36,8 +39,8 @@ int main (){
 	exit(1);
 	}
 
-	servidor.sin_family = AF_UNSPEC;
-	servidor.sin_addr.s_addr= IP;
+	servidor.sin_family = AF_INET;
+	servidor.sin_addr.s_addr= inet_addr(IP);
 	memset(&servidor.sin_zero, 0, sizeof servidor.sin_zero[8]); //memset inicializa el vector con ceros
 	servidor.sin_port= htons(PUERTO); //asigno un puerto
 
@@ -58,25 +61,20 @@ int main (){
 	descriptorSocketCliente=accept(descriptorSocket,(struct sockaddr *)&cliente,&sin_size);
 
 
-	//READ recibe datos a travez del descriptor de socket
-	if ((recv(descriptorSocket, (void *) buffer, BUFFERSIZE,0))<0)
-	{
-		printf("error en recv()\n");
-		exit(0);
+	//RECV recibe datos a travez del descriptor de socket
+
+	while((readSize = recv(descriptorSocket, (void*) buffer, BUFFERSIZE, 0))>0){
+		buffer[readSize]='\0';
+		printf("%s", buffer);
 	}
 
-	int a=buffer[0];
-	int b=0;
+	if (readSize==0)
+		printf("Cliente desconectado");
 
 	//CLOSE cierra el socket
 	close(descriptorSocket);
 	close(descriptorSocketCliente);
 
-	if (a>0){
-		b=2*a;
-	}
-	printf("%d\n",b);
-	return a;
+	return 0;
 }
-
 
