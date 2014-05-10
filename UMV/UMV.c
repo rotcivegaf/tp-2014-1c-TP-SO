@@ -3,6 +3,9 @@
 #include <string.h>
 #include <commons/string.h>
 #include <commons/config.h>
+#include <commons/dictionary.h>
+#include <commons/list.h>
+
 
 #define MAX 50
 
@@ -15,6 +18,9 @@ void compactar();
 void dump();
 
 void *ptrMemoria;
+void *tablaProgramas;
+char modoOperacion;
+
 
 int main()
 {
@@ -31,6 +37,8 @@ int main()
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
 
 	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
+
+	tablaProgramas = dictionary_create();
 
 	printf("UMV >> ");
 	fgets(entrada, MAX, stdin);
@@ -119,4 +127,61 @@ void encabezado(long byte, char *modo)
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
 }
+
+void crearSegmento(int id_Prog, int tamanio)
+{
+	void *lista;
+	struct tabMem
+	{
+		int memLogica;
+		int longitud;
+		int memFisica;
+	};
+	struct tabMem nodoTab;
+
+	nodoTab.memFisica = asignarMemoria(modoOperacion);
+	nodoTab.longitud = tamanio;
+
+
+	if dictionary_has_key(tablaProgramas, id_Prog)
+
+	else
+
+		lista = listCreate();
+
+
+
+		list_add(lista,nodoTab);
+		dictionary_put(tablaProgramas, id_Prog, lista);
+
+
+}
+
+
+
+
+/*
+ * prueba.c
+ *
+ *  Created on: 09/05/2014
+ *      Author: utnso
+ */
+
+
+#include<stdio.h>
+#include<stdlib.h>
+#include<commons/string.h>
+
+int prueba(){
+	 char* dato;
+	 dato = malloc(10);
+	 dato="1,2,3,4";
+	 char **imprimir=string_get_string_as_array(dato);
+
+	 printf("%s \n",dato);
+	 printf("%s",imprimir[0]);
+	 return 0;
+}
+
+
 
