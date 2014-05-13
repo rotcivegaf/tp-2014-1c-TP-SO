@@ -3,8 +3,12 @@
 #include <string.h>
 #include <commons/string.h>
 #include <commons/config.h>
-#include <commons/dictionary.h>
-#include <commons/list.h>
+
+#include <commons/collections/dictionary.h>
+#include <commons/collections/list.h>
+
+
+
 
 
 #define MAX 50
@@ -16,10 +20,17 @@ void retardo(int milisegundos);
 void algoritmo(char *modo);
 void compactar();
 void dump();
+int asignarMemoria(char modo);
 
 void *ptrMemoria;
 void *tablaProgramas;
 char modoOperacion;
+
+typedef struct t_tabMem {
+	int memLogica;
+	int longitud;
+	int memFisica;
+	} TabMen;
 
 
 int main()
@@ -42,10 +53,9 @@ int main()
 
 	printf("UMV >> ");
 	fgets(entrada, MAX, stdin);
-	printf("%s",entrada);
-	arrayComando =  string_get_string_as_array(entrada);
+	arrayComando =  string_split(entrada," ");
 	a = clasificarComando(arrayComando[0]);
-	printf("\n%s--%s\n",arrayComando[0],arrayComando[1]);
+
 
 	while (a != 6)
 	{
@@ -72,7 +82,7 @@ int main()
 
 		printf("\nUMV >> ");
 		fgets(entrada, MAX, stdin);
-		arrayComando =  string_get_string_as_array(entrada);
+		arrayComando =  string_split(entrada," ");
 		a = clasificarComando(arrayComando[0]);
 	}
 	return 0;
@@ -108,7 +118,10 @@ void retardo(int milisegundos)
 
 void algoritmo(char *modo)
 {
-	printf("algoritmo");
+	if (!strcmp(modo,"WorstFit") || !strcmp(modo,"FirstFit"))
+		modoOperacion=modo[0];
+	else
+		printf("Modo incorrecto");
 }
 void compactar()
 {
@@ -128,60 +141,39 @@ void encabezado(long byte, char *modo)
 	printf("Espacio reservado: %ld bytes\n", byte);
 }
 
-void crearSegmento(int id_Prog, int tamanio)
+
+
+void crearSegmento(char *id_Prog, int tamanio)
 {
 	void *lista;
-	struct tabMem
-	{
-		int memLogica;
-		int longitud;
-		int memFisica;
-	};
-	struct tabMem nodoTab;
-
-	nodoTab.memFisica = asignarMemoria(modoOperacion);
-	nodoTab.longitud = tamanio;
+	TabMen *nodoTab = malloc(sizeof(TabMen));
 
 
-	if dictionary_has_key(tablaProgramas, id_Prog)
+	nodoTab->memLogica = 0;
+	nodoTab->longitud = tamanio;
+	nodoTab->memFisica = asignarMemoria(modoOperacion);
 
+	if (dictionary_has_key(tablaProgramas, id_Prog))
+		{
+		lista = dictionary_get(tablaProgramas,id_Prog);
+		list_add(lista,nodoTab);
+		}
 	else
-
-		lista = listCreate();
-
-
-
+	{
+		lista = list_create();
 		list_add(lista,nodoTab);
 		dictionary_put(tablaProgramas, id_Prog, lista);
-
+	}
 
 }
 
 
 
-
-/*
- * prueba.c
- *
- *  Created on: 09/05/2014
- *      Author: utnso
- */
-
-
-#include<stdio.h>
-#include<stdlib.h>
-#include<commons/string.h>
-
-int prueba(){
-	 char* dato;
-	 dato = malloc(10);
-	 dato="1,2,3,4";
-	 char **imprimir=string_get_string_as_array(dato);
-
-	 printf("%s \n",dato);
-	 printf("%s",imprimir[0]);
-	 return 0;
+int asignarMemoria(char modo)
+{
+	return 0;
 }
+
 
 
 
