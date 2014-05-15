@@ -42,14 +42,23 @@ int main(int argc, char *argv[])
 	}
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
-	int tamanioScript = tamanioArchivo(scriptAProcesar);
-	char script[tamanioScript];
+	int *tamanioScript = malloc(sizeof (int));
+	*tamanioScript=tamanioArchivo(scriptAProcesar);
+	char script[*tamanioScript];
+
+
+	/*
+	//Envia el tamanio del script
+	send(socketKernel,tamanioScript,sizeof (int),0);
+	*/
+
 	int i=0;
-
+	//Lee el script
 	while(!feof(scriptAProcesar))
-	script[i++]=fgetc(scriptAProcesar);
+		script[i++]=fgetc(scriptAProcesar);
 
-	send(socketKernel, script, tamanioScript, 0);
+	send(socketKernel, script, *tamanioScript, 0);
+
 
 	close(socketKernel);
 	fclose(scriptAProcesar);
