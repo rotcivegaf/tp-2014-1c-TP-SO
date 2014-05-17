@@ -21,10 +21,16 @@ void algoritmo(char *modo);
 void compactar();
 void dump();
 int asignarMemoria(char modo);
+void recorrerTablaSegmentos();
+
+void recorrerLista(void *ptrLista);
+
+
 
 void *ptrMemoria;
 void *tablaProgramas;
 char modoOperacion;
+void *listaAuxiliar;
 
 typedef struct t_tabMem {
 	int memLogica;
@@ -32,14 +38,23 @@ typedef struct t_tabMem {
 	int memFisica;
 	} TabMen;
 
+typedef struct t_auxiliar {
+	int ptrInicio;
+	int ptrFin;
+	void *ptrATabla;
+	} ListAuxiliar;
+
+
+void completarListaAuxiliar(TabMen *nodo);
+
 
 int main()
 {
 
 	char **arrayComando;
-	char entrada[100];
 	int a;
 	void *ptrConfig;
+	char entrada[100];
 
 	extern void *ptrMemoria;
 
@@ -52,10 +67,9 @@ int main()
 	tablaProgramas = dictionary_create();
 
 	printf("UMV >> ");
-	fgets(entrada, MAX, stdin);
+	gets(entrada);
 	arrayComando =  string_split(entrada," ");
 	a = clasificarComando(arrayComando[0]);
-
 
 	while (a != 6)
 	{
@@ -80,14 +94,13 @@ int main()
 				break;
 			}
 
-		printf("\nUMV >> ");
-		fgets(entrada, MAX, stdin);
-		arrayComando =  string_split(entrada," ");
-		a = clasificarComando(arrayComando[0]);
+	printf("\nUMV >> ");
+	gets(entrada);
+	arrayComando =  string_split(entrada," ");
+	a = clasificarComando(arrayComando[0]);
 	}
 	return 0;
 }
-
 
 int clasificarComando (char *comando)
 {
@@ -123,9 +136,26 @@ void algoritmo(char *modo)
 	else
 		printf("Modo incorrecto");
 }
+
 void compactar()
 {
-	printf("compactar");
+	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
+	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
+	int x;
+
+	recorrerTablaSegmentos();
+	list_sort(listaAuxiliar, <);
+	for (x=0;x<list_size(listaAuxiliar)-1;x++){
+		p1 = list_get(listaAuxiliar,x);
+		p2 = list_get(listaAuxiliar,x+1);
+
+		if (p2->ptrInicio != (p1->ptrFin) +1)
+		{
+			//desplazarMemoria(deDonde,ADonde);
+			//actualizarDiccionario(nuevoInicio,DireccionDelNodoAActualizar)
+		}
+	}
+	list_destroy(listaAuxiliar);
 }
 
 void dump()
@@ -142,12 +172,10 @@ void encabezado(long byte, char *modo)
 }
 
 
-
 void crearSegmento(char *id_Prog, int tamanio)
 {
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
-
 
 	nodoTab->memLogica = 0;
 	nodoTab->longitud = tamanio;
@@ -167,8 +195,6 @@ void crearSegmento(char *id_Prog, int tamanio)
 
 }
 
-
-
 int asignarMemoria(char modo)
 {
 	return 0;
@@ -176,4 +202,25 @@ int asignarMemoria(char modo)
 
 
 
+void recorrerTablaSegmentos()
+{
+	listaAuxiliar= list_create();
+	dictionary_iterator(tablaProgramas,recorrerLista);
+}
 
+void recorrerLista(void *ptrLista){
+	list_iterate(ptrLista,completarListaAuxiliar);
+}
+
+void completarListaAuxiliar(TabMen *nodo)
+{
+	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
+
+	nodoAux->ptrInicio = nodo->memFisica;
+	nodoAux->ptrFin = nodo->memFisica + nodo->longitud;
+	nodoAux->ptrATabla = nodo;
+
+	list_add(listaAuxiliar, nodoAux);
+}
+
+// error en el sort y en los iterator
