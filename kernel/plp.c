@@ -16,14 +16,16 @@
 #include <arpa/inet.h>
 #include <parser/metadata_program.h>
 
-#define PUERTO 6667  		//El puerto que será abierto
+#include "planificadores.h"
+
 #define BACKLOG 1 			//Es la cantidad de conexiones permitidas
 #define IP "127.0.0.1"
 #define MAXSIZE 1024
 
+void *crearPCB(char *script);
 
-int main(){
-
+void *plp(){
+	extern int puerto_programas;
 	int socketKernel,socketPrograma;
 	struct sockaddr_in kernel,programa;	//Estructuras en las que se guarda la info de las conexiones
 
@@ -33,7 +35,7 @@ int main(){
 	kernel.sin_family = AF_INET;
 	kernel.sin_addr.s_addr= inet_addr(IP);
 	memset(&kernel.sin_zero, 0, sizeof kernel.sin_zero[8]);
-	kernel.sin_port= htons(PUERTO);
+	kernel.sin_port= htons(puerto_programas);
 
 	//Para setear en que puerto e ip va a escuchar el srv
 	if(bind(socketKernel,(struct sockaddr*)&kernel,sizeof(struct sockaddr))==-1) {
@@ -56,20 +58,27 @@ int main(){
 
 	recv(socketPrograma , script , MAXSIZE , 0);
 
-	t_medatada_program* metadata;
-	metadata = metadata_desde_literal(script);
-	//Esto es de prueba, metadata hay que mandarlo a una funcion para que cree el pcb por ejemplo
-	printf("Cantidad de etiquetas %i\n",metadata->cantidad_de_etiquetas);
-	printf("Cantidad de funciones %i\n",metadata->cantidad_de_funciones);
-	printf("Etiquetas %s\n",metadata->etiquetas);
-	printf("Tamaño del mapa serializado de etiquetas %i\n",metadata->etiquetas_size);
-	printf("Tamaño del mapa serializado de instrucciones %i\n",metadata->instrucciones_size);
-	printf("El numero de la primera instruccion es %i\n",metadata->instruccion_inicio);
-
 	close(socketPrograma);
 	close(socketKernel);
-	return 0;
 
+	return 0;
 }
 
+void *crearPCB(char *script){
+	typedef struct{
+		int id;
+		int *segmento_codigo;
+		int *segmento_stack;
+		int *cursor_stack;
+		int *indice_codigo;
+		int *indice_etiquetas;
+		int program_counter;
+		int tamanio_context;
+		int tamanio_indice_etiquetas;
+	}pcb;
 
+	t_medatada_program* metadata;
+	metadata = metadata_desde_literal(script);
+
+	return 0;
+}
