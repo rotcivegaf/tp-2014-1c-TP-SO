@@ -137,6 +137,10 @@ void algoritmo(char *modo)
 		printf("Modo incorrecto");
 }
 
+bool CompararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2){
+	return nodo1->ptrInicio < nodo2->ptrInicio;
+}
+
 void compactar()
 {
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
@@ -144,7 +148,7 @@ void compactar()
 	int x;
 
 	recorrerTablaSegmentos();
-	list_sort(listaAuxiliar, <);
+	list_sort(listaAuxiliar, CompararListaAuxiliar);
 	for (x=0;x<list_size(listaAuxiliar)-1;x++){
 		p1 = list_get(listaAuxiliar,x);
 		p2 = list_get(listaAuxiliar,x+1);
@@ -201,14 +205,13 @@ int asignarMemoria(char modo)
 }
 
 
-
 void recorrerTablaSegmentos()
 {
 	listaAuxiliar= list_create();
 	dictionary_iterator(tablaProgramas,recorrerLista);
 }
 
-void recorrerLista(void *ptrLista){
+void recorrerLista(char* clave, void *ptrLista){
 	list_iterate(ptrLista,completarListaAuxiliar);
 }
 
@@ -222,5 +225,4 @@ void completarListaAuxiliar(TabMen *nodo)
 
 	list_add(listaAuxiliar, nodoAux);
 }
-
 // error en el sort y en los iterator
