@@ -155,7 +155,7 @@ void compactar()
 
 		if (p2->ptrInicio != (p1->ptrFin) +1)
 		{
-			//desplazarMemoria(deDonde,ADonde);
+			//desplazarMemoria(deDonde,ADonde) con memcopy;
 			//actualizarDiccionario(nuevoInicio,DireccionDelNodoAActualizar)
 		}
 	}
