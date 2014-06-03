@@ -6,7 +6,7 @@
 
 #include <commons/collections/dictionary.h>
 #include <commons/collections/list.h>
-
+#include <stdbool.h>
 
 
 
@@ -20,10 +20,10 @@ void retardo(int milisegundos);
 void algoritmo(char *modo);
 void compactar();
 void dump();
-int asignarMemoria(char modo);
+int asignarMemoria(int tamanio);
 void recorrerTablaSegmentos();
+void recorrerLista(char *clave, void *ptrLista);
 
-void recorrerLista(void *ptrLista);
 
 
 
@@ -46,6 +46,7 @@ typedef struct t_auxiliar {
 
 
 void completarListaAuxiliar(TabMen *nodo);
+bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
 
 
 int main()
@@ -137,8 +138,8 @@ void algoritmo(char *modo)
 		printf("Modo incorrecto");
 }
 
-bool CompararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2){
-	return nodo1->ptrInicio < nodo2->ptrInicio;
+bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
+	return ((nodo1->ptrInicio) < (nodo2->ptrInicio));
 }
 
 void compactar()
@@ -146,17 +147,23 @@ void compactar()
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int x;
+	TabMen *actualizar;
+
 
 	recorrerTablaSegmentos();
-	list_sort(listaAuxiliar, CompararListaAuxiliar);
+	list_sort(listaAuxiliar, compararListaAuxiliar);
 	for (x=0;x<list_size(listaAuxiliar)-1;x++){
 		p1 = list_get(listaAuxiliar,x);
 		p2 = list_get(listaAuxiliar,x+1);
 
 		if (p2->ptrInicio != (p1->ptrFin) +1)
 		{
-			//desplazarMemoria(deDonde,ADonde) con memcopy;
-			//actualizarDiccionario(nuevoInicio,DireccionDelNodoAActualizar)
+			memcpy(ptrMemoria + (p1->ptrFin+1),ptrMemoria+(p2->ptrInicio,p2),(p2->ptrFin - p2->ptrInicio));
+			actualizar = p2->ptrATabla;
+			actualizar->memFisica = p1->ptrFin+1;
+			p2->ptrFin = p1->ptrFin+1 + (p2->ptrFin - p2->ptrInicio);
+			p2->ptrInicio = p1->ptrFin+1;
+
 		}
 	}
 	list_destroy(listaAuxiliar);
@@ -183,7 +190,7 @@ void crearSegmento(char *id_Prog, int tamanio)
 
 	nodoTab->memLogica = 0;
 	nodoTab->longitud = tamanio;
-	nodoTab->memFisica = asignarMemoria(modoOperacion);
+	nodoTab->memFisica = asignarMemoria(tamanio);
 
 	if (dictionary_has_key(tablaProgramas, id_Prog))
 		{
@@ -199,8 +206,63 @@ void crearSegmento(char *id_Prog, int tamanio)
 
 }
 
-int asignarMemoria(char modo)
+int asignarMemoria(int tamanio)
 {
+
+	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
+	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
+	int x;
+	int espacioDisponible;
+	int hayEspacio;
+	int seCompacto;
+	struct peorEspacio {
+		int espacio;
+		int offset;
+	};
+
+	struct peorEspacio pE;
+
+	seCompacto =0;
+	hayEspacio = 0;
+
+	recorrerTablaSegmentos();
+	list_sort(listaAuxiliar, compararListaAuxiliar);
+
+	etiqueta_1:
+	for (x=0;x<list_size(listaAuxiliar)-1;x++){
+		p1 = list_get(listaAuxiliar,x);
+		p2 = list_get(listaAuxiliar,x+1);
+
+		if (p2->ptrInicio != (p1->ptrFin) +1){
+			espacioDisponible = (p2->ptrInicio - p1->ptrFin);
+			if (espacioDisponible >= tamanio)
+			{
+				hayEspacio=1;
+				switch (modoOperacion){
+					case'F':
+						{
+							return (p1->ptrFin+1);
+							break;
+						}
+					case 'W':
+						{
+						if (espacioDisponible > pE.espacio){
+							pE.espacio = espacioDisponible;
+							pE.offset = p1->ptrFin+1;
+							}
+						break;
+						}
+				}
+			}
+				if (hayEspacio) return pE.offset;
+				if (!hayEspacio && !seCompacto){
+					seCompacto = 1;
+					compactar();
+					goto etiqueta_1;
+				}
+				if (!hayEspacio && seCompacto) return -1;
+		}
+	}
 	return 0;
 }
 
@@ -225,4 +287,4 @@ void completarListaAuxiliar(TabMen *nodo)
 
 	list_add(listaAuxiliar, nodoAux);
 }
-// error en el sort y en los iterator
+// error en los iterator, en el memcopy
