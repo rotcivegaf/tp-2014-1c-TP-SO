@@ -148,7 +148,8 @@ void compactar()
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int x;
 	TabMen *actualizar;
-
+	void *aux1;
+	void *aux2;
 
 	recorrerTablaSegmentos();
 	list_sort(listaAuxiliar, compararListaAuxiliar);
@@ -158,7 +159,11 @@ void compactar()
 
 		if (p2->ptrInicio != (p1->ptrFin) +1)
 		{
-			memcpy(ptrMemoria + (p1->ptrFin+1),ptrMemoria+(p2->ptrInicio,p2),(p2->ptrFin - p2->ptrInicio));
+			int aux = (p1->ptrFin)+1;
+			aux1 = (&ptrMemoria + aux);
+			aux = p2->ptrInicio;
+			aux2 = (&ptrMemoria + aux);
+			memcpy(aux1, aux2,(p2->ptrFin - p2->ptrInicio));
 			actualizar = p2->ptrATabla;
 			actualizar->memFisica = p1->ptrFin+1;
 			p2->ptrFin = p1->ptrFin+1 + (p2->ptrFin - p2->ptrInicio);
@@ -288,3 +293,4 @@ void completarListaAuxiliar(TabMen *nodo)
 	list_add(listaAuxiliar, nodoAux);
 }
 // error en los iterator, en el memcopy
+// revisar como se le asigna memoria al primer nodo
