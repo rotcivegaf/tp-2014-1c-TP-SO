@@ -5,22 +5,13 @@
  *      Author: utnso
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 #include <parser/metadata_program.h>
 #include <commons/collections/list.h>
 #include "planificadores.h"
+#include "funciones.h"
 
 #define BACKLOG 1 			//Es la cantidad de conexiones permitidas
 #define IP "127.0.0.1"
-#define MAXSIZE 1024
 
 typedef struct{
 		int id;
@@ -32,14 +23,13 @@ typedef struct{
 		int program_counter;
 		int tamanio_context;
 		int tamanio_indice_etiquetas;
-		char* etiquetas;				//Dsp va en el segmento indice de etiquetas
-		t_intructions*	instrucciones_serializado;  //Dsp va en el segmento indice de codigo
-		int cant_lineas_codigo;
 		int peso;
+		int socket_asociado;
 }estructura_pcb;
 
-estructura_pcb* crearPCB(char *script);
-int calcular_peso(t_metadata_program *metadata, int cant_lineas_cod);
+estructura_pcb* crearPCB(t_medatada_program *metadata, int socket);
+int calcularPeso(t_metadata_program *metadata);
+int pedirSegmento(int idPrograma, int tamanio, int socket);
 
 void *plp(){
 	/*bool comparar_peso(estructura_pcb *pcb1,estructura_pcb *pcb2){
@@ -48,65 +38,73 @@ void *plp(){
 
 	t_list *cola_new = list_create();
 
-	extern int puerto_programas;
-	int socketKernel,socketPrograma;
-	struct sockaddr_in kernel,programa;	//Estructuras en las que se guarda la info de las conexiones
+	extern int puerto_programas,puerto_umv;
+	int socketKernel,socketPrograma,socketUmv;
+	struct sockaddr_in programa;	//Estructuras en las que se guarda la info de las conexiones
 
-	socketKernel=socket(AF_INET, SOCK_STREAM, 0);
-
-	//Seteo de ip, puerto y protocolo del srv
-	kernel.sin_family = AF_INET;
-	kernel.sin_addr.s_addr= inet_addr(IP);
-	memset(&kernel.sin_zero, 0, sizeof kernel.sin_zero[8]);
-	kernel.sin_port= htons(puerto_programas);
-
-	//Para setear en que puerto e ip va a escuchar el kernel
-	if(bind(socketKernel,(struct sockaddr*)&kernel,sizeof(struct sockaddr))==-1) {
-		printf("error en bind() \n");
-		exit(-1);
-	}
+	socketKernel = servidor(IP,puerto_programas);
+	socketUmv = conectarse(IP,puerto_umv);
 
 	listen(socketKernel,BACKLOG);
-
 	socklen_t sin_size = sizeof(struct sockaddr_in);
 	socketPrograma = accept(socketKernel, (struct sockaddr *)&programa, &sin_size);
 
-	/*
-	int *tamanioScript=malloc(sizeof (int));
-	recv(socketPrograma,tamanioScript,sizeof (int),0);
-	printf("%d",*tamanioScript);
-	*/
+	//Recepcion y deserializacion del script (quizas convenga hacerlo una funcion)
+	int *script_size = malloc(sizeof(int));
+	recv(socketPrograma , script_size , sizeof(int) , 0);
+	char *script = malloc(*script_size);
+	recv(socketPrograma , script , *script_size , 0);
 
-	char *script=malloc(MAXSIZE); //el MAXSIZE deberia cambiarse por la variable tamanioScript
+	t_medatada_program *metadata = metadata_desde_literal(script);
+	estructura_pcb *pcb=crearPCB(metadata,socketPrograma);
 
-	recv(socketPrograma , script , MAXSIZE , 0);
+	//Pedir segmentos a la umv
+	//Si se pudieron pedir los 4:
+	//Envio el contenido de cada uno a la umv para que los guarde
+	//Agrego el pcb a la cola de new:
+		//list_add(cola_new, pcb);
+		//list_sort(cola_new,comparar_peso);
+	//Si el grado de multiprog me deja, lo paso de new a ready
 
-	estructura_pcb *pcb=crearPCB(script);
-	list_add(cola_new, pcb);
-	//list_sort(cola_new,comparar_peso);
-
-	close(socketPrograma);
 	close(socketKernel);
-	free(script);
-	free(cola_new);
+	//free(cola_new);
 	return 0;
 }
 
-estructura_pcb* crearPCB(char *script){
+estructura_pcb* crearPCB(t_medatada_program *metadata, int socket){
 	estructura_pcb *pcb=malloc(sizeof(estructura_pcb));
-	t_medatada_program *metadata = metadata_desde_literal(script);
 
 	pcb->program_counter = metadata->instruccion_inicio;
 	pcb->tamanio_indice_etiquetas = metadata->etiquetas_size;
-	pcb->etiquetas=metadata->etiquetas;
-	pcb->instrucciones_serializado = metadata->instrucciones_serializado;
-	pcb->cant_lineas_codigo = metadata->instrucciones_size; 		//Suponiendo que la cant de lineas de codigo sea la cant de instrucc
-	pcb->peso = calcular_peso(metadata,pcb->cant_lineas_codigo);
+	pcb->peso = calcularPeso(metadata);
+	pcb->socket_asociado = socket;
 
 	return pcb;
 }
 
-int calcular_peso(t_metadata_program *metadata, int cant_lineas_codigo){
-	return (5 * (metadata->cantidad_de_etiquetas) + 3 * (metadata->cantidad_de_funciones) + cant_lineas_codigo);
+int calcularPeso(t_metadata_program *metadata){
+	return (5 * (metadata->cantidad_de_etiquetas) + 3 * (metadata->cantidad_de_funciones) + (metadata->instrucciones_size));
+}
+
+int pedirSegmento(int id_programa, int tamanio, int socket){
+	int *pedido = malloc(sizeof(int) *3);
+	int id_mensaje = 1;
+	int direcc_segmento;
+
+	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
+	memcpy(pedido+sizeof(id_mensaje),&id_programa,sizeof(id_programa));
+	memcpy(pedido+sizeof(id_mensaje)+sizeof(id_programa),&tamanio,sizeof(tamanio));
+
+	send(socket,pedido,sizeof(int)*3,0);
+	recv(socket,&direcc_segmento,sizeof(int),0);
+
+	return direcc_segmento;
+}
+
+int pedirDestruirSegmentos(int id_programa,int socket){
+	int *pedido = malloc(sizeof(int));
+	*pedido = 2;
+	send(socket,pedido,sizeof(int),0);
+	return 0;
 }
 

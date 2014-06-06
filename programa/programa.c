@@ -21,28 +21,25 @@ int main(int argc, char *argv[])
 	int puertoKernel = config_get_int_value(config, "PUERTO");*/
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
-	int *tamanioScript = malloc(sizeof (int));
-	*tamanioScript=tamanioArchivo(scriptAProcesar);
-	char script[*tamanioScript];
+	int tamanioScript=tamanioArchivo(scriptAProcesar);
+	char *script = malloc(tamanioScript);
 
 	int socket=conectarse(IP,PUERTO);
-
-	/*
-	//Envia el tamanio del script
-	send(socketKernel,tamanioScript,sizeof (int),0);
-	*/
 
 	int i=0;
 	//Lee el script
 	while(!feof(scriptAProcesar))
 		script[i++]=fgetc(scriptAProcesar);
 
-	send(socket, &script, *tamanioScript, 0);
+	char *script_serializado = malloc(sizeof(int)+tamanioScript);
+	memcpy(script_serializado,&tamanioScript,sizeof(int));
+	memcpy(script_serializado+sizeof(int),script,tamanioScript);
 
+	send(socket,script_serializado,sizeof(int)+tamanioScript,0);
 
 	close(socket);
 	fclose(scriptAProcesar);
-	free(tamanioScript);
+	free(script);
 	return 0;
 }
 
