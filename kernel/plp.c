@@ -28,7 +28,7 @@ typedef struct{
 }estructura_pcb;
 
 estructura_pcb* crearPCB(t_medatada_program *metadata, int socket);
-int calcularPeso(t_metadata_program *metadata);
+int calcularPeso(t_medatada_program *metadata);
 int pedirSegmento(int idPrograma, int tamanio, int socket);
 
 void *plp(){
@@ -82,7 +82,7 @@ estructura_pcb* crearPCB(t_medatada_program *metadata, int socket){
 	return pcb;
 }
 
-int calcularPeso(t_metadata_program *metadata){
+int calcularPeso(t_medatada_program *metadata){
 	return (5 * (metadata->cantidad_de_etiquetas) + 3 * (metadata->cantidad_de_funciones) + (metadata->instrucciones_size));
 }
 
