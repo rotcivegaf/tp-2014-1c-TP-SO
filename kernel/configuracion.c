@@ -7,6 +7,7 @@
 
 #include<stdio.h>
 #include<commons/config.h>
+#include<commons/collections/list.h>
 #include <pthread.h>
 #include "planificadores.h"
 
@@ -23,14 +24,20 @@
 	char **retardos_io;
 	char **ids_io;
 
-	int grado_multiprog;
+	int grado_multiprog = 0;
+
+	t_list *cola_ready;
+	t_list *cola_exit;
 
 int main(int argc, char *argv[]){
 
 	t_config *config;
 	config=config_create(argv[1]);
 
-	pthread_t threadPLP;
+	cola_ready = list_create();
+	cola_exit = list_create();
+
+	pthread_t threadPLP, threadPCP, threadEXIT;
 
 	puerto_programas=config_get_int_value(config,"PUERTO_PROG");
 	puerto_cpu=config_get_int_value(config,"PUERTO_CPU");
@@ -48,10 +55,12 @@ int main(int argc, char *argv[]){
 	//printf("%s",valoresIniciales_semaforos[2]);
 
 	pthread_create( &threadPLP, NULL, plp, NULL);
-	//pthread_create( &threadPCP, NULL, pcp, NULL);
+	pthread_create(&threadEXIT,NULL,colaExit,NULL);
+	pthread_create( &threadPCP, NULL, pcp, NULL);
 
 	pthread_join(threadPLP, NULL);
-	//pthread_join(threadPCP, NULL);
+	pthread_join(threadPCP, NULL);
+	pthread_join(threadEXIT, NULL);
 
 	return 0;
 }

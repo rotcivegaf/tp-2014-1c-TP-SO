@@ -8,26 +8,9 @@
 #include <parser/metadata_program.h>
 #include <commons/collections/list.h>
 #include "planificadores.h"
-#include "funciones.h"
 
 #define BACKLOG 1 			//Es la cantidad de conexiones permitidas
 #define IP "127.0.0.1"
-
-typedef struct{
-		int id;
-		int *segmento_codigo;
-		int *segmento_stack;
-		int *cursor_stack;
-		int *indice_codigo;
-		int *indice_etiquetas;
-		int program_counter;
-		int tamanio_context;
-		int tamanio_indice_etiquetas;
-		int tamanio_instrucciones;
-		int tamanio_script;
-		int peso;
-		int socket_asociado;
-}estructura_pcb;
 
 estructura_pcb* crearPCB(t_metadata_program *metadata, int script_size, int socket);
 int calcularPeso(t_metadata_program *metadata);
@@ -40,10 +23,13 @@ bool comparar_peso(estructura_pcb *pcb1,estructura_pcb *pcb2);
 
 int idProgr=1;
 
+
 void *plp(){
 
 	t_list *cola_new = list_create();
-	t_list *cola_ready = list_create();
+	extern t_list *cola_ready;
+	extern t_list *cola_exit;
+
 	extern int grado_multiprog;
 	extern int grado_multiprog_max;
 
@@ -124,18 +110,21 @@ int pedirSegmentos(estructura_pcb *pcb, int socketUmv){
 	pcb->indice_etiquetas = pedirSegmento(pcb->id,pcb->tamanio_indice_etiquetas,socketUmv);
 	if  ( pcb->indice_etiquetas==0){
 		avisarNoHayEspacio(pcb->socket_asociado);
+		pedirDestruirSegmentos(pcb->id,socketUmv);
 		free(pcb);
 		return 0;
 	}
 	pcb->indice_codigo = pedirSegmento(pcb->id,(pcb->tamanio_instrucciones)*8,socketUmv);
 	if (pcb->indice_codigo==0){
 		avisarNoHayEspacio(pcb->socket_asociado);
+		pedirDestruirSegmentos(pcb->id,socketUmv);
 		free(pcb);
 		return(0);
 	}
 	pcb->segmento_stack=pedirSegmento(pcb->id, stack, socketUmv);
 	if (pcb->segmento_stack==0){
 		avisarNoHayEspacio(pcb->socket_asociado);
+		pedirDestruirSegmentos(pcb->id,socketUmv);
 		free(pcb);
 		return(0);
 	}
