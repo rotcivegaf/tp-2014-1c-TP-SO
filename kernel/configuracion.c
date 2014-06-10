@@ -15,12 +15,15 @@
 	int puerto_umv;
 	int quantum;
 	int retardo_q;
-	int grado_multiprog;
+	int grado_multiprog_max;
+	int stack;
 	char **var_globales;
 	char **ids_semaforos;
 	char **valoresIniciales_semaforos;
 	char **retardos_io;
 	char **ids_io;
+
+	int grado_multiprog;
 
 int main(int argc, char *argv[]){
 
@@ -34,7 +37,8 @@ int main(int argc, char *argv[]){
 	puerto_umv=config_get_int_value(config,"PUERTO_UMV");
 	quantum=config_get_int_value(config,"QUANTUM");
 	retardo_q=config_get_int_value(config,"RETARDO");
-	grado_multiprog=config_get_int_value(config,"MULTIPROGRAMACION");
+	grado_multiprog_max=config_get_int_value(config,"MULTIPROGRAMACION");
+	stack=config_get_int_value(config,"STACK");
 	var_globales=config_get_array_value(config,"VAR_GLOBALES");
 	ids_semaforos=config_get_array_value(config,"SEMAFOROS");
 	valoresIniciales_semaforos=config_get_array_value(config,"VALOR_SEMAFORO");
