@@ -37,6 +37,13 @@ int main(int argc, char *argv[])
 
 	send(socket,script_serializado,sizeof(int)+tamanioScript,0);
 
+	int id_mensaje;
+
+	recv(socket,&id_mensaje,sizeof(int),0);
+
+	if(id_mensaje==1)
+		printf("Acceso al sistema rechazado, no hay memoria suficiente");
+
 	close(socket);
 	fclose(scriptAProcesar);
 	free(script);

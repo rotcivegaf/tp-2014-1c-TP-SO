@@ -12,23 +12,12 @@
 #define BACKLOG 1 			//Es la cantidad de conexiones permitidas
 #define IP "127.0.0.1"
 
-estructura_pcb* crearPCB(t_metadata_program *metadata, int script_size, int socket);
-int calcularPeso(t_metadata_program *metadata);
-int pedirSegmentos(estructura_pcb *pcb, int socketUmv);
-int *pedirSegmento(int idPrograma, int tamanio, int socket);
-int pedirDestruirSegmentos(int id_programa,int socket);
-int avisarNoHayEspacio(int socketPrograma);
-int guardarContenido(int *direccion, int tamanio, void *contenido, int socketUmv);
-bool comparar_peso(estructura_pcb *pcb1,estructura_pcb *pcb2);
-
 int idProgr=1;
-
 
 void *plp(){
 
 	t_list *cola_new = list_create();
 	extern t_list *cola_ready;
-	extern t_list *cola_exit;
 
 	extern int grado_multiprog;
 	extern int grado_multiprog_max;
@@ -53,6 +42,9 @@ void *plp(){
 	t_metadata_program *metadata = metadata_desde_literal(script);
 	estructura_pcb *pcb=crearPCB(metadata, *script_size, socketPrograma);
 
+	pedirSegmento(pcb->id,pcb->tamanio_script,socketUmv);
+
+/*
 	//Pedir segmentos a la umv
 	if(pedirSegmentos(pcb,socketUmv)==0){
 		pedirDestruirSegmentos(pcb->id, socketUmv);
@@ -61,7 +53,7 @@ void *plp(){
 	else
 	//Envio el contenido de cada uno a la umv para que los guarde
 	guardarContenido(pcb->segmento_codigo, pcb->tamanio_script, script, socketUmv);
-	guardarContenido(pcb->indice_codigo, (pcb->tamanio_instrucciones)*8, metadata->instrucciones_serializado, socketUmv);
+	guardarContenido(pcb->indice_codigo, (pcb->cant_instrucciones)*8, metadata->instrucciones_serializado, socketUmv);
 	guardarContenido(pcb->indice_etiquetas, pcb->tamanio_indice_etiquetas, script, socketUmv);
 
 	//Agrego el pcb a la cola de new:
@@ -72,10 +64,9 @@ void *plp(){
 		estructura_pcb *pcbAR = list_remove(cola_new,1); //Ver si en vez de 1 no deberia ser indice 0
 		list_add(cola_ready, pcbAR);
 	}
-
+*/
 	close(socketKernel);
-	free(cola_new);
-	free(cola_ready);
+	list_destroy(cola_new);
 	return 0;
 }
 
@@ -86,7 +77,7 @@ estructura_pcb* crearPCB(t_metadata_program *metadata, int script_size, int sock
 	pcb->id = idProgr++;
 	pcb->program_counter = metadata->instruccion_inicio;
 	pcb->tamanio_indice_etiquetas = metadata->etiquetas_size;
-	pcb->tamanio_instrucciones = metadata->instrucciones_size;
+	pcb->cant_instrucciones = metadata->instrucciones_size;
 	pcb->tamanio_script = script_size;
 	pcb->peso = calcularPeso(metadata);
 	pcb->socket_asociado = socket;
@@ -114,7 +105,7 @@ int pedirSegmentos(estructura_pcb *pcb, int socketUmv){
 		free(pcb);
 		return 0;
 	}
-	pcb->indice_codigo = pedirSegmento(pcb->id,(pcb->tamanio_instrucciones)*8,socketUmv);
+	pcb->indice_codigo = pedirSegmento(pcb->id,(pcb->cant_instrucciones)*8,socketUmv);
 	if (pcb->indice_codigo==0){
 		avisarNoHayEspacio(pcb->socket_asociado);
 		pedirDestruirSegmentos(pcb->id,socketUmv);
@@ -131,18 +122,19 @@ int pedirSegmentos(estructura_pcb *pcb, int socketUmv){
 	return 1;
 }
 
-int *pedirSegmento(int id_programa, int tamanio, int socket){
+int pedirSegmento(int id_programa, int tamanio, int socket){
 	int *pedido = malloc(sizeof(int) *3);
 	int id_mensaje = 1;
-	int *direcc_segmento = malloc(sizeof(int));
+	int direcc_segmento;
 
 	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
 	memcpy(pedido+sizeof(id_mensaje),&id_programa,sizeof(id_programa));
 	memcpy(pedido+sizeof(id_mensaje)+sizeof(id_programa),&tamanio,sizeof(tamanio));
-
+printf("id programa: %d \n",*(pedido+sizeof(id_mensaje)));
+printf("tamaño pedido: %d \n",*(pedido+sizeof(int)*2));
 	send(socket,pedido,sizeof(int)*3,0);
-	recv(socket,direcc_segmento,sizeof(int),0);
-
+	recv(socket,&direcc_segmento,sizeof(int),0);
+printf("Direccion devuelta %d \n",direcc_segmento);
 	return direcc_segmento;
 }
 
@@ -157,20 +149,22 @@ int pedirDestruirSegmentos(int id_programa,int socket){
 	return 0;
 }
 
-int guardarContenido(int *direccion, int tamanio, void *contenido, int socketUmv){
+int guardarContenido(int direccion, int tamanio, void *contenido, int socketUmv){
 	int *pedido = malloc(sizeof(int)*3+tamanio);
 	int id_mensaje = 3;
 
 	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
 	memcpy(pedido+sizeof(id_mensaje),&tamanio,sizeof(int));
 	memcpy(pedido+sizeof(id_mensaje)+sizeof(int),&direccion, sizeof(int));
-	memcpy(pedido+sizeof(id_mensaje)+sizeof(int)*2,contenido, tamanio);
+	memcpy(pedido+sizeof(int)*3,contenido, tamanio);
 
 	send(socketUmv,pedido,sizeof(int)*3+tamanio,0);
 	return 0;
 }
 
 int avisarNoHayEspacio(int socket){
+	int id_mensaje=1;
+	send(socket,&id_mensaje,sizeof(int),0);
 	return 0;
 }
 

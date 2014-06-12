@@ -5,12 +5,13 @@
  *      Author: utnso
  */
 
+
 #include <commons/collections/list.h>
 #include "planificadores.h"
 
 
 void *colaExit(){
-
+/*
 	extern t_list *cola_exit;
 	extern int grado_multiprog;
 
@@ -20,7 +21,7 @@ void *colaExit(){
 		//destruirpcb
 		grado_multiprog--;
 	}
-
+*/
 	return 0;
 }
 

@@ -52,16 +52,16 @@ int main(int argc, char *argv[]){
 	retardos_io=config_get_array_value(config,"RETARDO");
 	ids_io=config_get_array_value(config,"ID_HIO");
 
-	//printf("%s",valoresIniciales_semaforos[2]);
-
 	pthread_create( &threadPLP, NULL, plp, NULL);
-	pthread_create(&threadEXIT,NULL,colaExit,NULL);
 	pthread_create( &threadPCP, NULL, pcp, NULL);
+	pthread_create(&threadEXIT,NULL,colaExit,NULL);
 
 	pthread_join(threadPLP, NULL);
 	pthread_join(threadPCP, NULL);
 	pthread_join(threadEXIT, NULL);
 
+	list_destroy(cola_ready);
+	list_destroy(cola_exit);
 	return 0;
 }
 

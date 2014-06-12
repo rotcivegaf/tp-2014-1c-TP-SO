@@ -17,12 +17,21 @@
 #include <unistd.h>		//para el close
 #include <arpa/inet.h>	//para el inet_addr
 
+typedef struct{
+	int valor;
+	struct process *list;
+}semaforo;
 
 //Se le manda la ip y el puerto al que se quiere conectar y devuelve el socket
 int conectarse(char* ip,int puerto);
 
 //Abre un srv en la ip y puerto que se le manda y devuelve el socket
 int servidor(char *ip, int puerto);
+
+/*
+wait(semaforo *s)
+signal(semaforo *s)
+*/
 
 #endif /* FUNCIONES_H_ */
 

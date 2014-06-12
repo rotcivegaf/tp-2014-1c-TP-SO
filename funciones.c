@@ -45,4 +45,20 @@ int servidor(char *ip, int puerto){
 	return socket_srv;
 }
 
+/*
+wait(semaforo *s){
+	s->valor--;
+	if(s->valor<0){
+		añadir proceso a s->list;
+		block();
+	}
+}
+
+signal(semaforo *s){
+	s->valor++;
+	if(s->valor<=0){
+		eliminar un proceso p de s->list;
+		wakeup();
+	}
+}*/
 
