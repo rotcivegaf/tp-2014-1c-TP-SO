@@ -21,8 +21,28 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+typedef struct{
+		int id;
+		int segmento_codigo;
+		int segmento_stack;
+		int *cursor_stack;
+		int indice_codigo;
+		int indice_etiquetas;
+		int program_counter;
+		int tamanio_context;
+		int tamanio_indice_etiquetas;
+		int cant_instrucciones;
+		int tamanio_script;
+		int peso;
+		int socket_asociado;
+}estructura_pcb;
 
 
+void salirPorQuantum(int socketKernel, estructura_pcb *pcb);
+void parsearUnaInstruccion(char* unaIns);
+void parsearUltimaInstruccion(char* ultIns, int socketKernel);
+void errorDeProxInstruccion(int socketKernel);
+char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb);
 t_puntero definirVariable(t_nombre_variable identificador_variable);
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable);
 t_valor_variable dereferenciar(t_puntero direccion_variable);

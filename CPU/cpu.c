@@ -10,6 +10,7 @@
 static const int CONTENIDO_VARIABLE = 20;
 static const int POSICION_MEMORIA = 0x10;
 
+
 AnSISOP_funciones functions = {
 		.AnSISOP_definirVariable		= definirVariable,
 		.AnSISOP_obtenerPosicionVariable= obtenerPosicionVariable,
@@ -30,7 +31,6 @@ AnSISOP_kernel kernel_functions = {
 		.AnSISOP_wait = wait,
 		.AnSISOP_signal =signal};
 
-
 int main(){
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
@@ -40,45 +40,49 @@ int main(){
 	char *ipUmv=config_get_string_value(unaConfig, "IPUMV");
 	int puertoUmv = config_get_int_value(unaConfig, "PUERTOUMV");
 
-	//u_int32_t tipoCPU = 2; //para tipo de conexion cpu
-	//int cantIns = 0 // cantidad de instruccion ansisop que ejecuta
 
 	/*conexion con el kernel*/
-	struct sockaddr_in infoConexion;
-	int socketCpu = servidor(ipKernel, puertoKernel);
-	listen(socketCpu, 1);
-	socklen_t sin_size = sizeof(struct sockaddr_in);
-	int socketKernel = accept(socketCpu, (struct sockaddr *)&infoConexion, &sin_size);
+
+	int socketKernel = conectarse(ipKernel, puertoKernel);
+
 	//queda a la espera que el pcp  envie el pcb
+	//recibe el pcb
+	estructura_pcb *pcb = malloc(sizeof(estructura_pcb));
+	int quantum;
+	recv(socketKernel,pcb, sizeof(estructura_pcb),0);
+	recv(socketKernel, &quantum, sizeof(int), 0);
+
+
+	//crear diccionario de variables
+
+	int cantIns = 0;
 
 	/*conexion con la umv*/
 	int socketUmv = conectarse(ipUmv,puertoUmv);
-	//falta handshake para indicar tipo de conexion:CPU
 
-	//recibir pcb
-	//recv()
-	//crear diccionario de variables
+	char* proxInstrucc = solicitarProxSentenciaAUmv(socketUmv,pcb);
 
-	//mientras (cantIns <= quantum )
-		//para saber la instruccion que tengo que ejecutar
-		//solicito a la umv base= base seg de codigo offset=program counter tamaño= ?
-		//proxSentencia solicitarProxSentencia(indice_codigo);
-	 	//con indice de codigo del pcb solicita prox sentencia a ejecutar
-		//recibo de umv una linea de codigo a ejecutar
-		//si devuelve error
-		//if(no es ultimaSentencia)
-			//analizadorLinea(strdup(instruccion), &functions, &kernel_functions);
-			//incremento el program counter/ pido al kernel/umv que aumente el pc
-			//aumento cantIns
-			//else
-				//analizadorLinea
-				//aviso a umv para que destruya segmentos
-				//aviso a pcp que termino la ejecucion
+	if (strcmp(proxInstrucc, "error") ){
+		errorDeProxInstruccion(socketKernel); // le aviso al pcp que la umv me devolvio error al solicitar prox inst
+		}else{
+			pcb->program_counter ++; // aumento el pc
+			if (pcb->program_counter == pcb->cant_instrucciones){ // me fijo si la sentencia a ejecutar es la ultima del script
+				parsearUltimaInstruccion(proxInstrucc, socketKernel);}
+				else{
+					while(cantIns<= quantum){ //ejecuta tantas instrucciones como quantums tenga
+						parsearUnaInstruccion(proxInstrucc);
+						cantIns ++;
+					}
+					salirPorQuantum(socketKernel,pcb);
 
-	//aviso al pcp que termino el quantum
+
+			}
+
+		}
+
+
+
 	//destruyo diccionario de datos
-
-
 
 
 	/* si recibe señal sigusr1 debe desconectarse del pcp
@@ -90,15 +94,71 @@ int main(){
 	 *
 	 * si umv devuelve un mensaje de excepcion, se muestra por pantalla de programa y concluye ejecucion avisando al pcp
 	 */
-close(socketKernel);
-close(socketCpu);
-close(socketUmv);
+/*close(socketKernel);
+close(socketUmv);*/
 
 return 0;
 
 }
 
+void avisarAlPcp(int unCodigo, int socketKernel){
+	char *pedido = malloc(sizeof(int));
+	int id_mensaje = 6;
+	memcpy(pedido, &id_mensaje, sizeof(id_mensaje));
+	send(socketKernel,pedido,sizeof(int),0);
+}
 
+void salirPorQuantum(int socketKernel, estructura_pcb *pcb){
+	//aviso al pcp que termino mi quantum
+	int codigoQuantum =1;
+	avisarAlPcp(codigoQuantum, socketKernel);
+	//le mando el pcb actualizado;
+	send(socketKernel,pcb, sizeof(estructura_pcb),0);
+
+}
+void parsearUltimaInstruccion(char* ultIns, int socketKernel){
+	analizadorLinea(strdup(ultIns), &functions, &kernel_functions);
+	//avisar al pcp que termino el programa
+	int codigoFinProg = 2;
+	avisarAlPcp(codigoFinProg, socketKernel);
+}
+
+void parsearUnaInstruccion(char* unaIns){
+	analizadorLinea(strdup(unaIns), &functions, &kernel_functions);
+}
+
+void errorDeProxInstruccion(int socketKernel){
+	//avisar al pcp que hubo un error de en el pedido de la instruccion
+	int codigoErrorEnUmv = 3;
+	avisarAlPcp(codigoErrorEnUmv, socketKernel);
+
+
+}
+
+char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
+	//para decir que se esta conectando una conexion tipo cpu
+	char *pedido = malloc(sizeof(int));
+	int id_mensaje = 4; //para saber que le estoy pidiendo prox instruccion a ejecutar
+
+	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
+	int proxInstBase = pcb->segmento_codigo;
+	int proxInstOffset = (pcb->indice_codigo)+ 8*(1-pcb->program_counter);
+	int proxInstTamanio = proxInstOffset + 4;
+	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
+	memcpy(pedido+sizeof(id_mensaje),&proxInstBase,sizeof(proxInstBase));
+	memcpy(pedido+sizeof(id_mensaje)+sizeof(proxInstBase), &proxInstOffset, sizeof(proxInstOffset));
+	memcpy(pedido+sizeof(id_mensaje)+sizeof(proxInstBase)+sizeof(proxInstOffset), &proxInstTamanio, sizeof(proxInstTamanio));
+
+	//le mando a la umv base, offset y tamanio de la proxima instruccion
+	send(socket,pedido,sizeof(u_int32_t)*4,0);
+
+	//recibir la instruccion a ejecutar
+	char* instruccion = malloc(proxInstTamanio);
+	recv(socket,instruccion,sizeof(instruccion),0);
+	printf("Instruccion que voy a ejecutar %s\n",instruccion);
+	return instruccion;
+
+}
 
 
 t_puntero definirVariable(t_nombre_variable identificador_variable){
