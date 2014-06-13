@@ -163,7 +163,7 @@ void compactar()
 	void *aux2;
 
 	recorrerTablaSegmentos();
-	list_sort(listaAuxiliar, compararListaAuxiliar);
+	list_sort(listaAuxiliar, (void*)compararListaAuxiliar);
 	for (x=0;x<list_size(listaAuxiliar)-1;x++){
 		p1 = list_get(listaAuxiliar,x);
 		p2 = list_get(listaAuxiliar,x+1);
@@ -214,7 +214,7 @@ void crearSegmento(char *id_Prog, int tamanio)
 			do {
 			memEstaOk = 1;
 			nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
-			list_iterate(lista,controlarSegmFault(nodoTab->memLogica));
+			//list_iterate(lista,controlarSegmFault(nodoTab->memLogica));
 			}while (!memEstaOk);
 		list_add(lista,nodoTab);
 		}
@@ -255,7 +255,7 @@ int asignarMemoria(int tamanio)
 	hayEspacio = 0;
 
 	recorrerTablaSegmentos();
-	list_sort(listaAuxiliar, compararListaAuxiliar);
+	list_sort(listaAuxiliar, (void *)compararListaAuxiliar);
 
 	etiqueta_1:
 	for (x=0;x<list_size(listaAuxiliar)-1;x++){
@@ -311,7 +311,7 @@ void recorrerTablaSegmentos()
 }
 
 void recorrerLista(char* clave, void *ptrLista){
-	list_iterate(ptrLista,completarListaAuxiliar);
+	list_iterate(ptrLista,(void *)completarListaAuxiliar);
 }
 
 void completarListaAuxiliar(TabMen *nodo)
@@ -337,9 +337,9 @@ void insertarNodosBarrera ()
 }
 
 void destruirSegmentos(char *id_Prog){
-	void *list;
+	void *lista;
 	dictionary_get(tablaProgramas, id_Prog);
-	list_destroy_and_destroy_elements(list, eliminarElemento);
+	list_destroy_and_destroy_elements(lista, (void *)eliminarElemento);
 }
 void eliminarElemento(void *elemento){
 	free (elemento);
