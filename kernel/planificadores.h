@@ -39,6 +39,9 @@ int pedirDestruirSegmentos(int id_programa,int socket);
 int avisarNoHayEspacio(int socketPrograma);
 int guardarContenido(int direccion, int tamanio, void *contenido, int socketUmv);
 bool comparar_peso(estructura_pcb *pcb1,estructura_pcb *pcb2);
+void mostrar_ready(t_list *ready);
+void imprimirIdPcb(estructura_pcb *pcb);
+int indicePcbConId(t_list *lista,int id);
 
 #endif /* PLANIFICADORES_H_ */
 

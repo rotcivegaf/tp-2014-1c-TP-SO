@@ -16,7 +16,7 @@ void *colaExit(){
 	extern int grado_multiprog;
 
 	if (!list_is_empty(cola_exit)){
-		estructura_pcb *pcb= list_remove(cola_exit,1);
+		estructura_pcb *pcb= list_remove(cola_exit,0);
 		pedirDestruirSegmentos(pcb->id,socketUmv);
 		//destruirpcb
 		grado_multiprog--;
