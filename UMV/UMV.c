@@ -1,12 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <math.h>
+#include <time.h>
+
 #include <commons/string.h>
 #include <commons/config.h>
 
 #include <commons/collections/dictionary.h>
 #include <commons/collections/list.h>
-#include <stdbool.h>
+
 
 
 
@@ -23,14 +27,21 @@ void dump();
 int asignarMemoria(int tamanio);
 void recorrerTablaSegmentos();
 void recorrerLista(char *clave, void *ptrLista);
+void insertarNodosBarrera ();
+int asignarMemoriaAleatoria(int tamanio);
 
 
+void destruirSegmentos(char *id_Prog);
+
+void eliminarElemento(void *elemento);
 
 
 void *ptrMemoria;
 void *tablaProgramas;
 char modoOperacion;
 void *listaAuxiliar;
+void *ptrConfig;
+int memEstaOk;
 
 typedef struct t_tabMem {
 	int memLogica;
@@ -47,17 +58,17 @@ typedef struct t_auxiliar {
 
 void completarListaAuxiliar(TabMen *nodo);
 bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
+void controlarSegFault();
 
 
 int main()
 {
-
 	char **arrayComando;
 	int a;
-	void *ptrConfig;
 	char entrada[100];
-
 	extern void *ptrMemoria;
+
+	srand(time(0));
 
 	ptrConfig = config_create("umv_config.txt");
 
@@ -193,20 +204,33 @@ void crearSegmento(char *id_Prog, int tamanio)
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 
-	nodoTab->memLogica = 0;
+
 	nodoTab->longitud = tamanio;
 	nodoTab->memFisica = asignarMemoria(tamanio);
 
 	if (dictionary_has_key(tablaProgramas, id_Prog))
 		{
 		lista = dictionary_get(tablaProgramas,id_Prog);
+			do {
+			memEstaOk = 1;
+			nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
+			list_iterate(lista,controlarSegmFault(nodoTab->memLogica));
+			}while (!memEstaOk);
 		list_add(lista,nodoTab);
 		}
 	else
 	{
+		nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
 		lista = list_create();
 		list_add(lista,nodoTab);
 		dictionary_put(tablaProgramas, id_Prog, lista);
+	}
+
+}
+
+void controlarSegFault(TabMen *nodo, int numMemoria){
+	if (((nodo->memLogica) < numMemoria) && ((nodo->memLogica + nodo->longitud) > numMemoria)){
+		memEstaOk = 0;
 	}
 
 }
@@ -239,7 +263,7 @@ int asignarMemoria(int tamanio)
 		p2 = list_get(listaAuxiliar,x+1);
 
 		if (p2->ptrInicio != (p1->ptrFin) +1){
-			espacioDisponible = (p2->ptrInicio - p1->ptrFin);
+			espacioDisponible = (p2->ptrInicio - p1->ptrFin -1);
 			if (espacioDisponible >= tamanio)
 			{
 				hayEspacio=1;
@@ -271,11 +295,19 @@ int asignarMemoria(int tamanio)
 	return 0;
 }
 
+int asignarMemoriaAleatoria(int tamanio){
+	int numero;
+	numero = (rand());
+	return numero;
+}
+
+
 
 void recorrerTablaSegmentos()
 {
 	listaAuxiliar= list_create();
 	dictionary_iterator(tablaProgramas,recorrerLista);
+	insertarNodosBarrera();
 }
 
 void recorrerLista(char* clave, void *ptrLista){
@@ -292,5 +324,24 @@ void completarListaAuxiliar(TabMen *nodo)
 
 	list_add(listaAuxiliar, nodoAux);
 }
-// error en los iterator, en el memcopy
-// revisar como se le asigna memoria al primer nodo
+
+void insertarNodosBarrera ()
+{
+	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
+	nodoAux->ptrInicio = -1;
+	nodoAux->ptrFin = -1;
+	list_add_in_index(listaAuxiliar,0,nodoAux);
+	nodoAux->ptrInicio=config_get_int_value(ptrConfig,"tamanio");
+	nodoAux->ptrFin = config_get_int_value(ptrConfig,"tamanio");
+	list_add(listaAuxiliar,nodoAux);
+}
+
+void destruirSegmentos(char *id_Prog){
+	void *list;
+	dictionary_get(tablaProgramas, id_Prog);
+	list_destroy_and_destroy_elements(list, eliminarElemento);
+}
+void eliminarElemento(void *elemento){
+	free (elemento);
+}
+// error en iterator, en todas las funciones con orden superior
