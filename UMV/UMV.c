@@ -227,7 +227,7 @@ void crearSegmento(char *id_Prog, int tamanio)
 	}
 
 }
-
+// revisar
 void controlarSegFault(TabMen *nodo, int numMemoria){
 	if (((nodo->memLogica) < numMemoria) && ((nodo->memLogica + nodo->longitud) > numMemoria)){
 		memEstaOk = 0;
