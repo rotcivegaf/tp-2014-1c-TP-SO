@@ -69,13 +69,10 @@ int main()
 	extern void *ptrMemoria;
 
 	srand(time(0));
-
+	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("umv_config.txt");
-
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
-
 	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
-
 	tablaProgramas = dictionary_create();
 
 	printf("UMV >> ");
@@ -161,7 +158,8 @@ void compactar()
 	TabMen *actualizar;
 	void *aux1;
 	void *aux2;
-
+	/*recorrer tabla de programas y crear una lista auxiliar ordenada, preguntar si hay espacio
+	entre dos nodos, si hay se desplaza la memoria y se actualiza la tabla de programas*/
 	recorrerTablaSegmentos();
 	list_sort(listaAuxiliar, (void*)compararListaAuxiliar);
 	for (x=0;x<list_size(listaAuxiliar)-1;x++){
@@ -338,7 +336,7 @@ void insertarNodosBarrera ()
 
 void destruirSegmentos(char *id_Prog){
 	void *lista;
-	dictionary_get(tablaProgramas, id_Prog);
+	lista = dictionary_get(tablaProgramas, id_Prog);
 	list_destroy_and_destroy_elements(lista, (void *)eliminarElemento);
 }
 void eliminarElemento(void *elemento){
