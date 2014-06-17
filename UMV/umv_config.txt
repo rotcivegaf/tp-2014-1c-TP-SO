@@ -1,2 +1,4 @@
 tamanio=26214400
 modo=WorstFit
+puerto=5002
+IP=127.0.0.1

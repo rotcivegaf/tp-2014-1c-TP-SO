@@ -11,13 +11,11 @@
 #include <commons/collections/dictionary.h>
 #include <commons/collections/list.h>
 
-
-
-
-
 #define MAX 50
 
 void encabezado(long byte, char *modo);
+void crearConsola();
+void admin_conecciones();
 int clasificarComando(char *comando);
 void operacion(int proceso, int base, int offset, int tamanio);
 void retardo(int milisegundos);
@@ -29,10 +27,7 @@ void recorrerTablaSegmentos();
 void recorrerLista(char *clave, void *ptrLista);
 void insertarNodosBarrera ();
 int asignarMemoriaAleatoria(int tamanio);
-
-
 void destruirSegmentos(char *id_Prog);
-
 void eliminarElemento(void *elemento);
 
 
@@ -58,14 +53,12 @@ typedef struct t_auxiliar {
 
 void completarListaAuxiliar(TabMen *nodo);
 bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-void controlarSegFault();
+void controlarMemPisada();
 
 
 int main()
 {
-	char **arrayComando;
-	int a;
-	char entrada[100];
+
 	extern void *ptrMemoria;
 
 	srand(time(0));
@@ -75,40 +68,59 @@ int main()
 	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
 	tablaProgramas = dictionary_create();
 
-	printf("UMV >> ");
-	gets(entrada);
-	arrayComando =  string_split(entrada," ");
-	a = clasificarComando(arrayComando[0]);
 
-	while (a != 6)
-	{
-		switch (a){
-			case 1:
-				operacion(atoi(arrayComando[1]),atoi(arrayComando[2]),atoi(arrayComando[3]),atoi(arrayComando[4]));
-				break;
-			case 2:
-				retardo(atoi(arrayComando[1]));
-				break;
-			case 3:
-				algoritmo(arrayComando[1]);
-				break;
-			case 4:
-				compactar();
-				break;
-			case 5:
-				dump();
-				break;
-			default:
-				printf("Comando desconocido");
-				break;
-			}
+	pthread_t hilo_consola;
+	pthread_t hilo_conecciones;
 
-	printf("\nUMV >> ");
-	gets(entrada);
-	arrayComando =  string_split(entrada," ");
-	a = clasificarComando(arrayComando[0]);
-	}
+
+	pthread_create( &hilo_conecciones, NULL, admin_conecciones,NULL);
+	pthread_create( &hilo_consola, NULL, crearConsola, NULL);
+
+	pthread_join( hilo_conecciones, NULL);
+	pthread_join( hilo_consola, NULL);
+
+
 	return 0;
+}
+
+void crearConsola (){
+	char **arrayComando;
+	int a;
+	char entrada[100];
+
+	printf("UMV >> ");
+		gets(entrada);
+		arrayComando =  string_split(entrada," ");
+		a = clasificarComando(arrayComando[0]);
+
+		while (a != 6)
+		{
+			switch (a){
+				case 1:
+					operacion(atoi(arrayComando[1]),atoi(arrayComando[2]),atoi(arrayComando[3]),atoi(arrayComando[4]));
+					break;
+				case 2:
+					retardo(atoi(arrayComando[1]));
+					break;
+				case 3:
+					algoritmo(arrayComando[1]);
+					break;
+				case 4:
+					compactar();
+					break;
+				case 5:
+					dump();
+					break;
+				default:
+					printf("Comando desconocido");
+					break;
+				}
+
+		printf("\nUMV >> ");
+		gets(entrada);
+		arrayComando =  string_split(entrada," ");
+		a = clasificarComando(arrayComando[0]);
+		}
 }
 
 int clasificarComando (char *comando)
@@ -129,6 +141,12 @@ int clasificarComando (char *comando)
 }
 
 
+void admin_conecciones(){
+	int socket = servidor(config_get_string_value(ptrConfig,"IP"),config_get_int_value(ptrConfig,"puerto"));
+
+}
+
+
 void operacion(int proceso, int base, int offset, int tamanio)
 {
 	printf("operacion");
@@ -137,7 +155,7 @@ void retardo(int milisegundos)
 {
 	printf("retardo");
 }
-
+//modifica el modo de operacion
 void algoritmo(char *modo)
 {
 	if (!strcmp(modo,"WorstFit") || !strcmp(modo,"FirstFit"))
@@ -189,11 +207,13 @@ void dump()
 }
 
 
-void encabezado(long byte, char *modo)
-{
-	printf("** UMV: Unidad de Memoria Virtual **\n");
+void encabezado(long byte, char *modo){
+	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
+	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
+	printf("IP: %d\n", config_get_int_value(ptrConfig,"IP"));
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
+	printf("------------------------------------------------------------------------\n\n");
 }
 
 
@@ -201,8 +221,10 @@ void crearSegmento(char *id_Prog, int tamanio)
 {
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
-
-
+	/*pregunta si en la tabla de programas existe el id de prog,
+	 si no existe se agrega el key al diccionario y si existe
+	 se agrega un nodo a la lista de segmentos, controlando que
+	 la memoria logica no se pise dentro del mismo programa */
 	nodoTab->longitud = tamanio;
 	nodoTab->memFisica = asignarMemoria(tamanio);
 
@@ -212,7 +234,7 @@ void crearSegmento(char *id_Prog, int tamanio)
 			do {
 			memEstaOk = 1;
 			nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
-			//list_iterate(lista,controlarSegmFault(nodoTab->memLogica));
+			//list_iterate(lista,controlarMemPisada(nodoTab->memLogica));
 			}while (!memEstaOk);
 		list_add(lista,nodoTab);
 		}
@@ -226,7 +248,7 @@ void crearSegmento(char *id_Prog, int tamanio)
 
 }
 // revisar
-void controlarSegFault(TabMen *nodo, int numMemoria){
+void controlarMemPisada(TabMen *nodo, int numMemoria){
 	if (((nodo->memLogica) < numMemoria) && ((nodo->memLogica + nodo->longitud) > numMemoria)){
 		memEstaOk = 0;
 	}
@@ -235,7 +257,6 @@ void controlarSegFault(TabMen *nodo, int numMemoria){
 
 int asignarMemoria(int tamanio)
 {
-
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int x;
@@ -251,7 +272,11 @@ int asignarMemoria(int tamanio)
 
 	seCompacto =0;
 	hayEspacio = 0;
-
+	/*se recorre la tabla de segmentos y se crea una lista auxiliar
+	 ordenada segun memoria fisica. Se comparan dos nodos, si hay
+	 espacio entre ellos, se pregunta si ese espacio es suficiente, si
+	 lo es se asigna segun el algoritmo en uso. Si no hay espacio se
+	 compacta y se vuelve a buscar lugar. */
 	recorrerTablaSegmentos();
 	list_sort(listaAuxiliar, (void *)compararListaAuxiliar);
 
@@ -298,8 +323,6 @@ int asignarMemoriaAleatoria(int tamanio){
 	numero = (rand());
 	return numero;
 }
-
-
 
 void recorrerTablaSegmentos()
 {
