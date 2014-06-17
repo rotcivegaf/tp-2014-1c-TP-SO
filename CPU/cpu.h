@@ -20,6 +20,8 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
+//importar la shared library
 
 typedef struct{
 		int id;
@@ -37,7 +39,19 @@ typedef struct{
 		int socket_asociado;
 }estructura_pcb;
 
+typedef struct{
+	char *puertoKernel;
+	char *ipKernel;
+	char *puertoUmv;
+	char *ipUmv;
+}t_datos_config;
 
+t_dictionary dicVariables;
+
+void destruirDiccionario();
+void signal_handler(int sig);
+t_config *levantarConfiguracion();
+void crearDiccionario();
 void salirPorQuantum(int socketKernel, estructura_pcb *pcb);
 void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
@@ -58,7 +72,7 @@ void imprimir(t_valor_variable valor_mostrar);
 void imprimirTexto(char* texto);
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo);
 void wait(t_nombre_semaforo identificador_semaforo);
-void signal(t_nombre_semaforo identificador_semaforo);
+void mi_signal(t_nombre_semaforo identificador_semaforo);
 
 
 #endif /* CPU_H_ */

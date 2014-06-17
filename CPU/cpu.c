@@ -29,21 +29,19 @@ AnSISOP_funciones functions = {
 
 AnSISOP_kernel kernel_functions = {
 		.AnSISOP_wait = wait,
-		.AnSISOP_signal =signal};
+		.AnSISOP_signal = mi_signal};
+
 
 int main(){
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
-	t_config *unaConfig = config_create("config.conf");//debe obtener este archivo por la direcc en la variable de enterno
-	char *ipKernel=config_get_string_value(unaConfig, "IPKERNEL");
-	int puertoKernel = config_get_int_value(unaConfig, "PUERTOKERNEL");
-	char *ipUmv=config_get_string_value(unaConfig, "IPUMV");
-	int puertoUmv = config_get_int_value(unaConfig, "PUERTOUMV");
+	t_datos_config *unaConfig = *levantarConfiguracion();
+
 
 
 	/*conexion con el kernel*/
 
-	int socketKernel = conectarse(ipKernel, puertoKernel);
+	int socketKernel = conectarse(unaConfig->ipKernel,unaConfig->puertoKernel);
 
 	//queda a la espera que el pcp  envie el pcb
 	//recibe el pcb
@@ -54,11 +52,14 @@ int main(){
 
 
 	//crear diccionario de variables
+	crearDiccionario();
+
+	signal(SIGUSR1, signal_handler);
 
 	int cantIns = 0;
 
 	/*conexion con la umv*/
-	int socketUmv = conectarse(ipUmv,puertoUmv);
+	int socketUmv = conectarse(unaConfig->ipUmv,unaConfig->puertoUmv);
 
 	char* proxInstrucc = solicitarProxSentenciaAUmv(socketUmv,pcb);
 
@@ -69,7 +70,8 @@ int main(){
 			if (pcb->program_counter == pcb->cant_instrucciones){ // me fijo si la sentencia a ejecutar es la ultima del script
 				parsearUltimaInstruccion(proxInstrucc, socketKernel);}
 				else{
-					while(cantIns<= quantum){ //ejecuta tantas instrucciones como quantums tenga
+					for(;quantum>0;quantum--){
+						//ejecuta tantas instrucciones como quantums tenga
 						parsearUnaInstruccion(proxInstrucc);
 						cantIns ++;
 					}
@@ -81,24 +83,43 @@ int main(){
 		}
 
 
-
-	//destruyo diccionario de datos
-
-
-	/* si recibe señal sigusr1 debe desconectarse del pcp
-	 *atendida por un thread del proceso
-	 *signal(SIGUSR1, rutina);
-	 * void rutina{}
-	 * continua donde el programa fue interrumpido
-	 *
-	 *
-	 * si umv devuelve un mensaje de excepcion, se muestra por pantalla de programa y concluye ejecucion avisando al pcp
-	 */
 /*close(socketKernel);
 close(socketUmv);*/
 
+destruirDiccionario();
+
 return 0;
 
+}
+
+t_datos_config *levantarConfiguracion(){
+	t_config *unaConfig = config_create("config.conf");//debe obtener este archivo por la direcc en la variable de enterno
+	t_datos_config *ret = malloc(sizeof(t_datos_config));
+	char *ipKernel=config_get_string_value(ret->ipKernel, "IPKERNEL");
+	char *puertoKernel = config_get_string_value(ret->puertoKernel, "PUERTOKERNEL");
+	char *ipUmv=config_get_string_value(ret->ipUmv, "IPUMV");
+	char *puertoUmv = config_get_string_value(ret->puertoUmv, "PUERTOUMV");
+	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
+	printf("IP Kernel = %s\n", ret->ipKernel);
+	printf("Puerto Kernel = %s\n",ret->puertoKernel);
+	printf("IP UMV = %s\n", ret->ipUmv);
+	printf("Puerto UMV = %s\n", ret->puertoUmv);
+	printf("------------------------------------------------------------------------------------\n\n");
+	return ret;
+}
+
+void crearDiccionario(){
+	t_dictionary dicVariables = *dictionary_create();
+	//si el tamaño de contexto es distinto de cero
+		// for (de tamaño de contexto a 0){
+			//pedir a umv, base= stack offset=(i-1)x5 tamanio=1
+			//recibir de la umv key
+			//dictionary_put(dicVariables,key, stack + (i-1))
+	//}
+}
+
+void destruirDiccionario(){
+	dictionary_remove_and_destroy(dicVariables);
 }
 
 void avisarAlPcp(int unCodigo, int socketKernel){
@@ -131,7 +152,9 @@ void errorDeProxInstruccion(int socketKernel){
 	//avisar al pcp que hubo un error de en el pedido de la instruccion
 	int codigoErrorEnUmv = 3;
 	avisarAlPcp(codigoErrorEnUmv, socketKernel);
-
+	//mostrar por pantalla que hubo un excepcion
+	printf("Ocurrio una excepcion en el pedido a la UMV\n");
+	//concluir la ejecucion de un programa
 
 }
 
@@ -140,6 +163,7 @@ char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
 	char *pedido = malloc(sizeof(int));
 	int id_mensaje = 4; //para saber que le estoy pidiendo prox instruccion a ejecutar
 
+	//mandarle a la umv el cambio de proceso activo  pcb->id
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
 	int proxInstBase = pcb->segmento_codigo;
 	int proxInstOffset = (pcb->indice_codigo)+ 8*(1-pcb->program_counter);
@@ -162,24 +186,28 @@ char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
 
 
 t_puntero definirVariable(t_nombre_variable identificador_variable){
-	//obtener del pcb el pointer al contexto actual
-	//obtener posicion a la que escribir por pointer de ejecucion actual + desplazamiento tamaño de contexto
-	//chequea que no se pase del tamño del stack
-	//escribe identificador_variable en stack
-	//agregar a diccionario de variables: identificador y posicion de memoria dictionary_put()
-	// aumentar tamaño de contexto actual
-	//devolver puntero a la nueva variable
-	//aumentar program counter
+	// almacenar en umv base=stack  offset= tamaño= buffer=
+	//solicitar a la umv
+	//recibir de la umv un puntero a la nueva variable = puntNuevo
+	//dictionary_put(dicVariables, identificador_variable, puntNuevo)
+	//pcb->tamanio_context ++;
+	//return puntNuevo
 	printf("definir la variable %c\n",identificador_variable);
 	return POSICION_MEMORIA;
 }
 
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
-	//return dictionary_get(diccionario, identificador de variable)
-	// si no esta, devolver -1
 	printf("Obtener posicion de %c\n", identificador_variable);
-	return POSICION_MEMORIA;
+	//return dictionary_get(diccionario, identificador de variable)
+	t_puntero posicionVariable = *dictionary_get(dicVariables, identificador_variable);
+	// si no esta, devolver -1
+	if (posicionVariable == NULL){
+		posicionVariable = -1;
+	}
+	printf("La posicion es %s\n", posicionVariable);
+	return posicionVariable;
+
 }
 
 
@@ -196,18 +224,24 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
+	//cambiar va
 	printf("Asignando en el valor \n");
 }
 
 
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
-	printf("Obteniendo el valor de compartida");
+	//le mando al kernel el nombre de la variable compartida
+	//recibo el valor
+	printf("Obteniendo el valor de compartida %s que es %s", variable, CONTENIDO_VARIABLE);
 	return CONTENIDO_VARIABLE;
 }
 
 t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_variable valor){
-	printf("Asignando a variable compartida ");
+	//le mando al kernel el nombre de la variable compartida
+	//le mando el valor que le quiero asignar
+	//recibir el valor que le asigne
+	printf("Asignando a variable compartida %s el valor %c \n", variable, CONTENIDO_VARIABLE);
 	return CONTENIDO_VARIABLE;
 	}
 
@@ -234,22 +268,132 @@ void retornar(t_valor_variable retorno){
 }
 
 void imprimir(t_valor_variable valor_mostrar){
+	/*char *aux = string_itoa(valor_mostrar);
+	t_mensaje *men = crear_t_mensaje(IMPRIMIR_VALOR,aux ,string_length(aux));
+	socket_send_serealizado(soc_kernel,men);
+	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
+	socket_send_serealizado(soc_kernel,men);
+	destruir_t_mensaje(men);*/
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
 
 void imprimirTexto(char* texto){
+	/*t_mensaje *men = crear_t_mensaje(IMPRIMIR_TEXTO, texto,string_length(texto));
+	socket_send_serealizado(soc_kernel,men);
+	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
+	socket_send_serealizado(soc_kernel,men);
+	destruir_t_mensaje(men);*/
 	printf("Imprimiendo texto: %s", texto);
 	}
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
+	/*t_mensaje *men = crear_t_mensaje(IO_ID, dispositivo,string_length(dispositivo));
+	char *cant_unidades = string_itoa(tiempo);
+	men = crear_t_mensaje(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
+	socket_send_serealizado(soc_kernel,men);
+	destruir_t_mensaje(men);*/
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
+	/*t_mensaje *men = crear_t_mensaje(WAIT, identificador_semaforo,string_length(identificador_semaforo));
+	socket_send_serealizado(soc_kernel,men);
+	destruir_t_mensaje(men);*/
 	printf("Haciendo wait a semaforo\n");
 }
-void signal(t_nombre_semaforo identificador_semaforo){
+void mi_signal(t_nombre_semaforo identificador_semaforo){
+	/*t_mensaje *men = crear_t_mensaje(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
+	socket_send_serealizado(soc_kernel,men);
+	destruir_t_mensaje(men);*/
 	printf("Haciendo signal a semaforo\n");
 }
 
+void signal_handler(int sig){
+	if(sig == SIGUSR1){
+	printf("Le llego la señal sigusr");
+	//desconectarse luego de la ejecucion actual dejando de dar servicio al sistema
+	//mandarle el pcb al pcp
+	//cerrar conexiones
+	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
+	//liberar memoria
+	}
+}
+
+/*
+ * void pedir_umv_prox_instruc(){
+
+	char *dato = string_itoa(pcb->id);
+	t_mensaje *men = crear_t_mensaje(PROX_INSTRUCCION,dato,string_length(dato));
+	socket_send_serealizado(soc_umv,men);
+
+	dato = string_itoa(pcb->program_counter);
+	men = crear_t_mensaje(PROGRAM_COUNTER,dato,string_length(dato));
+	socket_send_serealizado(soc_umv,men);
+}
+
+void recv_pcb_del_kernel(t_mensaje *men){
+	switch(men->tipo){
+	case QUANTUM_MAX:
+		quantum = atoi(men->dato);
+		break;
+	case CANT_VAR_CONTEXTO_ACTUAL:
+		pcb->cant_var_contexto_actual = atoi(men->dato);
+		break;
+	case DPBU_CONTEXTO_ACTUAL:
+		pcb->dir_primer_byte_umv_contexto_actual = atoi(men->dato);
+		break;
+	case DPBU_INDICE_CODIGO:
+		pcb->dir_primer_byte_umv_indice_codigo = atoi(men->dato);
+		break;
+	case DPBU_INDICE_ETIQUETAS:
+		pcb->dir_primer_byte_umv_indice_etiquetas = atoi(men->dato);
+		break;
+	case DPBU_SEGMENTO_CODIGO:
+		pcb->dir_primer_byte_umv_segmento_codigo = atoi(men->dato);
+		break;
+	case DPBU_SEGMENTO_STACK:
+		pcb->dir_primer_byte_umv_segmento_stack = atoi(men->dato);
+		break;
+	case ID_PROG:
+		pcb->id = atoi(men->dato);
+		break;
+	case PROGRAM_COUNTER:
+		pcb->program_counter = atoi(men->dato);
+		break;
+	case TAM_INDICE_ETIQUETAS:
+		pcb->tam_indice_etiquetas = atoi(men->dato);
+		break;
+	default:
+		printf("El tipo de dato enviado es erroneo\n");
+		break;
+	}
+}
+ *
+ *
+ * void handshake_umv(){
+	t_mensaje *handshake = crear_t_mensaje(HS_UMV_CPU,"",1);
+	socket_send_serealizado(soc_umv,handshake);
+
+	handshake = socket_recv_serealizado(soc_umv);
+
+	if(handshake->tipo == HS_UMV_CPU){
+		printf("UMV conectada\n");
+	}else{
+		printf("ERROR HANDSHAKE UMV = %i\n",handshake->tipo);
+	}
+}
+
+void handshake_kernel(){
+	t_mensaje *handshake = crear_t_mensaje(HS_KERNEL_CPU,"",1);
+	socket_send_serealizado(soc_kernel,handshake);
+
+	handshake = socket_recv_serealizado(soc_kernel);
+	if(handshake->tipo == HS_KERNEL_CPU){
+		printf("KERNEL conectada\n");
+	}else{
+		printf("ERROR HANDSHAKE KERNEL = %i\n",handshake->tipo);
+	}
+}
+ *
+ * */
