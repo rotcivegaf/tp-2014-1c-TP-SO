@@ -10,6 +10,12 @@
 static const int CONTENIDO_VARIABLE = 20;
 static const int POSICION_MEMORIA = 0x10;
 
+int quantum;
+int quit_sistema = 1;
+int socketKernel;
+int socketUmv;
+char *prox_inst;
+estructura_pcb *pcb;
 
 AnSISOP_funciones functions = {
 		.AnSISOP_definirVariable		= definirVariable,
@@ -32,24 +38,41 @@ AnSISOP_kernel kernel_functions = {
 		.AnSISOP_signal = mi_signal};
 
 
+
 int main(){
+	prox_inst = malloc(0);
+	t_mensaje *men;
+	estructura_pcb *pcb = malloc(sizeof(estructura_pcb));
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
-	t_datos_config *unaConfig = *levantarConfiguracion();
+	//t_datos_config *unaConfig = levantarConfiguracion();
 
+	t_config *unaConfig = config_create("config.conf");
+	char *ipKernel=config_get_string_value(unaConfig, "IPKERNEL");
+	char *puertoKernel = config_get_string_value(unaConfig, "PUERTOKERNEL");
+	char *puertoUmv = config_get_string_value(unaConfig, "PUERTOUMV");
+	char *ipUmv=config_get_string_value(unaConfig, "IPKERNEL");
 
 
 	/*conexion con el kernel*/
 
-	int socketKernel = conectarse(unaConfig->ipKernel,unaConfig->puertoKernel);
+	socketKernel = socket_crear_client(puertoKernel, ipKernel);
+	handshake_kernel();
+	//int socketKernel = conectarse(ipKernel,puertoKernel);
 
 	//queda a la espera que el pcp  envie el pcb
 	//recibe el pcb
-	estructura_pcb *pcb = malloc(sizeof(estructura_pcb));
-	int quantum;
-	recv(socketKernel,pcb, sizeof(estructura_pcb),0);
-	recv(socketKernel, &quantum, sizeof(int), 0);
+	//int i, fdmax;
+	//fdmax=socketKernel;
 
+	//for(i = 3; i <= fdmax; i++) {
+	while(1){
+		men = socket_recv_serealizado(socketKernel);
+		recv_pcb_del_kernel(men);
+	}
+	//}
+
+	//recv(socketKernel,pcb, sizeof(estructura_pcb),0);	recv(socketKernel, &quantum, sizeof(int), 0);
 
 	//crear diccionario de variables
 	crearDiccionario();
@@ -59,7 +82,9 @@ int main(){
 	int cantIns = 0;
 
 	/*conexion con la umv*/
-	int socketUmv = conectarse(unaConfig->ipUmv,unaConfig->puertoUmv);
+	socketUmv = socket_crear_client(puertoUmv, ipUmv);
+	handshake_umv();
+	//int socketUmv = conectarse(ipUmv,puertoUmv);
 
 	char* proxInstrucc = solicitarProxSentenciaAUmv(socketUmv,pcb);
 
@@ -92,7 +117,7 @@ return 0;
 
 }
 
-t_datos_config *levantarConfiguracion(){
+/*t_datos_config *levantarConfiguracion(){
 	t_config *unaConfig = config_create("config.conf");//debe obtener este archivo por la direcc en la variable de enterno
 	t_datos_config *ret = malloc(sizeof(t_datos_config));
 	char *ipKernel=config_get_string_value(ret->ipKernel, "IPKERNEL");
@@ -106,10 +131,10 @@ t_datos_config *levantarConfiguracion(){
 	printf("Puerto UMV = %s\n", ret->puertoUmv);
 	printf("------------------------------------------------------------------------------------\n\n");
 	return ret;
-}
+}*/
 
 void crearDiccionario(){
-	t_dictionary dicVariables = *dictionary_create();
+	//t_dictionary *dicVariables = dictionary_create();
 	//si el tamaño de contexto es distinto de cero
 		// for (de tamaño de contexto a 0){
 			//pedir a umv, base= stack offset=(i-1)x5 tamanio=1
@@ -119,7 +144,7 @@ void crearDiccionario(){
 }
 
 void destruirDiccionario(){
-	dictionary_remove_and_destroy(dicVariables);
+	//dictionary_remove_and_destroy(dicVariables, , );
 }
 
 void avisarAlPcp(int unCodigo, int socketKernel){
@@ -181,8 +206,98 @@ char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
 	recv(socket,instruccion,sizeof(instruccion),0);
 	printf("Instruccion que voy a ejecutar %s\n",instruccion);
 	return instruccion;
-
 }
+
+void signal_handler(int sig){
+	if(sig == SIGUSR1){
+	printf("Le llego la señal sigusr");
+	//desconectarse luego de la ejecucion actual dejando de dar servicio al sistema
+	//mandarle el pcb al pcp
+	//cerrar conexiones
+	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
+	//liberar memoria
+	}
+}
+
+
+
+
+void recv_pcb_del_kernel(t_mensaje *men){
+	switch(men->tipo){
+	case QUANTUM_MAX:
+		quantum = atoi(men->dato);
+		break;
+	case CANT_VAR_CONTEXTO_ACTUAL:
+		//pcb->cant_var_contexto_actual = atoi(men->dato);
+		pcb->tamanio_context = atoi(men->dato);
+		break;
+	case DPBU_CONTEXTO_ACTUAL:
+		//pcb->dir_primer_byte_umv_contexto_actual = atoi(men->dato);
+		*pcb->cursor_stack = atoi(men->dato);
+		break;
+	case DPBU_INDICE_CODIGO:
+		//pcb->dir_primer_byte_umv_indice_codigo = atoi(men->dato);
+		pcb->indice_codigo = atoi(men->dato);
+		break;
+	case DPBU_INDICE_ETIQUETAS:
+		//pcb->dir_primer_byte_umv_indice_etiquetas = atoi(men->dato);
+		pcb->indice_etiquetas = atoi(men->dato);
+		break;
+	case DPBU_SEGMENTO_CODIGO:
+		//pcb->dir_primer_byte_umv_segmento_codigo = atoi(men->dato);
+		pcb->segmento_codigo = atoi(men->dato);
+		break;
+	case DPBU_SEGMENTO_STACK:
+		//pcb->dir_primer_byte_umv_segmento_stack = atoi(men->dato);
+		pcb->segmento_stack = atoi(men->dato);
+		break;
+	case ID_PROG:
+		//pcb->id = atoi(men->dato);
+		pcb->id = atoi(men->dato);
+		break;
+	case PROGRAM_COUNTER:
+		//pcb->program_counter = atoi(men->dato);
+		pcb->program_counter = atoi(men->dato);
+		break;
+	case TAM_INDICE_ETIQUETAS:
+		//pcb->tam_indice_etiquetas = atoi(men->dato);
+		pcb->tamanio_indice_etiquetas = atoi(men->dato);
+		break;
+	default:
+		printf("El tipo de dato enviado es erroneo\n");
+		//deberia avisar al kernel que recibio mal el pcb
+		break;
+	}
+}
+
+
+ void handshake_umv(){
+	t_mensaje *handshake = crear_t_mensaje(HS_UMV_CPU,"",1);
+	socket_send_serealizado(socketUmv,handshake);
+
+	handshake = socket_recv_serealizado(socketUmv);
+
+	if(handshake->tipo == HS_UMV_CPU){
+		printf("UMV conectada\n");
+	}else{
+		printf("ERROR HANDSHAKE UMV = %i\n",handshake->tipo);
+	}
+}
+
+void handshake_kernel(){
+	t_mensaje *handshake = crear_t_mensaje(HS_KERNEL_CPU,"",1);
+	socket_send_serealizado(socketKernel,handshake);
+
+	handshake = socket_recv_serealizado(socketKernel);
+	if(handshake->tipo == HS_KERNEL_CPU){
+		printf("KERNEL conectada\n");
+	}else{
+		printf("ERROR HANDSHAKE KERNEL = %i\n",handshake->tipo);
+	}
+}
+
+
+//Primitivas ANSISOP
 
 
 t_puntero definirVariable(t_nombre_variable identificador_variable){
@@ -199,8 +314,9 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	printf("Obtener posicion de %c\n", identificador_variable);
+	return POSICION_MEMORIA;
 	//return dictionary_get(diccionario, identificador de variable)
-	t_puntero posicionVariable = *dictionary_get(dicVariables, identificador_variable);
+	/*t_puntero posicionVariable = *dictionary_get(dicVariables, identificador_variable);
 	// si no esta, devolver -1
 	if (posicionVariable == NULL){
 		posicionVariable = -1;
@@ -208,7 +324,7 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	printf("La posicion es %s\n", posicionVariable);
 	return posicionVariable;
 
-}
+}*/
 
 
 
@@ -233,7 +349,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
 	//recibo el valor
-	printf("Obteniendo el valor de compartida %s que es %s", variable, CONTENIDO_VARIABLE);
+	printf("Obteniendo el valor de compartida %s que es %c", variable, CONTENIDO_VARIABLE);
 	return CONTENIDO_VARIABLE;
 }
 
@@ -247,153 +363,113 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 
 void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){
+	// primer instruccion ejecutable de etiqueta y -1 en caso de error
+	/* Cambia la linea de ejecucion a la correspondiente de la etiqueta buscada.
+			 * @sintax	TEXT_GOTO (goto )
+			 * @param	t_nombre_etiqueta	Nombre de la etiqueta
+			 * @return	void
+			 */
 	printf("Yendo al label \n");
 
 }
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
+	/*Preserva el contexto de ejecución actual para poder retornar luego al mismo.
+			 * Modifica las estructuras correspondientes para mostrar un nuevo contexto vacío.
+			 *
+			 * Los parámetros serán definidos luego de esta instrucción de la misma manera que una variable local, con identificadores numéricos empezando por el 0.
+			 *
+			 * @sintax	Sin sintaxis particular, se invoca cuando no coresponde a ninguna de las otras reglas sintacticas
+			 * @param	etiqueta	Nombre de la funcion
+			 * @return	void
+			 */
 	printf("Llamando sin retorno a etiqueta\n");
 	}
 
 void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
+	/* Preserva el contexto de ejecución actual para poder retornar luego al mismo, junto con la posicion de la variable entregada por donde_retornar.
+		 * Modifica las estructuras correspondientes para mostrar un nuevo contexto vacío.
+		 *
+		 * Los parámetros serán definidos luego de esta instrucción de la misma manera que una variable local, con identificadores numéricos empezando por el 0.
+		 *
+		 * @sintax	TEXT_CALL (<-)
+		 * @param	etiqueta	Nombre de la funcion
+		 * @param	donde_retornar	Posicion donde insertar el valor de retorno
+		 * @return	void
+		 */
 	printf("Llamando con retorno a etiqueta");
 }
 
 void finalizar(void){
+	/*
+			 * FINALIZAR
+			 *
+			 * Cambia el Contexto de Ejecución Actual para volver al Contexto anterior al que se está ejecutando, recuperando el Cursor de Contexto Actual y el Program Counter previamente apilados en el Stack.
+			 * En caso de estar finalizando el Contexto principal (el ubicado al inicio del Stack), deberá finalizar la ejecución del programa.
+			 *
+			 * @sintax	TEXT_END (end )
+			 * @param	void
+			 * @return	void
+			 */
 	printf("Finalizando");
 }
 
 void retornar(t_valor_variable retorno){
+	/*
+			 * RETORNAR
+			 *
+			 * Cambia el Contexto de Ejecución Actual para volver al Contexto anterior al que se está ejecutando, recuperando el Cursor de Contexto Actual, el Program Counter y la direccion donde retornar, asignando el valor de retorno en esta, previamente apilados en el Stack.
+			 *
+			 * @sintax	TEXT_RETURN (return )
+			 * @param	retorno	Valor a ingresar en la posicion corespondiente
+			 * @return	void
+			 */
 	printf("Retornando valor de variable%d\n", retorno);
 }
 
 void imprimir(t_valor_variable valor_mostrar){
-	/*char *aux = string_itoa(valor_mostrar);
+	char *aux = string_itoa(valor_mostrar);
 	t_mensaje *men = crear_t_mensaje(IMPRIMIR_VALOR,aux ,string_length(aux));
-	socket_send_serealizado(soc_kernel,men);
+	socket_send_serealizado(socketKernel,men);
 	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_serealizado(soc_kernel,men);
-	destruir_t_mensaje(men);*/
+	socket_send_serealizado(socketKernel,men);
+	destruir_t_mensaje(men);
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
 
 void imprimirTexto(char* texto){
-	/*t_mensaje *men = crear_t_mensaje(IMPRIMIR_TEXTO, texto,string_length(texto));
-	socket_send_serealizado(soc_kernel,men);
+	t_mensaje *men = crear_t_mensaje(IMPRIMIR_TEXTO, texto,string_length(texto));
+	socket_send_serealizado(socketKernel,men);
 	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_serealizado(soc_kernel,men);
-	destruir_t_mensaje(men);*/
+	socket_send_serealizado(socketKernel,men);
+	destruir_t_mensaje(men);
 	printf("Imprimiendo texto: %s", texto);
 	}
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	/*t_mensaje *men = crear_t_mensaje(IO_ID, dispositivo,string_length(dispositivo));
+	t_mensaje *men = crear_t_mensaje(IO_ID, dispositivo,string_length(dispositivo));
 	char *cant_unidades = string_itoa(tiempo);
 	men = crear_t_mensaje(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
-	socket_send_serealizado(soc_kernel,men);
-	destruir_t_mensaje(men);*/
+	socket_send_serealizado(socketKernel,men);
+	destruir_t_mensaje(men);
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	/*t_mensaje *men = crear_t_mensaje(WAIT, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_serealizado(soc_kernel,men);
-	destruir_t_mensaje(men);*/
-	printf("Haciendo wait a semaforo\n");
+	t_mensaje *men = crear_t_mensaje(WAIT, identificador_semaforo,string_length(identificador_semaforo));
+	socket_send_serealizado(socketKernel,men);
+	destruir_t_mensaje(men);
+	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
 }
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	/*t_mensaje *men = crear_t_mensaje(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_serealizado(soc_kernel,men);
-	destruir_t_mensaje(men);*/
-	printf("Haciendo signal a semaforo\n");
+	t_mensaje *men = crear_t_mensaje(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
+	socket_send_serealizado(socketKernel,men);
+	destruir_t_mensaje(men);
+	printf("Haciendo signal a semaforo%s\n", identificador_semaforo);
+
+}
 }
 
-void signal_handler(int sig){
-	if(sig == SIGUSR1){
-	printf("Le llego la señal sigusr");
-	//desconectarse luego de la ejecucion actual dejando de dar servicio al sistema
-	//mandarle el pcb al pcp
-	//cerrar conexiones
-	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
-	//liberar memoria
-	}
-}
 
-/*
- * void pedir_umv_prox_instruc(){
 
-	char *dato = string_itoa(pcb->id);
-	t_mensaje *men = crear_t_mensaje(PROX_INSTRUCCION,dato,string_length(dato));
-	socket_send_serealizado(soc_umv,men);
-
-	dato = string_itoa(pcb->program_counter);
-	men = crear_t_mensaje(PROGRAM_COUNTER,dato,string_length(dato));
-	socket_send_serealizado(soc_umv,men);
-}
-
-void recv_pcb_del_kernel(t_mensaje *men){
-	switch(men->tipo){
-	case QUANTUM_MAX:
-		quantum = atoi(men->dato);
-		break;
-	case CANT_VAR_CONTEXTO_ACTUAL:
-		pcb->cant_var_contexto_actual = atoi(men->dato);
-		break;
-	case DPBU_CONTEXTO_ACTUAL:
-		pcb->dir_primer_byte_umv_contexto_actual = atoi(men->dato);
-		break;
-	case DPBU_INDICE_CODIGO:
-		pcb->dir_primer_byte_umv_indice_codigo = atoi(men->dato);
-		break;
-	case DPBU_INDICE_ETIQUETAS:
-		pcb->dir_primer_byte_umv_indice_etiquetas = atoi(men->dato);
-		break;
-	case DPBU_SEGMENTO_CODIGO:
-		pcb->dir_primer_byte_umv_segmento_codigo = atoi(men->dato);
-		break;
-	case DPBU_SEGMENTO_STACK:
-		pcb->dir_primer_byte_umv_segmento_stack = atoi(men->dato);
-		break;
-	case ID_PROG:
-		pcb->id = atoi(men->dato);
-		break;
-	case PROGRAM_COUNTER:
-		pcb->program_counter = atoi(men->dato);
-		break;
-	case TAM_INDICE_ETIQUETAS:
-		pcb->tam_indice_etiquetas = atoi(men->dato);
-		break;
-	default:
-		printf("El tipo de dato enviado es erroneo\n");
-		break;
-	}
-}
- *
- *
- * void handshake_umv(){
-	t_mensaje *handshake = crear_t_mensaje(HS_UMV_CPU,"",1);
-	socket_send_serealizado(soc_umv,handshake);
-
-	handshake = socket_recv_serealizado(soc_umv);
-
-	if(handshake->tipo == HS_UMV_CPU){
-		printf("UMV conectada\n");
-	}else{
-		printf("ERROR HANDSHAKE UMV = %i\n",handshake->tipo);
-	}
-}
-
-void handshake_kernel(){
-	t_mensaje *handshake = crear_t_mensaje(HS_KERNEL_CPU,"",1);
-	socket_send_serealizado(soc_kernel,handshake);
-
-	handshake = socket_recv_serealizado(soc_kernel);
-	if(handshake->tipo == HS_KERNEL_CPU){
-		printf("KERNEL conectada\n");
-	}else{
-		printf("ERROR HANDSHAKE KERNEL = %i\n",handshake->tipo);
-	}
-}
- *
- * */

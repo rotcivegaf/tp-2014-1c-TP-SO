@@ -12,6 +12,8 @@
 #include <parser/parser.h>
 #include "funciones.h"
 #include <commons/config.h>
+#include <commons/string.h>
+#include <commons/collections/dictionary.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,7 +23,10 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include "sockets_lib.h"
 //importar la shared library
+
+
 
 typedef struct{
 		int id;
@@ -39,24 +44,33 @@ typedef struct{
 		int socket_asociado;
 }estructura_pcb;
 
-typedef struct{
+/*typedef struct{
 	char *puertoKernel;
 	char *ipKernel;
 	char *puertoUmv;
 	char *ipUmv;
-}t_datos_config;
+}t_datos_config;*/
 
 t_dictionary dicVariables;
+int socketKernel, socketUmv;
+t_mensaje *men;
 
+
+void handshake_umv();
+void handshake_kernel();
+void recv_pcb_del_kernel(t_mensaje *men);
 void destruirDiccionario();
 void signal_handler(int sig);
-t_config *levantarConfiguracion();
+//t_config *levantarConfiguracion();
 void crearDiccionario();
 void salirPorQuantum(int socketKernel, estructura_pcb *pcb);
 void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
 void errorDeProxInstruccion(int socketKernel);
 char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb);
+
+
+//primitivas anSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable);
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable);
 t_valor_variable dereferenciar(t_puntero direccion_variable);
@@ -68,6 +82,8 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta);
 void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar);
 void finalizar(void);
 void retornar(t_valor_variable retorno);
+
+//primitivas anSISOP del Kernel
 void imprimir(t_valor_variable valor_mostrar);
 void imprimirTexto(char* texto);
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo);
