@@ -29,19 +29,19 @@
 
 
 typedef struct{
-		int id;
-		int segmento_codigo;
-		int segmento_stack;
-		int *cursor_stack;
-		int indice_codigo;
-		int indice_etiquetas;
-		int program_counter;
-		int tamanio_context;
-		int tamanio_indice_etiquetas;
-		int cant_instrucciones;
-		int tamanio_script;
-		int peso;
-		int socket_asociado;
+		u_int32_t id;
+		u_int32_t segmento_codigo;
+		u_int32_t segmento_stack;
+		u_int32_t *cursor_stack;
+		u_int32_t indice_codigo;
+		u_int32_t indice_etiquetas;
+		u_int32_t program_counter;
+		u_int32_t tamanio_context;
+		u_int32_t tamanio_indice_etiquetas;
+		u_int32_t cant_instrucciones;
+		u_int32_t tamanio_script;
+		u_int32_t peso;
+		u_int32_t socket_asociado;
 }estructura_pcb;
 
 /*typedef struct{

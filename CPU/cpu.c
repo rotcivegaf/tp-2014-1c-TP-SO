@@ -149,14 +149,14 @@ void destruirDiccionario(){
 
 void avisarAlPcp(int unCodigo, int socketKernel){
 	char *pedido = malloc(sizeof(int));
-	int id_mensaje = 6;
+	u_int32_t id_mensaje = 6;
 	memcpy(pedido, &id_mensaje, sizeof(id_mensaje));
 	send(socketKernel,pedido,sizeof(int),0);
 }
 
 void salirPorQuantum(int socketKernel, estructura_pcb *pcb){
 	//aviso al pcp que termino mi quantum
-	int codigoQuantum =1;
+	u_int32_t codigoQuantum =1;
 	avisarAlPcp(codigoQuantum, socketKernel);
 	//le mando el pcb actualizado;
 	send(socketKernel,pcb, sizeof(estructura_pcb),0);
@@ -165,7 +165,7 @@ void salirPorQuantum(int socketKernel, estructura_pcb *pcb){
 void parsearUltimaInstruccion(char* ultIns, int socketKernel){
 	analizadorLinea(strdup(ultIns), &functions, &kernel_functions);
 	//avisar al pcp que termino el programa
-	int codigoFinProg = 2;
+	u_int32_t codigoFinProg = 2;
 	avisarAlPcp(codigoFinProg, socketKernel);
 }
 
@@ -175,7 +175,7 @@ void parsearUnaInstruccion(char* unaIns){
 
 void errorDeProxInstruccion(int socketKernel){
 	//avisar al pcp que hubo un error de en el pedido de la instruccion
-	int codigoErrorEnUmv = 3;
+	u_int32_t codigoErrorEnUmv = 3;
 	avisarAlPcp(codigoErrorEnUmv, socketKernel);
 	//mostrar por pantalla que hubo un excepcion
 	printf("Ocurrio una excepcion en el pedido a la UMV\n");
@@ -186,13 +186,13 @@ void errorDeProxInstruccion(int socketKernel){
 char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
 	//para decir que se esta conectando una conexion tipo cpu
 	char *pedido = malloc(sizeof(int));
-	int id_mensaje = 4; //para saber que le estoy pidiendo prox instruccion a ejecutar
+	u_int32_t id_mensaje = 4; //para saber que le estoy pidiendo prox instruccion a ejecutar
 
 	//mandarle a la umv el cambio de proceso activo  pcb->id
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
-	int proxInstBase = pcb->segmento_codigo;
-	int proxInstOffset = (pcb->indice_codigo)+ 8*(1-pcb->program_counter);
-	int proxInstTamanio = proxInstOffset + 4;
+	u_int32_t proxInstBase = pcb->segmento_codigo;
+	u_int32_t proxInstOffset = (pcb->indice_codigo)+ 8*(1-pcb->program_counter);
+	u_int32_t proxInstTamanio = proxInstOffset + 4;
 	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
 	memcpy(pedido+sizeof(id_mensaje),&proxInstBase,sizeof(proxInstBase));
 	memcpy(pedido+sizeof(id_mensaje)+sizeof(proxInstBase), &proxInstOffset, sizeof(proxInstOffset));
