@@ -1,28 +1,9 @@
-/*
- * programa.c
- *
- *  Created on: 25/04/2014
- *      Author: utnso
- */
-
-#include "sockets_lib.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <commons/config.h>
-
+#include "programa.h"
 
 #define IP "127.0.0.1" //Esto hay que cargarlo por archivo de config, que esta en la variable de entorno ANSISOP_CONFIG
-#define PUERTO 5000
+#define PUERTO "5000"
 
-
-int tamanioArchivo(FILE *archivo);
-void handshake_kernel(int soc_kernel);
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
 	/*t_config *config=config_create("configuracion.conf");
 	char *ipKernel=config_get_string_value(config, "IP");
 	char *puertoKernel = config_get_int_value(config, "PUERTO");*/
@@ -39,19 +20,18 @@ int main(int argc, char *argv[])
 	while(!feof(scriptAProcesar))
 		script[i++]=fgetc(scriptAProcesar);
 
-	t_mensaje *mensaje_cod_prog = crear_t_mensaje(CODIGO_SCRIPT,script,tamanioScript);
-	socket_send_serealizado(socket_kernel,mensaje_cod_prog);
+	t_men_comun *mensaje_cod_prog = crear_men_comun(CODIGO_SCRIPT,script,tamanioScript);
+	socket_send_comun(socket_kernel,mensaje_cod_prog);
 
 	//espero la respuesta del kernel
 	int fin_ejecucion = 0;
-	t_mensaje *mensaje_recibido;
+	t_men_comun *mensaje_recibido;
 	while (fin_ejecucion != 1){
-		mensaje_recibido = socket_recv_serealizado(socket_kernel);
+		mensaje_recibido = socket_recv_comun(socket_kernel);
 
 		switch(mensaje_recibido->tipo){
 		case IMPRIMIR_VALOR:
-			int valor = atoi(mensaje_recibido->dato);
-			printf("%d",valor);
+			printf("%d",atoi(mensaje_recibido->dato));
 			break;
 		case IMPRIMIR_TEXTO:
 			printf("%s",mensaje_recibido->dato);
@@ -95,10 +75,10 @@ int tamanioArchivo(FILE *archivo){
 }
 
 void handshake_kernel(int soc_kernel){
-	t_mensaje *handshake = crear_t_mensaje(HS_KERNEL_PROG,"",1);
-	socket_send_serealizado(soc_kernel,handshake);
+	t_men_comun *handshake = crear_men_comun(HS_KERNEL_PROG,"",1);
+	socket_send_comun(soc_kernel,handshake);
 
-	handshake = socket_recv_serealizado(soc_kernel);
+	handshake = socket_recv_comun(soc_kernel);
 
 	if(handshake->tipo == HS_KERNEL_PROG)
 		printf("KERNEL conectado\n");
