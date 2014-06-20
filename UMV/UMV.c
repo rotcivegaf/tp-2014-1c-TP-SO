@@ -1,63 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <math.h>
-#include <time.h>
+#include "UMV.h"
 
-#include <commons/string.h>
-#include <commons/config.h>
-
-#include <commons/collections/dictionary.h>
-#include <commons/collections/list.h>
-
-#define MAX 50
-
-void encabezado(long byte, char *modo);
-void crearConsola();
-void admin_conecciones();
-int clasificarComando(char *comando);
-void operacion(int proceso, int base, int offset, int tamanio);
-void retardo(int milisegundos);
-void algoritmo(char *modo);
-void compactar();
-void dump();
-int asignarMemoria(int tamanio);
-void recorrerTablaSegmentos();
-void recorrerLista(char *clave, void *ptrLista);
-void insertarNodosBarrera ();
-int asignarMemoriaAleatoria(int tamanio);
-void destruirSegmentos(char *id_Prog);
-void eliminarElemento(void *elemento);
-
-
-void *ptrMemoria;
-void *tablaProgramas;
-char modoOperacion;
-void *listaAuxiliar;
-void *ptrConfig;
-int memEstaOk;
-
-typedef struct t_tabMem {
-	int memLogica;
-	int longitud;
-	int memFisica;
-	} TabMen;
-
-typedef struct t_auxiliar {
-	int ptrInicio;
-	int ptrFin;
-	void *ptrATabla;
-	} ListAuxiliar;
-
-
-void completarListaAuxiliar(TabMen *nodo);
-bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-void controlarMemPisada();
-
-
-int main()
-{
+int main(){
 
 	extern void *ptrMemoria;
 
@@ -123,8 +66,7 @@ void crearConsola (){
 		}
 }
 
-int clasificarComando (char *comando)
-{
+int clasificarComando (char *comando){
 	int a;
 	if (!strcmp(comando,"operacion")) a=1;
 	if (!strcmp(comando,"retardo")) a=2;
@@ -142,22 +84,19 @@ int clasificarComando (char *comando)
 
 
 void admin_conecciones(){
-	int socket = servidor(config_get_string_value(ptrConfig,"IP"),config_get_int_value(ptrConfig,"puerto"));
+	//int socket = servidor(config_get_string_value(ptrConfig,"IP"),config_get_int_value(ptrConfig,"puerto"));
 
 }
 
 
-void operacion(int proceso, int base, int offset, int tamanio)
-{
+void operacion(int proceso, int base, int offset, int tamanio){
 	printf("operacion");
 }
-void retardo(int milisegundos)
-{
+void retardo(int milisegundos){
 	printf("retardo");
 }
 //modifica el modo de operacion
-void algoritmo(char *modo)
-{
+void algoritmo(char *modo){
 	if (!strcmp(modo,"WorstFit") || !strcmp(modo,"FirstFit"))
 		modoOperacion=modo[0];
 	else
@@ -168,8 +107,7 @@ bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
 	return ((nodo1->ptrInicio) < (nodo2->ptrInicio));
 }
 
-void compactar()
-{
+void compactar(){
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int x;
@@ -201,8 +139,7 @@ void compactar()
 	list_destroy(listaAuxiliar);
 }
 
-void dump()
-{
+void dump(){
 	printf("dump");
 }
 
@@ -217,8 +154,7 @@ void encabezado(long byte, char *modo){
 }
 
 
-void crearSegmento(char *id_Prog, int tamanio)
-{
+void crearSegmento(char *id_Prog, int tamanio){
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 	/*pregunta si en la tabla de programas existe el id de prog,
@@ -255,8 +191,7 @@ void controlarMemPisada(TabMen *nodo, int numMemoria){
 
 }
 
-int asignarMemoria(int tamanio)
-{
+int asignarMemoria(int tamanio){
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int x;
@@ -324,8 +259,7 @@ int asignarMemoriaAleatoria(int tamanio){
 	return numero;
 }
 
-void recorrerTablaSegmentos()
-{
+void recorrerTablaSegmentos(){
 	listaAuxiliar= list_create();
 	dictionary_iterator(tablaProgramas,recorrerLista);
 	insertarNodosBarrera();
@@ -335,8 +269,7 @@ void recorrerLista(char* clave, void *ptrLista){
 	list_iterate(ptrLista,(void *)completarListaAuxiliar);
 }
 
-void completarListaAuxiliar(TabMen *nodo)
-{
+void completarListaAuxiliar(TabMen *nodo){
 	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
 
 	nodoAux->ptrInicio = nodo->memFisica;
@@ -346,8 +279,7 @@ void completarListaAuxiliar(TabMen *nodo)
 	list_add(listaAuxiliar, nodoAux);
 }
 
-void insertarNodosBarrera ()
-{
+void insertarNodosBarrera (){
 	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
 	nodoAux->ptrInicio = -1;
 	nodoAux->ptrFin = -1;
