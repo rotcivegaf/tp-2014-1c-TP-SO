@@ -13,6 +13,7 @@
 	//tipos de mensajes
 	typedef enum {
 		CONEC_CERRADA = 0,
+		FIN_QUANTUM=1,
 		CPU_DESCONEC = 2,
 		//handshakes
 		HS_KERNEL_UMV = 10,
