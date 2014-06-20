@@ -112,9 +112,9 @@
 	void handshake_cpu(int soc);
 	void handshake_prog(int soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
-	t_resp_sol_mem * solicitar_mem(t_mensaje *men_cod_prog, int tam_stack, int id_prog);
-	t_pcb *crear_pcb_escribir_seg_UMV(t_mensaje *men_cod_prog ,t_resp_sol_mem *resp_sol ,int *contador_id_programa);
-	int calcular_peso(t_mensaje *men_cod_prog);
+	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int tam_stack, int id_prog);
+	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int *contador_id_programa);
+	int calcular_peso(t_men_comun *men_cod_prog);
 	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
 	t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config);
 	void *plp();
