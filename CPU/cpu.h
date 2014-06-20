@@ -53,12 +53,12 @@ typedef struct{
 
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
-t_mensaje *men;
+t_men_comun *men;
 
 
 void handshake_umv();
 void handshake_kernel();
-void recv_pcb_del_kernel(t_mensaje *men);
+void recv_pcb_del_kernel(t_men_comun *men);
 void destruirDiccionario();
 void signal_handler(int sig);
 //t_config *levantarConfiguracion();

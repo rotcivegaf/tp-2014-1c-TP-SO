@@ -41,7 +41,7 @@ AnSISOP_kernel kernel_functions = {
 
 int main(){
 	prox_inst = malloc(0);
-	t_mensaje *men;
+	t_men_comun *men;
 	estructura_pcb *pcb = malloc(sizeof(estructura_pcb));
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
@@ -222,7 +222,7 @@ void signal_handler(int sig){
 
 
 
-void recv_pcb_del_kernel(t_mensaje *men){
+void recv_pcb_del_kernel(t_men_comun *men){
 	switch(men->tipo){
 	case QUANTUM_MAX:
 		quantum = atoi(men->dato);
@@ -272,7 +272,7 @@ void recv_pcb_del_kernel(t_mensaje *men){
 
 
  void handshake_umv(){
-	t_mensaje *handshake = crear_t_mensaje(HS_UMV_CPU,"",1);
+	t_men_comun *handshake = crear_men_comun(HS_UMV_CPU,"",1);
 	socket_send_serealizado(socketUmv,handshake);
 
 	handshake = socket_recv_serealizado(socketUmv);
@@ -285,7 +285,7 @@ void recv_pcb_del_kernel(t_mensaje *men){
 }
 
 void handshake_kernel(){
-	t_mensaje *handshake = crear_t_mensaje(HS_KERNEL_CPU,"",1);
+	t_men_comun *handshake = crear_men_comun(HS_KERNEL_CPU,"",1);
 	socket_send_serealizado(socketKernel,handshake);
 
 	handshake = socket_recv_serealizado(socketKernel);
@@ -323,8 +323,8 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	}
 	printf("La posicion es %s\n", posicionVariable);
 	return posicionVariable;
-
-}*/
+*/
+}
 
 
 
@@ -429,9 +429,9 @@ void retornar(t_valor_variable retorno){
 
 void imprimir(t_valor_variable valor_mostrar){
 	char *aux = string_itoa(valor_mostrar);
-	t_mensaje *men = crear_t_mensaje(IMPRIMIR_VALOR,aux ,string_length(aux));
+	t_men_comun *men = crear_men_comun(IMPRIMIR_VALOR,aux ,string_length(aux));
 	socket_send_serealizado(socketKernel,men);
-	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
+	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_serealizado(socketKernel,men);
 	destruir_t_mensaje(men);
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
@@ -439,36 +439,35 @@ void imprimir(t_valor_variable valor_mostrar){
 
 
 void imprimirTexto(char* texto){
-	t_mensaje *men = crear_t_mensaje(IMPRIMIR_TEXTO, texto,string_length(texto));
+	t_men_comun *men = crear_men_comun(IMPRIMIR_TEXTO, texto,string_length(texto));
 	socket_send_serealizado(socketKernel,men);
-	men = crear_t_mensaje(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
+	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_serealizado(socketKernel,men);
 	destruir_t_mensaje(men);
 	printf("Imprimiendo texto: %s", texto);
 	}
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	t_mensaje *men = crear_t_mensaje(IO_ID, dispositivo,string_length(dispositivo));
+	t_men_comun *men = crear_men_comun(IO_ID, dispositivo,string_length(dispositivo));
 	char *cant_unidades = string_itoa(tiempo);
-	men = crear_t_mensaje(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
+	men = crear_men_comun(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
 	socket_send_serealizado(socketKernel,men);
 	destruir_t_mensaje(men);
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	t_mensaje *men = crear_t_mensaje(WAIT, identificador_semaforo,string_length(identificador_semaforo));
+	t_men_comun *men = crear_men_comun(WAIT, identificador_semaforo,string_length(identificador_semaforo));
 	socket_send_serealizado(socketKernel,men);
 	destruir_t_mensaje(men);
 	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
 }
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	t_mensaje *men = crear_t_mensaje(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
+	t_men_comun *men = crear_men_comun(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
 	socket_send_serealizado(socketKernel,men);
 	destruir_t_mensaje(men);
 	printf("Haciendo signal a semaforo%s\n", identificador_semaforo);
 
-}
 }
 
 
