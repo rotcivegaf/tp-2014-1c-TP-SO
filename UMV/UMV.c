@@ -170,10 +170,9 @@ void dump(){
 void encabezado(long byte, char *modo){
 	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
 	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
-	printf("IP: %d\n", config_get_int_value(ptrConfig,"IP"));
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
-	printf("------------------------------------------------------------------------\n\n");
+	printf("------------------------------------------------------------------\n\n");
 }
 
 
