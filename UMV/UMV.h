@@ -24,8 +24,8 @@
 	#define MAX 50
 
 	void encabezado(long byte, char *modo);
-	void crearConsola();
-	void admin_conecciones();
+	void *crearConsola();
+	void *admin_conecciones();
 	int clasificarComando(char *comando);
 	void operacion(int proceso, int base, int offset, int tamanio);
 	void retardo(int milisegundos);

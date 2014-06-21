@@ -1,4 +1,5 @@
 #include "UMV.h"
+int quit_sistema = 1;
 
 int main(){
 
@@ -26,7 +27,7 @@ int main(){
 	return 0;
 }
 
-void crearConsola (){
+void *crearConsola (){
 	char **arrayComando;
 	int a;
 	char entrada[100];
@@ -36,8 +37,7 @@ void crearConsola (){
 		arrayComando =  string_split(entrada," ");
 		a = clasificarComando(arrayComando[0]);
 
-		while (a != 6)
-		{
+		while (a != 6){
 			switch (a){
 				case 1:
 					operacion(atoi(arrayComando[1]),atoi(arrayComando[2]),atoi(arrayComando[3]),atoi(arrayComando[4]));
@@ -64,6 +64,7 @@ void crearConsola (){
 		arrayComando =  string_split(entrada," ");
 		a = clasificarComando(arrayComando[0]);
 		}
+	return NULL;
 }
 
 int clasificarComando (char *comando){
@@ -83,11 +84,33 @@ int clasificarComando (char *comando){
 }
 
 
-void admin_conecciones(){
-	//int socket = servidor(config_get_string_value(ptrConfig,"IP"),config_get_int_value(ptrConfig,"puerto"));
+void *admin_conecciones(){
+	int listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
+	int new_soc;
+	t_men_comun *men;
 
+	while(quit_sistema){
+		new_soc = socket_accept(listen_soc);
+		men = socket_recv_comun(new_soc);
+		if (men->tipo == CONEC_CERRADA){
+			printf("Socket nº%i desconectado",new_soc);
+			continue;
+		}
+		if (men->tipo >= HS_KERNEL_UMV){//si se conecta el kernel
+			//todo crear hilo para administrar el kernel
+			//acordarse de responder el handshake
+			continue;
+		}
+		if (men->tipo >= HS_CPU_UMV){//si es una cpu nueva
+			//todo crear hilo para administrar la cpu nueva
+			//acordarse de responder el handshake
+			continue;
+		}
+		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men->tipo);
+	}
+	socket_cerrar(listen_soc);
+	return NULL;
 }
-
 
 void operacion(int proceso, int base, int offset, int tamanio){
 	printf("operacion");
