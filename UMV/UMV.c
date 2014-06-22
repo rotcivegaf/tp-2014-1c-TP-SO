@@ -166,7 +166,6 @@ void dump(){
 	printf("dump");
 }
 
-
 void encabezado(long byte, char *modo){
 	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
 	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
@@ -180,19 +179,21 @@ void crearSegmento(char *id_Prog, int tamanio){
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 	/*pregunta si en la tabla de programas existe el id de prog,
-	 si no existe se agrega el key al diccionario y si existe
-	 se agrega un nodo a la lista de segmentos, controlando que
-	 la memoria logica no se pise dentro del mismo programa */
+		 si no existe se agrega el key al diccionario y si existe
+		 se agrega un nodo a la lista de segmentos, controlando que
+		 la memoria logica no se pise dentro del mismo programa */
 	nodoTab->longitud = tamanio;
 	nodoTab->memFisica = asignarMemoria(tamanio);
 
 	if (dictionary_has_key(tablaProgramas, id_Prog))
 		{
 		lista = dictionary_get(tablaProgramas,id_Prog);
+			/*controla que no se pise la memoria dentro del mismo programa
+			repitiendo el ciclio hasta que se genere uno valido*/
 			do {
 			memEstaOk = 1;
 			nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
-			//list_iterate(lista,controlarMemPisada(nodoTab->memLogica));
+			memEstaOk = controlarMemPisada(lista,nodoTab->memLogica,tamanio);
 			}while (!memEstaOk);
 		list_add(lista,nodoTab);
 		}
@@ -205,12 +206,17 @@ void crearSegmento(char *id_Prog, int tamanio){
 	}
 
 }
-// revisar
-void controlarMemPisada(TabMen *nodo, int numMemoria){
-	if (((nodo->memLogica) < numMemoria) && ((nodo->memLogica + nodo->longitud) > numMemoria)){
-		memEstaOk = 0;
-	}
 
+int controlarMemPisada(void *lista, int numMemoria, int tamanio){
+	int x;
+	TabMen *nodo;
+	for (x=0;list_size(lista)-1;x++){
+		nodo = list_get(lista,x);
+		if ((((nodo->memLogica) <= numMemoria) && ((nodo->memLogica + nodo->longitud) >= numMemoria)) || (((nodo->memLogica) <= numMemoria+tamanio) && ((nodo->memLogica + nodo->longitud) >= numMemoria+tamanio)) || ((numMemoria <= nodo->memLogica) && (numMemoria >= (nodo->memLogica+nodo->longitud)))){
+				return 0;
+		}
+	}
+	return 1;
 }
 
 int asignarMemoria(int tamanio){
@@ -300,7 +306,7 @@ void completarListaAuxiliar(TabMen *nodo){
 
 	list_add(listaAuxiliar, nodoAux);
 }
-
+//en la lista auxiliar inserta un nodo ficticio al inicio y al final para poder hacer las comparaciones con el primer y ultimo nodo real
 void insertarNodosBarrera (){
 	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
 	nodoAux->ptrInicio = -1;
@@ -318,5 +324,58 @@ void destruirSegmentos(char *id_Prog){
 }
 void eliminarElemento(void *elemento){
 	free (elemento);
+}
+
+void *solicitarBytes (int base, int offset, int tamanio){
+	//se tiene el proceso activo
+	/*revisar como se obtiene la clave id_proceso*/char *id_proceso;
+	void *lista;
+	TabMen *segmento;
+	char *b;
+	b = malloc(tamanio);
+	lista = dictionary_get(tablaProgramas, id_proceso);
+	// encontrar el nodo(segmento) en donde coincide la base y la memoria logica
+	segmento = encontrarSegmento (lista,base);
+	// teniendo el segmento, controlar que no se excedan los limites
+	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
+		//SEGMENTATION FAULT
+	}
+	else{
+		void *origen;
+		origen = ptrMemoria+segmento->memFisica+offset;
+		b = memcopy (b,origen,tamanio);
+		//hay q enviar b
+	}
+	return b;
+}
+
+//revisar el tipo que devuelve
+//¿q devolver si no encuentra el segmento?
+TabMen *encontrarSegmento(void *lista, int base){
+	int x;
+	TabMen *nodo;
+	for (x=0;list_size(lista)-1;x++){
+		nodo = list_get(lista,x);
+		if (nodo->memLogica == base){
+			return nodo;
+		}
+	}
+}
+
+void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ ){
+	//encontrar el segmento al q pertenece la base
+	char *id_proceso;
+	void *lista;
+	TabMen *segmento;
+	lista = dictionary_get(tablaProgramas, id_proceso);
+	segmento = encontrarSegmento (lista,base);
+	//controlar que no se excedan los limites
+	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
+		//SEGMENTATION FAULT
+	}
+	else{
+		void *destino = ptrMemoria+segmento->memFisica+offset;
+		memcpy(destino,/*buffer*/,tamanio);
+	}
 }
 // error en iterator, en todas las funciones con orden superior

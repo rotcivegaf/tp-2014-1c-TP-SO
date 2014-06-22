@@ -39,14 +39,15 @@
 	int asignarMemoriaAleatoria(int tamanio);
 	void destruirSegmentos(char *id_Prog);
 	void eliminarElemento(void *elemento);
-
+	int controlarMemPisada(void *lista, int numMemoria, int tamanio);
+	void *solicitarBytes (int base, int offset, int tamanio);
+	void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ );
 
 	void *ptrMemoria;
 	void *tablaProgramas;
 	char modoOperacion;
 	void *listaAuxiliar;
 	void *ptrConfig;
-	int memEstaOk;
 
 	typedef struct t_tabMem {
 		int memLogica;
@@ -63,6 +64,6 @@
 
 	void completarListaAuxiliar(TabMen *nodo);
 	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-	void controlarMemPisada();
+	TabMen *encontrarSegmento(void *lista, int base);
 
 #endif /* UMV_H_ */
