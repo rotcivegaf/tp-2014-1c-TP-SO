@@ -23,9 +23,15 @@
 
 	#define MAX 50
 
+	typedef struct{
+		int soc;
+	}t_param_conec_kernel;
+
 	void encabezado(long byte, char *modo);
 	void *crearConsola();
 	void *admin_conecciones();
+	void *admin_conec_kernel();
+	void *admin_conec_cpu();
 	int clasificarComando(char *comando);
 	void operacion(int proceso, int base, int offset, int tamanio);
 	void retardo(int milisegundos);

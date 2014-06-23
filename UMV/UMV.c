@@ -2,9 +2,7 @@
 int quit_sistema = 1;
 
 int main(){
-
 	extern void *ptrMemoria;
-
 	srand(time(0));
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("umv_config.txt");
@@ -12,17 +10,12 @@ int main(){
 	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
 	tablaProgramas = dictionary_create();
 
-
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-
-
 	pthread_create( &hilo_conecciones, NULL, admin_conecciones,NULL);
 	pthread_create( &hilo_consola, NULL, crearConsola, NULL);
-
 	pthread_join( hilo_conecciones, NULL);
 	pthread_join( hilo_consola, NULL);
-
 
 	return 0;
 }
@@ -83,12 +76,12 @@ int clasificarComando (char *comando){
 	return a;
 }
 
-
 void *admin_conecciones(){
 	int listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
 	int new_soc;
 	t_men_comun *men;
-
+	pthread_t hilo_conec_kernel;
+	t_param_conec_kernel *param_kernel;
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men = socket_recv_comun(new_soc);
@@ -96,12 +89,12 @@ void *admin_conecciones(){
 			printf("Socket nº%i desconectado",new_soc);
 			continue;
 		}
-		if (men->tipo >= HS_KERNEL_UMV){//si se conecta el kernel
-			//todo crear hilo para administrar el kernel
-			//acordarse de responder el handshake
+		if (men->tipo >= HS_KERNEL){//si se conecta el kernel
+			param_kernel->soc = new_soc;
+			pthread_create( &hilo_conec_kernel, NULL, admin_conec_kernel,param_kernel);
 			continue;
 		}
-		if (men->tipo >= HS_CPU_UMV){//si es una cpu nueva
+		if (men->tipo >= HS_CPU){//si es una cpu nueva
 			//todo crear hilo para administrar la cpu nueva
 			//acordarse de responder el handshake
 			continue;
@@ -112,9 +105,45 @@ void *admin_conecciones(){
 	return NULL;
 }
 
+void *admin_conec_kernel(t_param_conec_kernel *param){
+	t_men_comun *men= crear_men_comun(HS_UMV,NULL,0);
+	socket_send_comun(param->soc,men);
+	while(quit_sistema){
+		men = socket_recv_comun(param->soc);
+		switch (men->tipo) {
+		case 'PED_MEM_SEG_COD':
+			//todo
+			break;
+		case 'PED_MEM_SEG_COD':
+			//todo
+			break;
+		case 'PED_MEM_IND_ETI':
+			//todo
+			break;
+		case 'PED_MEM_IND_COD':
+			//todo
+			break;
+		case 'PED_MEM_SEG_STACK':
+			//todo
+			break;
+		default:
+			printf("ERROR tipo de dato recibio %i erroneo", men->tipo);
+			break;
+		}
+	}
+	return NULL;
+}
+
+void *admin_conec_cpu(){
+
+
+	return NULL;
+}
+
 void operacion(int proceso, int base, int offset, int tamanio){
 	printf("operacion");
 }
+
 void retardo(int milisegundos){
 	printf("retardo");
 }
@@ -174,7 +203,6 @@ void encabezado(long byte, char *modo){
 	printf("------------------------------------------------------------------\n\n");
 }
 
-
 void crearSegmento(char *id_Prog, int tamanio){
 	void *lista;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
@@ -185,8 +213,7 @@ void crearSegmento(char *id_Prog, int tamanio){
 	nodoTab->longitud = tamanio;
 	nodoTab->memFisica = asignarMemoria(tamanio);
 
-	if (dictionary_has_key(tablaProgramas, id_Prog))
-		{
+	if (dictionary_has_key(tablaProgramas, id_Prog)){
 		lista = dictionary_get(tablaProgramas,id_Prog);
 			/*controla que no se pise la memoria dentro del mismo programa
 			repitiendo el ciclio hasta que se genere uno valido*/
@@ -196,15 +223,12 @@ void crearSegmento(char *id_Prog, int tamanio){
 			memEstaOk = controlarMemPisada(lista,nodoTab->memLogica,tamanio);
 			}while (!memEstaOk);
 		list_add(lista,nodoTab);
-		}
-	else
-	{
+	}else{
 		nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
 		lista = list_create();
 		list_add(lista,nodoTab);
 		dictionary_put(tablaProgramas, id_Prog, lista);
 	}
-
 }
 
 int controlarMemPisada(void *lista, int numMemoria, int tamanio){
