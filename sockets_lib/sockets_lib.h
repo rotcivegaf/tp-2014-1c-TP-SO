@@ -136,4 +136,16 @@
 	char *men_serealizer_sol_alm_bytes(t_men_sol_alm_bytes *self);
 	t_men_sol_alm_bytes *men_deserealizer_sol_alm_bytes(char *stream);
 
+	typedef struct{
+		int32_t tipo;
+		int32_t id_prog;
+		int32_t tam_seg;
+	}__attribute__((__packed__)) t_men_ped_seg;
+
+	t_men_ped_seg *crear_men_ped_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg);
+	int socket_send_ped_seg(int soc,t_men_ped_seg *men);
+	t_men_ped_seg *socket_recv_ped_seg(int soc);
+	char *men_serealizer_ped_seg(t_men_ped_seg *self);
+	t_men_ped_seg *men_deserealizer_ped_seg(char *stream);
+
 #endif
