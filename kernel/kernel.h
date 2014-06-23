@@ -47,7 +47,7 @@
 		t_queue *cola_exit;
 		t_queue *cola_block;
 	} t_colas;
-	typedef struct {
+	/*typedef struct {
 		int32_t  id;										//Identificador único del Programa en el sistema
 		t_dir_mem dir_primer_byte_umv_segmento_codigo;	//Dirección del primer byte en la UMV del segmento de código
 		t_dir_mem dir_primer_byte_umv_segmento_stack;		//Dirección del primer byte en la UMV del segmento de stack
@@ -57,7 +57,7 @@
 		int32_t  program_counter;						//Número de la próxima instrucción a ejecutar
 		int32_t  cant_var_contexto_actual;				//Cantidad de variables (locales y parámetros) del Contexto de Ejecución Actual
 		int32_t  tam_indice_etiquetas;					//Cantidad de bytes que ocupa el Índice de etiquetas
-	} t_pcb;
+	} t_pcb;*/
 	typedef struct {
 		t_pcb *pcb;
 		int32_t  n_socket;
@@ -118,7 +118,7 @@
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
-	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t  tam_stack, int32_t  id_prog);
+	t_resp_sol_mem * solicitar_mem(char *script, int32_t  tam_stack, int32_t  id_prog);
 	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t  *contador_id_programa);
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
 	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
@@ -129,11 +129,12 @@
 	void *manejador_new_ready();
 	void *manejador_ready_exec();
 	void *manejador_exit();
+	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
 	int32_t  mover_pcb_exit(int32_t  soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	t_cpu *get_cpu(int32_t  soc_cpu);
-	void enviar_IO(int32_t  soc_cpu, t_queue *cola_IO, int32_t id_IO);
+	void enviar_IO(int32_t  soc_cpu, int32_t id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	void *entrar_IO();
 	t_cpu *get_cpu_libre(int32_t  *res);

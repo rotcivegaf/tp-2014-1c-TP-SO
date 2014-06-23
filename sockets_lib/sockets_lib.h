@@ -23,6 +23,8 @@
 		IMPRIMIR_VALOR = 21,
 		IMPRIMIR_TEXTO =22,
 		FIN_EJECUCION = 23,
+		OBTENER_VALOR = 24,
+		GRABAR_VALOR = 25,
 		//mando pcb
 		QUANTUM_MAX = 50,
 		CANT_VAR_CONTEXTO_ACTUAL = 51,
@@ -40,6 +42,7 @@
 		SIGNAL=64,
 		WAIT=65,
 		PROX_INSTRUCCION = 66,
+		PCB_Y_QUANTUM = 67,
 		ID_PROG_INI = 100,
 		//mensajes recibidos por la UMV departe del KERNEL
 		PED_MEM_SEG_COD = 200,
@@ -47,6 +50,7 @@
 		PED_MEM_IND_COD = 202,
 		PED_MEM_SEG_STACK = 203,
 		//mensajes enviados por la UMV al KERNEL
+		MEM_INSUFICIENTE = 249,
 		RESP_MEM_SEG_COD = 250,
 		RESP_MEM_IND_ETI = 251,
 		RESP_MEM_IND_COD = 252,
