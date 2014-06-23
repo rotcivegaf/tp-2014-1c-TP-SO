@@ -79,38 +79,40 @@ int clasificarComando (char *comando){
 void *admin_conecciones(){
 	int listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
 	int new_soc;
-	t_men_comun *men;
+	t_men_comun *men_hs;
 	pthread_t hilo_conec_kernel;
 	t_param_conec_kernel *param_kernel;
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
-		men = socket_recv_comun(new_soc);
-		if (men->tipo == CONEC_CERRADA){
+		men_hs = socket_recv_comun(new_soc);
+		if (men_hs->tipo == CONEC_CERRADA){
 			printf("Socket nº%i desconectado",new_soc);
 			continue;
 		}
-		if (men->tipo >= HS_KERNEL){//si se conecta el kernel
+		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
 			param_kernel->soc = new_soc;
 			pthread_create( &hilo_conec_kernel, NULL, admin_conec_kernel,param_kernel);
 			continue;
 		}
-		if (men->tipo >= HS_CPU){//si es una cpu nueva
+		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
 			//todo crear hilo para administrar la cpu nueva
 			//acordarse de responder el handshake
 			continue;
 		}
-		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men->tipo);
+		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
 	}
 	socket_cerrar(listen_soc);
 	return NULL;
 }
 
 void *admin_conec_kernel(t_param_conec_kernel *param){
-	t_men_comun *men= crear_men_comun(HS_UMV,NULL,0);
-	socket_send_comun(param->soc,men);
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
+	socket_send_comun(param->soc,men_hs);
+	t_men_ped_seg *men_ped;
+
 	while(quit_sistema){
-		men = socket_recv_comun(param->soc);
-		switch (men->tipo) {
+		men_ped = socket_recv_ped_seg(param->soc);
+		switch (men_ped->tipo) {
 		case 'PED_MEM_SEG_COD':
 			//todo
 			break;
@@ -127,7 +129,7 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 			//todo
 			break;
 		default:
-			printf("ERROR tipo de dato recibio %i erroneo", men->tipo);
+			printf("ERROR tipo de dato recibio %i erroneo", men_ped->tipo);
 			break;
 		}
 	}
@@ -205,6 +207,7 @@ void encabezado(long byte, char *modo){
 
 void crearSegmento(char *id_Prog, int tamanio){
 	void *lista;
+	int memEstaOk;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 	/*pregunta si en la tabla de programas existe el id de prog,
 		 si no existe se agrega el key al diccionario y si existe
