@@ -23,9 +23,15 @@
 
 	#define MAX 50
 
+	typedef struct{
+		int soc;
+	}t_param_conec_kernel;
+
 	void encabezado(long byte, char *modo);
-	void crearConsola();
-	void admin_conecciones();
+	void *crearConsola();
+	void *admin_conecciones();
+	void *admin_conec_kernel();
+	void *admin_conec_cpu();
 	int clasificarComando(char *comando);
 	void operacion(int proceso, int base, int offset, int tamanio);
 	void retardo(int milisegundos);
@@ -39,14 +45,15 @@
 	int asignarMemoriaAleatoria(int tamanio);
 	void destruirSegmentos(char *id_Prog);
 	void eliminarElemento(void *elemento);
-
+	int controlarMemPisada(void *lista, int numMemoria, int tamanio);
+	void *solicitarBytes (int base, int offset, int tamanio);
+	void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ );
 
 	void *ptrMemoria;
 	void *tablaProgramas;
 	char modoOperacion;
 	void *listaAuxiliar;
 	void *ptrConfig;
-	int memEstaOk;
 
 	typedef struct t_tabMem {
 		int memLogica;
@@ -63,6 +70,6 @@
 
 	void completarListaAuxiliar(TabMen *nodo);
 	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-	void controlarMemPisada();
+	TabMen *encontrarSegmento(void *lista, int base);
 
 #endif /* UMV_H_ */

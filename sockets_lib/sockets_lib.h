@@ -16,27 +16,13 @@
 		FIN_QUANTUM=1,
 		CPU_DESCONEC = 2,
 		//handshakes
-		HS_KERNEL_UMV = 10,
+		HS_KERNEL = 10,
 		HS_KERNEL_PROG = 11,
-		HS_KERNEL_CPU = 12,
-		HS_UMV_CPU =13,
+		HS_CPU = 12,
+		HS_UMV =13,
 		IMPRIMIR_VALOR = 21,
 		IMPRIMIR_TEXTO =22,
 		FIN_EJECUCION = 23,
-		//pedido de segmentos
-		MEM_INSUFICIENTE = 29,
-		RESP_MEM_SEG_COD =30,
-		PED_MEM_IND_ETI =31,
-		RESP_MEM_IND_ETI = 32,
-		PED_MEM_IND_COD = 33,
-		RESP_MEM_IND_COD = 34,
-		PED_MEM_SEG_STACK = 35,
-		RESP_MEM_SEG_STACK = 36,
-		//almacenamiento de segmentos
-		CODIGO_SCRIPT = 37,
-		IND_ETI_FUNC = 38,
-		IND_COD = 39,
-		IND_STACK = 40,
 		//mando pcb
 		QUANTUM_MAX = 50,
 		CANT_VAR_CONTEXTO_ACTUAL = 51,
@@ -54,7 +40,30 @@
 		SIGNAL=64,
 		WAIT=65,
 		PROX_INSTRUCCION = 66,
-		ID_PROG_INI = 100
+		ID_PROG_INI = 100,
+		//mensajes recibidos por la UMV departe del KERNEL
+		PED_MEM_SEG_COD = 200,
+		PED_MEM_IND_ETI = 201,
+		PED_MEM_IND_COD = 202,
+		PED_MEM_SEG_STACK = 203,
+		//mensajes enviados por la UMV al KERNEL
+		RESP_MEM_SEG_COD = 250,
+		RESP_MEM_IND_ETI = 251,
+		RESP_MEM_IND_COD = 252,
+		RESP_MEM_SEG_STACK = 253,
+		CODIGO_SCRIPT = 254,
+		IND_ETI_FUNC = 255,
+		IND_COD = 256,
+		IND_STACK = 257,
+		//mensajes recibidos por la UMV departe del CPU
+		SOL_BYTES = 300,
+		ALM_BYTES = 301,
+		CAMBIO_PA = 302,
+		//mensajes enviados por la UMV al CPU
+		R_SOL_BYTES = 350,
+		R_ALM_BYTES = 351,
+		MEM_OVERLOAD = 352,
+		SEGMEN_FAULT = 353
 	} tipo_datos;
 
 	int socket_crear_server(char *puerto);
@@ -127,5 +136,17 @@
 	t_men_sol_alm_bytes *socket_recv_sol_alm_bytes(int soc);
 	char *men_serealizer_sol_alm_bytes(t_men_sol_alm_bytes *self);
 	t_men_sol_alm_bytes *men_deserealizer_sol_alm_bytes(char *stream);
+
+	typedef struct{
+		int32_t tipo;
+		int32_t id_prog;
+		int32_t tam_seg;
+	}__attribute__((__packed__)) t_men_ped_seg;
+
+	t_men_ped_seg *crear_men_ped_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg);
+	int socket_send_ped_seg(int soc,t_men_ped_seg *men);
+	t_men_ped_seg *socket_recv_ped_seg(int soc);
+	char *men_serealizer_ped_seg(t_men_ped_seg *self);
+	t_men_ped_seg *men_deserealizer_ped_seg(char *stream);
 
 #endif

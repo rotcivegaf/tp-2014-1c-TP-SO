@@ -1,9 +1,8 @@
 #include "UMV.h"
+int quit_sistema = 1;
 
 int main(){
-
 	extern void *ptrMemoria;
-
 	srand(time(0));
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("umv_config.txt");
@@ -11,22 +10,17 @@ int main(){
 	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
 	tablaProgramas = dictionary_create();
 
-
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-
-
 	pthread_create( &hilo_conecciones, NULL, admin_conecciones,NULL);
 	pthread_create( &hilo_consola, NULL, crearConsola, NULL);
-
 	pthread_join( hilo_conecciones, NULL);
 	pthread_join( hilo_consola, NULL);
-
 
 	return 0;
 }
 
-void crearConsola (){
+void *crearConsola (){
 	char **arrayComando;
 	int a;
 	char entrada[100];
@@ -36,8 +30,7 @@ void crearConsola (){
 		arrayComando =  string_split(entrada," ");
 		a = clasificarComando(arrayComando[0]);
 
-		while (a != 6)
-		{
+		while (a != 6){
 			switch (a){
 				case 1:
 					operacion(atoi(arrayComando[1]),atoi(arrayComando[2]),atoi(arrayComando[3]),atoi(arrayComando[4]));
@@ -64,6 +57,7 @@ void crearConsola (){
 		arrayComando =  string_split(entrada," ");
 		a = clasificarComando(arrayComando[0]);
 		}
+	return NULL;
 }
 
 int clasificarComando (char *comando){
@@ -82,16 +76,76 @@ int clasificarComando (char *comando){
 	return a;
 }
 
-
-void admin_conecciones(){
-	//int socket = servidor(config_get_string_value(ptrConfig,"IP"),config_get_int_value(ptrConfig,"puerto"));
-
+void *admin_conecciones(){
+	int listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
+	int new_soc;
+	t_men_comun *men_hs;
+	pthread_t hilo_conec_kernel;
+	t_param_conec_kernel *param_kernel;
+	while(quit_sistema){
+		new_soc = socket_accept(listen_soc);
+		men_hs = socket_recv_comun(new_soc);
+		if (men_hs->tipo == CONEC_CERRADA){
+			printf("Socket nº%i desconectado",new_soc);
+			continue;
+		}
+		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
+			param_kernel->soc = new_soc;
+			pthread_create( &hilo_conec_kernel, NULL, admin_conec_kernel,param_kernel);
+			continue;
+		}
+		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
+			//todo crear hilo para administrar la cpu nueva
+			//acordarse de responder el handshake
+			continue;
+		}
+		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
+	}
+	socket_cerrar(listen_soc);
+	return NULL;
 }
 
+void *admin_conec_kernel(t_param_conec_kernel *param){
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
+	socket_send_comun(param->soc,men_hs);
+	t_men_ped_seg *men_ped;
+
+	while(quit_sistema){
+		men_ped = socket_recv_ped_seg(param->soc);
+		switch (men_ped->tipo) {
+		case 'PED_MEM_SEG_COD':
+			//todo
+			break;
+		case 'PED_MEM_SEG_COD':
+			//todo
+			break;
+		case 'PED_MEM_IND_ETI':
+			//todo
+			break;
+		case 'PED_MEM_IND_COD':
+			//todo
+			break;
+		case 'PED_MEM_SEG_STACK':
+			//todo
+			break;
+		default:
+			printf("ERROR tipo de dato recibio %i erroneo", men_ped->tipo);
+			break;
+		}
+	}
+	return NULL;
+}
+
+void *admin_conec_cpu(){
+
+
+	return NULL;
+}
 
 void operacion(int proceso, int base, int offset, int tamanio){
 	printf("operacion");
 }
+
 void retardo(int milisegundos){
 	printf("retardo");
 }
@@ -143,52 +197,53 @@ void dump(){
 	printf("dump");
 }
 
-
 void encabezado(long byte, char *modo){
 	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
 	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
-	printf("IP: %d\n", config_get_int_value(ptrConfig,"IP"));
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
-	printf("------------------------------------------------------------------------\n\n");
+	printf("------------------------------------------------------------------\n\n");
 }
-
 
 void crearSegmento(char *id_Prog, int tamanio){
 	void *lista;
+	int memEstaOk;
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 	/*pregunta si en la tabla de programas existe el id de prog,
-	 si no existe se agrega el key al diccionario y si existe
-	 se agrega un nodo a la lista de segmentos, controlando que
-	 la memoria logica no se pise dentro del mismo programa */
+		 si no existe se agrega el key al diccionario y si existe
+		 se agrega un nodo a la lista de segmentos, controlando que
+		 la memoria logica no se pise dentro del mismo programa */
 	nodoTab->longitud = tamanio;
 	nodoTab->memFisica = asignarMemoria(tamanio);
 
-	if (dictionary_has_key(tablaProgramas, id_Prog))
-		{
+	if (dictionary_has_key(tablaProgramas, id_Prog)){
 		lista = dictionary_get(tablaProgramas,id_Prog);
+			/*controla que no se pise la memoria dentro del mismo programa
+			repitiendo el ciclio hasta que se genere uno valido*/
 			do {
 			memEstaOk = 1;
 			nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
-			//list_iterate(lista,controlarMemPisada(nodoTab->memLogica));
+			memEstaOk = controlarMemPisada(lista,nodoTab->memLogica,tamanio);
 			}while (!memEstaOk);
 		list_add(lista,nodoTab);
-		}
-	else
-	{
+	}else{
 		nodoTab->memLogica = asignarMemoriaAleatoria(tamanio);
 		lista = list_create();
 		list_add(lista,nodoTab);
 		dictionary_put(tablaProgramas, id_Prog, lista);
 	}
-
 }
-// revisar
-void controlarMemPisada(TabMen *nodo, int numMemoria){
-	if (((nodo->memLogica) < numMemoria) && ((nodo->memLogica + nodo->longitud) > numMemoria)){
-		memEstaOk = 0;
-	}
 
+int controlarMemPisada(void *lista, int numMemoria, int tamanio){
+	int x;
+	TabMen *nodo;
+	for (x=0;list_size(lista)-1;x++){
+		nodo = list_get(lista,x);
+		if ((((nodo->memLogica) <= numMemoria) && ((nodo->memLogica + nodo->longitud) >= numMemoria)) || (((nodo->memLogica) <= numMemoria+tamanio) && ((nodo->memLogica + nodo->longitud) >= numMemoria+tamanio)) || ((numMemoria <= nodo->memLogica) && (numMemoria >= (nodo->memLogica+nodo->longitud)))){
+				return 0;
+		}
+	}
+	return 1;
 }
 
 int asignarMemoria(int tamanio){
@@ -278,7 +333,7 @@ void completarListaAuxiliar(TabMen *nodo){
 
 	list_add(listaAuxiliar, nodoAux);
 }
-
+//en la lista auxiliar inserta un nodo ficticio al inicio y al final para poder hacer las comparaciones con el primer y ultimo nodo real
 void insertarNodosBarrera (){
 	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
 	nodoAux->ptrInicio = -1;
@@ -296,5 +351,58 @@ void destruirSegmentos(char *id_Prog){
 }
 void eliminarElemento(void *elemento){
 	free (elemento);
+}
+
+void *solicitarBytes (int base, int offset, int tamanio){
+	//se tiene el proceso activo
+	/*revisar como se obtiene la clave id_proceso*/char *id_proceso;
+	void *lista;
+	TabMen *segmento;
+	char *b;
+	b = malloc(tamanio);
+	lista = dictionary_get(tablaProgramas, id_proceso);
+	// encontrar el nodo(segmento) en donde coincide la base y la memoria logica
+	segmento = encontrarSegmento (lista,base);
+	// teniendo el segmento, controlar que no se excedan los limites
+	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
+		//SEGMENTATION FAULT
+	}
+	else{
+		void *origen;
+		origen = ptrMemoria+segmento->memFisica+offset;
+		b = memcopy (b,origen,tamanio);
+		//hay q enviar b
+	}
+	return b;
+}
+
+//revisar el tipo que devuelve
+//¿q devolver si no encuentra el segmento?
+TabMen *encontrarSegmento(void *lista, int base){
+	int x;
+	TabMen *nodo;
+	for (x=0;list_size(lista)-1;x++){
+		nodo = list_get(lista,x);
+		if (nodo->memLogica == base){
+			return nodo;
+		}
+	}
+}
+
+void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ ){
+	//encontrar el segmento al q pertenece la base
+	char *id_proceso;
+	void *lista;
+	TabMen *segmento;
+	lista = dictionary_get(tablaProgramas, id_proceso);
+	segmento = encontrarSegmento (lista,base);
+	//controlar que no se excedan los limites
+	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
+		//SEGMENTATION FAULT
+	}
+	else{
+		void *destino = ptrMemoria+segmento->memFisica+offset;
+		memcpy(destino,/*buffer*/,tamanio);
+	}
 }
 // error en iterator, en todas las funciones con orden superior
