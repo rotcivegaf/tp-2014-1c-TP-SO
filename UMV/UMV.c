@@ -266,6 +266,7 @@ void destruirSegmentos(char *id_Prog){
 	lista = dictionary_get(tablaProgramas, id_Prog);
 	list_destroy_and_destroy_elements(lista, (void *)eliminarElemento);
 }
+
 void eliminarElemento(void *elemento){
 	free (elemento);
 }
@@ -287,7 +288,7 @@ void *solicitarBytes (int base, int offset, int tamanio){
 	else{
 		void *origen;
 		origen = mem_prin+segmento->memFisica+offset;
-		b = memcopy (b,origen,tamanio);
+		memcpy (b,origen,tamanio);
 		//hay q enviar b
 	}
 	return b;
