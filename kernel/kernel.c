@@ -102,9 +102,9 @@ void *plp(t_param_plp *param_plp){
 					printf("PLP-select: nuevo prog con socket n°%i\n", i);
 					contador_prog++;
 					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog->dato, param_plp->tam_stack,contador_prog);
-					if (resp_sol->memoria_insuficiente == MEM_INSUFICIENTE){
+					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
 						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
-						men_no_hay_mem->tipo = MEM_INSUFICIENTE;
+						men_no_hay_mem->tipo = MEM_OVERLOAD;
 						men_no_hay_mem->dato = string_itoa(contador_prog);
 						socket_send_comun(soc_umv, men_no_hay_mem);
 						socket_send_comun(i, men_no_hay_mem);
@@ -566,6 +566,8 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog){
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
 	resp_sol->memoria_insuficiente = 0;
+
+
 	t_men_comun *resp_mem;
 	t_men_ped_seg *ped_mem;
 	int32_t tam = 0;
@@ -573,8 +575,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	ped_mem = crear_men_ped_seg(PED_MEM_SEG_COD,id_prog,string_length(script));
 	socket_send_ped_seg(soc_umv, ped_mem);
 	t_men_comun *resp_men_cod = socket_recv_comun(soc_umv);
-	if (resp_men_cod->tipo == MEM_INSUFICIENTE){
-		resp_sol->memoria_insuficiente = MEM_INSUFICIENTE;
+	if (resp_men_cod->tipo == MEM_OVERLOAD){
+		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
 		return resp_sol;
 	}
 	if( resp_men_cod->tipo != RESP_MEM_SEG_COD)
@@ -588,8 +590,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	ped_mem = crear_men_ped_seg( PED_MEM_IND_ETI , id_prog, tam);
 	socket_send_ped_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
-	if (resp_mem->tipo == MEM_INSUFICIENTE){
-		resp_sol->memoria_insuficiente = MEM_INSUFICIENTE;
+	if (resp_mem->tipo == MEM_OVERLOAD){
+		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
 		return resp_sol;
 	}
 	if( resp_mem->tipo != RESP_MEM_IND_ETI)
@@ -601,8 +603,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	ped_mem = crear_men_ped_seg( PED_MEM_IND_COD , id_prog, tam);
 	socket_send_ped_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
-	if (resp_mem->tipo == MEM_INSUFICIENTE){
-		resp_sol->memoria_insuficiente = MEM_INSUFICIENTE;
+	if (resp_mem->tipo == MEM_OVERLOAD){
+		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
 		return resp_sol;
 	}
 	if( resp_mem->tipo != RESP_MEM_IND_COD)
@@ -613,8 +615,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	ped_mem = crear_men_ped_seg( PED_MEM_SEG_STACK , id_prog, tam_stack);
 	socket_send_ped_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
-	if (resp_mem->tipo == MEM_INSUFICIENTE){
-		resp_sol->memoria_insuficiente = MEM_INSUFICIENTE;
+	if (resp_mem->tipo == MEM_OVERLOAD){
+		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
 		return resp_sol;
 	}
 	if( resp_mem->tipo != RESP_MEM_SEG_STACK)

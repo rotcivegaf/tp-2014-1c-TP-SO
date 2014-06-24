@@ -49,7 +49,6 @@
 		PED_MEM_IND_COD = 202,
 		PED_MEM_SEG_STACK = 203,
 		//mensajes enviados por la UMV al KERNEL
-		MEM_INSUFICIENTE = 249,
 		RESP_MEM_SEG_COD = 250,
 		RESP_MEM_IND_ETI = 251,
 		RESP_MEM_IND_COD = 252,
@@ -65,7 +64,7 @@
 		//mensajes enviados por la UMV al CPU
 		R_SOL_BYTES = 350,
 		R_ALM_BYTES = 351,
-		MEM_OVERLOAD = 352,
+		MEM_OVERLOAD = 352,		//tambien es enviado al kernel
 		SEGMEN_FAULT = 353
 	} tipo_datos;
 
