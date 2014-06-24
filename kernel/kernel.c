@@ -1,5 +1,4 @@
 #include "kernel.h"
-#include "sockets_lib.h"
 
 int32_t soc_umv;
 t_colas *colas;
@@ -57,7 +56,7 @@ void *plp(t_param_plp *param_plp){
 	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
 
-	int32_t contador_prog = ID_PROG_INI;
+	int32_t contador_prog = 1;
 	fd_set master;   // conjunto maestro de descriptores de fichero
 	fd_set read_fds; // conjunto temporal de descriptores de fichero para select()
 	int32_t fdmax;        // número máximo de descriptores de fichero

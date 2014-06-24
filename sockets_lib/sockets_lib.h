@@ -43,7 +43,6 @@
 		WAIT=65,
 		PROX_INSTRUCCION = 66,
 		PCB_Y_QUANTUM = 67,
-		ID_PROG_INI = 100,
 		//mensajes recibidos por la UMV departe del KERNEL
 		PED_MEM_SEG_COD = 200,
 		PED_MEM_IND_ETI = 201,
@@ -88,14 +87,16 @@
 	char *men_serealizer_comun(t_men_comun *self);
 	t_men_comun *men_deserealizer_comun(char *stream);
 
+
 	//para los mensajes que contienen el pcb + quantum
+	typedef int32_t  t_dir_mem;
 	typedef struct{
 		int32_t cant_var_contexto_actual;
-		int32_t dir_primer_byte_umv_contexto_actual;
-		int32_t dir_primer_byte_umv_indice_codigo;
-		int32_t dir_primer_byte_umv_indice_etiquetas;
-		int32_t dir_primer_byte_umv_segmento_codigo;
-		int32_t dir_primer_byte_umv_segmento_stack;
+		t_dir_mem dir_primer_byte_umv_contexto_actual;
+		t_dir_mem dir_primer_byte_umv_indice_codigo;
+		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
+		t_dir_mem dir_primer_byte_umv_segmento_codigo;
+		t_dir_mem dir_primer_byte_umv_segmento_stack;
 		int32_t id;
 		int32_t program_counter;
 		int32_t tam_indice_etiquetas;
