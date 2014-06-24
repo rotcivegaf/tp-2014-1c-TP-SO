@@ -27,17 +27,23 @@
 		int soc;
 	}t_param_conec_kernel;
 
-	void encabezado(long byte, char *modo);
+	//consola
 	void *crearConsola();
+	void menuPrincipal();
+	void cambiarAlgoritmo();
+	void cambiarRetardo();
+	void operacion();
+	void imprimirDump();
+	void imp_estructura_mem();
+	void imp_mem_prin();
+	void imp_cont_mem_prin();
+	int imp_tablas_segmentos(int id_proc);
+
+	void encabezado(long byte, char *modo);
 	void *admin_conecciones();
 	void *admin_conec_kernel();
 	void *admin_conec_cpu();
-	int clasificarComando(char *comando);
-	void operacion(int proceso, int base, int offset, int tamanio);
-	void retardo(int milisegundos);
-	void algoritmo(char *modo);
 	void compactar();
-	void dump();
 	int asignarMemoria(int tamanio);
 	void recorrerTablaSegmentos();
 	void recorrerLista(char *clave, void *ptrLista);
@@ -47,13 +53,7 @@
 	void eliminarElemento(void *elemento);
 	int controlarMemPisada(void *lista, int numMemoria, int tamanio);
 	void *solicitarBytes (int base, int offset, int tamanio);
-	void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ );
-
-	void *ptrMemoria;
-	void *tablaProgramas;
-	char modoOperacion;
-	void *listaAuxiliar;
-	void *ptrConfig;
+	void almacenarBytes (int base,int offset,int tamanio/*, void/char *buffer*/ );
 
 	typedef struct t_tabMem {
 		int memLogica;
@@ -66,7 +66,6 @@
 		int ptrFin;
 		void *ptrATabla;
 		} ListAuxiliar;
-
 
 	void completarListaAuxiliar(TabMen *nodo);
 	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);

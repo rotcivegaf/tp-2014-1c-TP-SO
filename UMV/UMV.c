@@ -1,14 +1,21 @@
 #include "UMV.h"
 int quit_sistema = 1;
+char *mem_prin;
+void *tablaProgramas;
+int retardo = 0;
+char alg_actual;
+void *listaAuxiliar;
+void *ptrConfig;
+pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 
 int main(){
-	extern void *ptrMemoria;
 	srand(time(0));
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("umv_config.txt");
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
-	ptrMemoria = malloc(config_get_int_value(ptrConfig,"tamanio"));
+	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
 	tablaProgramas = dictionary_create();
+	alg_actual = config_get_string_value(ptrConfig,"modo")[0];
 
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
@@ -18,62 +25,6 @@ int main(){
 	pthread_join( hilo_consola, NULL);
 
 	return 0;
-}
-
-void *crearConsola (){
-	char **arrayComando;
-	int a;
-	char entrada[100];
-
-	printf("UMV >> ");
-		gets(entrada);
-		arrayComando =  string_split(entrada," ");
-		a = clasificarComando(arrayComando[0]);
-
-		while (a != 6){
-			switch (a){
-				case 1:
-					operacion(atoi(arrayComando[1]),atoi(arrayComando[2]),atoi(arrayComando[3]),atoi(arrayComando[4]));
-					break;
-				case 2:
-					retardo(atoi(arrayComando[1]));
-					break;
-				case 3:
-					algoritmo(arrayComando[1]);
-					break;
-				case 4:
-					compactar();
-					break;
-				case 5:
-					dump();
-					break;
-				default:
-					printf("Comando desconocido");
-					break;
-				}
-
-		printf("\nUMV >> ");
-		gets(entrada);
-		arrayComando =  string_split(entrada," ");
-		a = clasificarComando(arrayComando[0]);
-		}
-	return NULL;
-}
-
-int clasificarComando (char *comando){
-	int a;
-	if (!strcmp(comando,"operacion")) a=1;
-	if (!strcmp(comando,"retardo")) a=2;
-	if (!strcmp(comando,"algoritmo")) a=3;
-	if (!strcmp(comando,"compactacion")) a=4;
-	if (!strcmp(comando,"dump")) a=5;
-	if (!strcmp(comando,"exit"))
-		{
-		a=6;
-		free(ptrMemoria);
-		}
-	printf("%d",a);
-	return a;
 }
 
 void *admin_conecciones(){
@@ -113,19 +64,16 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 	while(quit_sistema){
 		men_ped = socket_recv_ped_seg(param->soc);
 		switch (men_ped->tipo) {
-		case 'PED_MEM_SEG_COD':
+		case PED_MEM_SEG_COD:
 			//todo
 			break;
-		case 'PED_MEM_SEG_COD':
+		case PED_MEM_IND_ETI:
 			//todo
 			break;
-		case 'PED_MEM_IND_ETI':
+		case PED_MEM_IND_COD:
 			//todo
 			break;
-		case 'PED_MEM_IND_COD':
-			//todo
-			break;
-		case 'PED_MEM_SEG_STACK':
+		case PED_MEM_SEG_STACK:
 			//todo
 			break;
 		default:
@@ -140,21 +88,6 @@ void *admin_conec_cpu(){
 
 
 	return NULL;
-}
-
-void operacion(int proceso, int base, int offset, int tamanio){
-	printf("operacion");
-}
-
-void retardo(int milisegundos){
-	printf("retardo");
-}
-//modifica el modo de operacion
-void algoritmo(char *modo){
-	if (!strcmp(modo,"WorstFit") || !strcmp(modo,"FirstFit"))
-		modoOperacion=modo[0];
-	else
-		printf("Modo incorrecto");
 }
 
 bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
@@ -176,12 +109,11 @@ void compactar(){
 		p1 = list_get(listaAuxiliar,x);
 		p2 = list_get(listaAuxiliar,x+1);
 
-		if (p2->ptrInicio != (p1->ptrFin) +1)
-		{
+		if (p2->ptrInicio != (p1->ptrFin) +1){
 			int aux = (p1->ptrFin)+1;
-			aux1 = (&ptrMemoria + aux);
+			aux1 = (&mem_prin + aux);
 			aux = p2->ptrInicio;
-			aux2 = (&ptrMemoria + aux);
+			aux2 = (&mem_prin + aux);
 			memcpy(aux1, aux2,(p2->ptrFin - p2->ptrInicio));
 			actualizar = p2->ptrATabla;
 			actualizar->memFisica = p1->ptrFin+1;
@@ -191,18 +123,6 @@ void compactar(){
 		}
 	}
 	list_destroy(listaAuxiliar);
-}
-
-void dump(){
-	printf("dump");
-}
-
-void encabezado(long byte, char *modo){
-	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
-	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
-	printf("Operando en modo: %s\n", modo);
-	printf("Espacio reservado: %ld bytes\n", byte);
-	printf("------------------------------------------------------------------\n\n");
 }
 
 void crearSegmento(char *id_Prog, int tamanio){
@@ -277,32 +197,29 @@ int asignarMemoria(int tamanio){
 
 		if (p2->ptrInicio != (p1->ptrFin) +1){
 			espacioDisponible = (p2->ptrInicio - p1->ptrFin -1);
-			if (espacioDisponible >= tamanio)
-			{
+			if (espacioDisponible >= tamanio){
 				hayEspacio=1;
-				switch (modoOperacion){
+				switch (alg_actual){
 					case'F':
-						{
-							return (p1->ptrFin+1);
-							break;
-						}
+						return (p1->ptrFin+1);
+						break;
 					case 'W':
-						{
 						if (espacioDisponible > pE.espacio){
 							pE.espacio = espacioDisponible;
 							pE.offset = p1->ptrFin+1;
-							}
-						break;
 						}
+						break;
 				}
 			}
-				if (hayEspacio) return pE.offset;
+				if (hayEspacio)
+					return pE.offset;
 				if (!hayEspacio && !seCompacto){
 					seCompacto = 1;
 					compactar();
 					goto etiqueta_1;
 				}
-				if (!hayEspacio && seCompacto) return -1;
+				if (!hayEspacio && seCompacto)
+					return -1;
 		}
 	}
 	return 0;
@@ -369,7 +286,7 @@ void *solicitarBytes (int base, int offset, int tamanio){
 	}
 	else{
 		void *origen;
-		origen = ptrMemoria+segmento->memFisica+offset;
+		origen = mem_prin+segmento->memFisica+offset;
 		b = memcopy (b,origen,tamanio);
 		//hay q enviar b
 	}
@@ -389,7 +306,7 @@ TabMen *encontrarSegmento(void *lista, int base){
 	}
 }
 
-void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ ){
+void almacenarBytes (int base,int offset,int tamanio/*, void/char *buffer*/ ){
 	//encontrar el segmento al q pertenece la base
 	char *id_proceso;
 	void *lista;
@@ -401,8 +318,172 @@ void almacenarBytes (int base,int offset,int tamanio, /*void/char *buffer*/ ){
 		//SEGMENTATION FAULT
 	}
 	else{
-		void *destino = ptrMemoria+segmento->memFisica+offset;
+		void *destino = mem_prin+segmento->memFisica+offset;
 		memcpy(destino,/*buffer*/,tamanio);
 	}
 }
 // error en iterator, en todas las funciones con orden superior
+
+//consola
+void* crearConsola(){
+	char opcion;
+	do {
+		menuPrincipal();
+		do {
+			scanf("%c", &opcion);
+		} while (opcion<'1' || opcion>'6');
+
+		switch (opcion) {
+			case '1':
+				operacion();
+				break;
+			case '2':
+				cambiarRetardo();
+				break;
+			case '3':
+				cambiarAlgoritmo();
+				break;
+			case '4':
+				compactar();
+				break;
+			case '5':
+				imprimirDump();
+				break;
+			}
+	}while (opcion != '6');
+	return NULL;
+}
+
+void menuPrincipal(){
+	printf ("--------------------------------\n"
+			"Elija una opcion:\n"
+			"	1.Operacion\n"
+			"	2.Retardo\n"
+			"	3.Cambiar Algoritmo\n"
+			"	4.Compactacion\n"
+			"	5.Dump\n"
+			"	6.Salir\n"
+			"--------------------------------\n");
+}
+
+void operacion(){
+	int base, offset, tam, id_proc;
+
+	//todo creo que aca se puede elegir entre crear/destruir un segmento o solicitar/escribir una pos de memoria
+	printf ("--------------------------------\n");
+	printf("ID del proceso:");
+	scanf("%i",&id_proc);
+	printf("Base:");
+	scanf("%i",&base);
+	printf("Offset:");
+	scanf("%i",&offset);
+	printf("Tamaño:");
+	scanf("%i",&tam);
+	printf ("--------------------------------\n");
+	//todo hacer operacion
+
+}
+
+void cambiarAlgoritmo(){
+	printf ("--------------------------------\n");
+	if(alg_actual == 'W'){
+		alg_actual = 'F';
+		printf("Algoritmo cambiado a = First-Fit\n");
+	}else{
+		alg_actual = 'W';
+		printf("Algoritmo cambiado a = Worst-Fit\n");
+	}
+}
+
+void cambiarRetardo(){
+	int t;
+
+	printf ("--------------------------------\n");
+	printf("Ingrese el tiempo:");
+	if (scanf("%i",&t)!= EOF && t>0){
+		retardo = t;
+		printf("Nuevo retardo: %i\n", t);
+	}else{
+		printf("Tiempo no válido.\n");
+	}
+
+}
+
+void imprimirDump(){
+	char opcion;
+	printf ("--------------------------------\n"
+			"Elija lo que desea imprimir:\n"
+			"	1.Estructuras de memoria\n"
+			"	2.Memoria principal\n"
+			"	3.Contenido memoria principal\n");
+	scanf("%c", &opcion);
+	switch (opcion) {
+	case '1':
+		imp_estructura_mem();
+		break;
+	case '2':
+		imp_mem_prin();
+		break;
+	case '3':
+		imp_cont_mem_prin();
+		break;
+	default:
+		printf ("Opcion invalida\n"
+				"--------------------------------\n");
+		break;
+	}
+}
+
+void imp_estructura_mem(){
+	char id_proc;
+
+	printf ("--------------------------------\n"
+			"Elija el id_proceso\n"
+			"Ingrese 0 si desea imprimir todos\n");
+	scanf("%i",&id_proc);
+	int resp = imp_tablas_segmentos(id_proc);
+	if (resp == -1)
+		printf("El proceso no existe");
+}
+
+int imp_tablas_segmentos(int id_proc){
+	//todo hacer funcion q imprimia las tablas de segmento
+	//recibira un int y devuelve -1 si no existe el proceso
+	return -1;
+}
+
+void imp_mem_prin(){
+	//todo hacer q imprima la memoria principal
+	//ir buscando en la tabla de segmentos e imprimir segun de que proceso es tipo
+	// "50###########################50##################BBBBBBBBBBBBBBBBBB53#####################
+	//los B son de basura
+}
+
+void imp_cont_mem_prin(){
+	int offset, tamanio, i;
+
+	printf ("--------------------------------\n"
+			"Ingrese un offset\n");
+	scanf("%i",&offset);
+	printf ("Ingrese una cantidad de bytes\n");
+	scanf("%i",&tamanio);
+	if (tamanio + offset > config_get_int_value(ptrConfig,"tamanio")){
+		printf ("Segmentation Fault\n");
+	}else{
+	//todo imprimir el cacho de memoriaint i;
+		for(i=0;i<config_get_int_value(ptrConfig,"tamanio");i++)
+			printf("%i",mem_prin[i]);
+			printf("\n");
+	}
+}
+
+
+
+
+void encabezado(long byte, char *modo){
+	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
+	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
+	printf("Operando en modo: %s\n", modo);
+	printf("Espacio reservado: %ld bytes\n", byte);
+	printf("------------------------------------------------------------------\n\n");
+}
