@@ -1,11 +1,11 @@
 #include "UMV.h"
 int quit_sistema = 1;
 char *mem_prin;
-void *tablaProgramas;
 int retardo = 0;
 char alg_actual;
-void *listaAuxiliar;
-void *ptrConfig;
+t_dictionary *tablaProgramas;
+t_dictionary *listaAuxiliar;
+t_config *ptrConfig;
 pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 
 int main(){
@@ -471,10 +471,11 @@ void imp_cont_mem_prin(){
 	if (tamanio + offset > config_get_int_value(ptrConfig,"tamanio")){
 		printf ("Segmentation Fault\n");
 	}else{
-	//todo imprimir el cacho de memoriaint i;
+		pthread_mutex_lock(&mutex_mem_prin);
 		for(i=0;i<config_get_int_value(ptrConfig,"tamanio");i++)
 			printf("%i",mem_prin[i]);
-			printf("\n");
+		printf("\n");
+		pthread_mutex_unlock(&mutex_mem_prin);
 	}
 }
 
