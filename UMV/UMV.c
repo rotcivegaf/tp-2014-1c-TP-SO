@@ -416,8 +416,12 @@ void imprimirDump(){
 			"Elija lo que desea imprimir:\n"
 			"	1.Estructuras de memoria\n"
 			"	2.Memoria principal\n"
-			"	3.Contenido memoria principal\n");
-	scanf("%c", &opcion);
+			"	3.Contenido memoria principal\n"
+			"--------------------------------\n");
+	do {
+		scanf("%c", &opcion);
+	} while (opcion<'1' || opcion>'3');
+
 	switch (opcion) {
 	case '1':
 		imp_estructura_mem();
@@ -428,10 +432,6 @@ void imprimirDump(){
 	case '3':
 		imp_cont_mem_prin();
 		break;
-	default:
-		printf ("Opcion invalida\n"
-				"--------------------------------\n");
-		break;
 	}
 }
 
@@ -441,7 +441,7 @@ void imp_estructura_mem(){
 	printf ("--------------------------------\n"
 			"Elija el id_proceso\n"
 			"Ingrese 0 si desea imprimir todos\n");
-	scanf("%i",&id_proc);
+	scanf("%c",&id_proc);
 	int resp = imp_tablas_segmentos(id_proc);
 	if (resp == -1)
 		printf("El proceso no existe");
@@ -461,26 +461,23 @@ void imp_mem_prin(){
 }
 
 void imp_cont_mem_prin(){
-	int offset, tamanio, i;
+	int offset, tam, i;
 
 	printf ("--------------------------------\n"
 			"Ingrese un offset\n");
 	scanf("%i",&offset);
 	printf ("Ingrese una cantidad de bytes\n");
-	scanf("%i",&tamanio);
-	if (tamanio + offset > config_get_int_value(ptrConfig,"tamanio")){
+	scanf("%i",&tam);
+	if (tam + offset > config_get_int_value(ptrConfig,"tamanio")){
 		printf ("Segmentation Fault\n");
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
-		for(i=0;i<config_get_int_value(ptrConfig,"tamanio");i++)
-			printf("%i",mem_prin[i]);
+		for(i=offset;i<(offset+tam);i++)
+			printf("%c",mem_prin[i]);
 		printf("\n");
 		pthread_mutex_unlock(&mutex_mem_prin);
 	}
 }
-
-
-
 
 void encabezado(long byte, char *modo){
 	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
