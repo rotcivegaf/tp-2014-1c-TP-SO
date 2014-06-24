@@ -199,6 +199,11 @@ void *pcp(t_param_pcp *param_pcp){
 							queue_push(colas->cola_ready,aux_pcb_otros);
 							pthread_mutex_unlock(&mutex_ready);
 							pthread_mutex_unlock(&mutex_ready_vacia);
+
+							pthread_mutex_lock(&mutex_uso_cola_cpu);
+							queue_push(cola_cpu,aux_cpu);
+							pthread_mutex_unlock(&mutex_uso_cola_cpu);
+							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						}
 					}
 					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
@@ -343,18 +348,13 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 	return NULL;
 }
 
-void enviar_IO(int32_t soc_cpu, int32_t id_IO){ //FALTA TERMINAR BIEN
+void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	t_men_comun *men;
 	t_IO *aux_IO = malloc(sizeof(t_IO));
 	t_cpu *aux_cpu = malloc(sizeof(t_cpu));
+	aux_cpu = get_cpu(soc_cpu);
 
 	int32_t i;
-	//t_param_IO *param_IO = malloc(sizeof(t_param_IO));
-	//pthread_t hilo_IO;
-
-	/*men = socket_recv_comun(soc_cpu);
-	if (men->tipo != IO_ID)
-		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_ID); esta de mas, ya lo recibe antes */
 
 	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
 	for (i=0; i < list_size(dispositivos_IO); i++){
@@ -374,52 +374,24 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){ //FALTA TERMINAR BIEN
 
 	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
 	t_IO_espera *espera = malloc(sizeof(t_IO_espera));
-	espera->id_prog = (get_cpu(soc_cpu)->id_prog_exec);
+	espera->id_prog = (aux_cpu->id_prog_exec);
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
 
 	//Recibo el pcb del cpu para actualizarlo, sacandolo de ejecucion y poniendolo en bloqueados.
-	aux_cpu = get_cpu(soc_cpu);
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 	aux_pcb_otros->pcb = (socket_recv_quantum_pcb(soc_cpu)->pcb);
 	aux_cpu->id_prog_exec = 0;
+//Agrego esto porque al usar get_cpu, faltaba volver a poner el cpu en la cola
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
 	pthread_mutex_lock(&mutex_block);
 	queue_push(colas->cola_block,aux_pcb_otros);
 	pthread_mutex_unlock(&mutex_block);
 
-
-/*
-	t_cpu *aux_cpu = malloc(sizeof(t_cpu));
-	int32_t tam = queue_size(cola_cpu);
-	int32_t aux_id_procAbloc;
-	pthread_mutex_lock(&mutex_uso_cola_cpu);
-	for(i=0 ;i < tam ;i++){
-		aux_cpu = queue_pop(cola_cpu);
-		if (aux_cpu->soc_cpu == soc_cpu){
-			aux_id_procAbloc = aux_cpu->id_prog_exec;
-			aux_cpu->id_prog_exec = 0;
-			i = tam;
-		}
-		queue_push(cola_cpu, aux_cpu);
-	}
-	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
-	pthread_mutex_lock(&mutex_exec);
-	for(i=0 ;i < queue_size(colas->cola_exec) ;i++){
-		aux_pcb_otros = queue_pop(colas->cola_exec);
-		if (aux_pcb_otros->pcb->id == aux_id_procAbloc){
-			pthread_mutex_lock(&mutex_block);
-			queue_push(colas->cola_block,aux_pcb_otros);
-			pthread_mutex_unlock(&mutex_block);
-			param_IO->id_proc = aux_pcb_otros->pcb->id;
-		}
-		queue_push(colas->cola_exec, aux_pcb_otros);
-	}
-	pthread_mutex_unlock(&mutex_exec);
-	pthread_create(&hilo_IO, NULL, entrar_IO, (void *)param_IO);
-*/
 }
 
 t_pcb_otros *get_peso_min(){

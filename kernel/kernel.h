@@ -129,11 +129,15 @@
 	void *manejador_new_ready();
 	void *manejador_ready_exec();
 	void *manejador_exit();
-	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
+	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pasa a exit (y retorna) y si no lo vuelve a poner
 	int32_t  mover_pcb_exit(int32_t  soc_prog);
+	//Busca un t_pcb_otros en la cola de ejecucion a partir del id y lo devuelve
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
+	//Idem anterior pero sin sacarlo de la cola
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
+	//Busca un t_cpu en la cola de cpus a partir del numero de socket del cpu y lo devuelve
 	t_cpu *get_cpu(int32_t  soc_cpu);
+	//Busca el dispositivo de IO en la lista a partir del id; agrega una estructura con el id_prog y la cant de unidades a la cola del dispositivo; saca al pcb de ejecucion, lo actualiza y pone en bloqueados.
 	void enviar_IO(int32_t  soc_cpu, int32_t id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	void *entrar_IO();
