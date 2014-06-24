@@ -53,7 +53,7 @@
 	void eliminarElemento(void *elemento);
 	int controlarMemPisada(void *lista, int numMemoria, int tamanio);
 	void *solicitarBytes (int base, int offset, int tamanio);
-	void almacenarBytes (int base,int offset,int tamanio/*, void/char *buffer*/ );
+	void almacenarBytes (int base,int offset,int tamanio, char *buffer);
 
 	typedef struct t_tabMem {
 		int memLogica;

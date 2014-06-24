@@ -307,7 +307,7 @@ TabMen *encontrarSegmento(void *lista, int base){
 	}
 }
 
-void almacenarBytes (int base,int offset,int tamanio/*, void/char *buffer*/ ){
+void almacenarBytes (int base,int offset,int tamanio, char *buffer){
 	//encontrar el segmento al q pertenece la base
 	char *id_proceso;
 	void *lista;
@@ -320,7 +320,7 @@ void almacenarBytes (int base,int offset,int tamanio/*, void/char *buffer*/ ){
 	}
 	else{
 		void *destino = mem_prin+segmento->memFisica+offset;
-		memcpy(destino,/*buffer*/,tamanio);
+		memcpy(destino,buffer,tamanio);
 	}
 }
 // error en iterator, en todas las funciones con orden superior
