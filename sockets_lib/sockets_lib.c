@@ -523,10 +523,10 @@ t_men_sol_alm_bytes *men_deserealizer_sol_alm_bytes(char *stream){
 
 /*
  * recibe tipo de mensaje, un id de programa y el tamanio del segmento a crear
- * retorna un t_men_ped_seg
+ * retorna un t_men_seg
  */
-t_men_ped_seg *crear_men_ped_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg){
-	t_men_ped_seg *men = malloc(sizeof(t_men_ped_seg));
+t_men_seg *crear_men_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg){
+	t_men_seg *men = malloc(sizeof(t_men_seg));
 	men->tipo = tipo;
 	men->id_prog = id_prog;
 	men->tam_seg = tam_seg;
@@ -536,8 +536,8 @@ t_men_ped_seg *crear_men_ped_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg)
 /*envia un mensaje de pedido de segmento al socket conectado
  *retorna los bytes que pudo mandar
  */
-int socket_send_ped_seg(int soc,t_men_ped_seg *men){
-	char *stream = men_serealizer_ped_seg(men);
+int socket_send_seg(int soc,t_men_seg *men){
+	char *stream = men_serealizer_seg(men);
 	int32_t length;
 	memcpy(&length, stream, sizeof(int32_t));
 	int pude_enviar = send(soc, stream, length, 0);
@@ -555,7 +555,7 @@ int socket_send_ped_seg(int soc,t_men_ped_seg *men){
  *retorna el mensaje recibido o
  *retorna un mensaje con tipo CONEC_CERRADA, si se desconecta el socket
  */
-t_men_ped_seg *socket_recv_ped_seg(int soc){
+t_men_seg *socket_recv_seg(int soc){
 	int32_t length = 0;
 	char *aux_len = malloc(sizeof(int32_t));
 	int resultado_recv = recv(soc, aux_len, sizeof(int32_t), MSG_PEEK);
@@ -564,7 +564,7 @@ t_men_ped_seg *socket_recv_ped_seg(int soc){
 		exit(1);
 	}
 	if (resultado_recv == 0)
-		return crear_men_ped_seg(CONEC_CERRADA,0,0);
+		return crear_men_seg(CONEC_CERRADA,0,0);
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
@@ -574,17 +574,17 @@ t_men_ped_seg *socket_recv_ped_seg(int soc){
 		exit(1);
 	}
 	if (resultado_recv == 0)
-		return crear_men_ped_seg(CONEC_CERRADA,0,0);
+		return crear_men_seg(CONEC_CERRADA,0,0);
 	if (resultado_recv != length)
 		printf("NO PUDE RECIBIR TODO\n");
-	t_men_ped_seg *mensaje = men_deserealizer_ped_seg(stream);
+	t_men_seg *mensaje = men_deserealizer_seg(stream);
 	return mensaje;
 }
 
 /*serealiza un mensaje de pedido de segmento
  * retorna un char * serealizado
  */
-char *men_serealizer_ped_seg(t_men_ped_seg *self){
+char *men_serealizer_seg(t_men_seg *self){
 	int length = (sizeof(int32_t)*4);//lenght+tipo+id_prog+tam del sego
 	int32_t offset = 0, tmp_size = 0;
 	char *stream = malloc(length);
@@ -600,10 +600,10 @@ char *men_serealizer_ped_seg(t_men_ped_seg *self){
 }
 
 /*deserealiza stream comun
- *retorna un t_men_ped_seg
+ *retorna un t_men_seg
  */
-t_men_ped_seg *men_deserealizer_ped_seg(char *stream){
-	t_men_ped_seg *self = malloc(sizeof(t_men_ped_seg));
+t_men_seg *men_deserealizer_seg(char *stream){
+	t_men_seg *self = malloc(sizeof(t_men_seg));
 	int32_t offset = sizeof(int32_t), tmp_size = 0;
 
 	memcpy(&self->tipo, stream+offset, tmp_size = sizeof(int32_t));

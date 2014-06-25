@@ -36,7 +36,6 @@
 		ID_PROG = 57,
 		PROGRAM_COUNTER = 58,
 		TAM_INDICE_ETIQUETAS = 59,
-		DESTR_SEGS = 61,
 		IO_ID = 62,
 		IO_CANT_UNIDADES=63,
 		SIGNAL=64,
@@ -48,6 +47,7 @@
 		PED_MEM_IND_ETI = 201,
 		PED_MEM_IND_COD = 202,
 		PED_MEM_SEG_STACK = 203,
+		DESTR_SEGS = 204,
 		//mensajes enviados por la UMV al KERNEL
 		RESP_MEM_SEG_COD = 250,
 		RESP_MEM_IND_ETI = 251,
@@ -145,12 +145,12 @@
 		int32_t tipo;
 		int32_t id_prog;
 		int32_t tam_seg;
-	}__attribute__((__packed__)) t_men_ped_seg;
+	}__attribute__((__packed__)) t_men_seg;
 
-	t_men_ped_seg *crear_men_ped_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg);
-	int socket_send_ped_seg(int soc,t_men_ped_seg *men);
-	t_men_ped_seg *socket_recv_ped_seg(int soc);
-	char *men_serealizer_ped_seg(t_men_ped_seg *self);
-	t_men_ped_seg *men_deserealizer_ped_seg(char *stream);
+	t_men_seg *crear_men_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg);
+	int socket_send_seg(int soc,t_men_seg *men);
+	t_men_seg *socket_recv_seg(int soc);
+	char *men_serealizer_seg(t_men_seg *self);
+	t_men_seg *men_deserealizer_seg(char *stream);
 
 #endif
