@@ -250,7 +250,7 @@ t_men_quantum_pcb *socket_recv_quantum_pcb(int soc){
  * retorna un char * serealizado
  */
 char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self){
-	int length = sizeof(int32_t)*12;//length total del mensaje+tipo+quantum+9int (por el pcb)
+	int length = sizeof(int32_t)*13;//length total del mensaje+tipo+quantum+10int (por el pcb)
 	int32_t offset = 0, tmp_size = 0;
 	char *stream = malloc(length);
 
@@ -277,6 +277,8 @@ char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self){
 	memcpy(stream+offset, &self->pcb->program_counter, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
 	memcpy(stream+offset, &self->pcb->tam_indice_etiquetas	, tmp_size = sizeof(int32_t));
+	offset = offset+tmp_size;
+	memcpy(stream+offset, &self->pcb->cant_instrucciones	, tmp_size = sizeof(int32_t));
 
 	return stream;
 }
@@ -310,6 +312,8 @@ t_men_quantum_pcb *men_deserealizer_quantum_pcb(char *stream){
 	memcpy(&self->pcb->program_counter , stream+offset, tmp_size = sizeof(int32_t));
 	offset = offset+ tmp_size;
 	memcpy(&self->pcb->tam_indice_etiquetas , stream+offset, tmp_size = sizeof(int32_t));
+	offset = offset+ tmp_size;
+	memcpy(&self->pcb->cant_instrucciones , stream+offset, tmp_size = sizeof(int32_t));
 
 	return self;
 }
