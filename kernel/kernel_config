@@ -1,0 +1,21 @@
+Puerto_prog=6668
+
+Puerto_CPU=6666
+
+IP_UMV=127.0.0.1
+Puerto_umv=6667
+
+ID_HIO=[Disco, Impresora, Scanner]
+HIO=[1, 2, 1]
+
+SEMAFOROS=[SEM1, SEM2, SEM3]
+VALOR_SEMAFORO=[0, 0, 5]
+
+MULTIPROGRAMACION=6
+
+QUANTUM=3
+RETARDO=1
+
+TAMANIO_STACK=100
+
+VARIABLES_GLOBALES=[!una,!dos,!tres,!cuatro,!cinco,!seis,!siete]
