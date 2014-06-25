@@ -24,7 +24,7 @@
 	#define MAX 50
 
 	typedef struct{
-		int soc;
+		int32_t soc;
 	}t_param_conec_kernel;
 
 	//consola
@@ -37,38 +37,40 @@
 	void imp_estructura_mem();
 	void imp_mem_prin();
 	void imp_cont_mem_prin();
-	int imp_tablas_segmentos(int id_proc);
+	int32_t imp_tablas_segmentos(int32_t id_proc);
 
 	void encabezado(long byte, char *modo);
 	void *admin_conecciones();
 	void *admin_conec_kernel();
 	void *admin_conec_cpu();
 	void compactar();
-	int asignarMemoria(int tamanio);
+	int32_t asignarMemoria(int32_t tamanio);
 	void recorrerTablaSegmentos();
 	void recorrerLista(char *clave, void *ptrLista);
 	void insertarNodosBarrera ();
-	int asignarMemoriaAleatoria(int tamanio);
+	int32_t asignarMemoriaAleatoria(int32_t tamanio);
+	int32_t crearSegmento(t_men_ped_seg *men_ped_seg);
 	void destruirSegmentos(char *id_Prog);
 	void eliminarElemento(void *elemento);
-	int controlarMemPisada(void *lista, int numMemoria, int tamanio);
-	void *solicitarBytes (int base, int offset, int tamanio);
-	void almacenarBytes (int base,int offset,int tamanio, char *buffer);
+	int32_t controlarMemPisada(void *lista, int32_t numMemoria, int32_t tamanio);
+	void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio);
+	void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer);
 
 	typedef struct t_tabMem {
-		int memLogica;
-		int longitud;
-		int memFisica;
+		int32_t memLogica;
+		int32_t memFisica;
+		int32_t longitud;
+		int32_t tipo_seg;
 		} TabMen;
 
 	typedef struct t_auxiliar {
-		int ptrInicio;
-		int ptrFin;
+		int32_t ptrInicio;
+		int32_t ptrFin;
 		void *ptrATabla;
 		} ListAuxiliar;
 
 	void completarListaAuxiliar(TabMen *nodo);
 	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-	TabMen *encontrarSegmento(void *lista, int base);
+	TabMen *encontrarSegmento(void *lista, int32_t base);
 
 #endif /* UMV_H_ */

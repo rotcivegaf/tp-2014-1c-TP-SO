@@ -1,14 +1,15 @@
 #include "UMV.h"
-int quit_sistema = 1;
+int32_t quit_sistema = 1;
 char *mem_prin;
-int retardo = 0;
+int32_t retardo = 0;
 char alg_actual;
+char *proc_activo = -1;
 t_dictionary *tablaProgramas;
-t_dictionary *listaAuxiliar;
+t_list *listaAuxiliar;
 t_config *ptrConfig;
 pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 
-int main(){
+int32_t main(){
 	srand(time(0));
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("umv_config.txt");
@@ -28,11 +29,11 @@ int main(){
 }
 
 void *admin_conecciones(){
-	int listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
-	int new_soc;
+	int32_t listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
+	int32_t new_soc;
 	t_men_comun *men_hs;
 	pthread_t hilo_conec_kernel;
-	t_param_conec_kernel *param_kernel;
+	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
@@ -60,21 +61,35 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
 	t_men_ped_seg *men_ped;
-
+	t_men_comun *aux_men;
 	while(quit_sistema){
 		men_ped = socket_recv_ped_seg(param->soc);
 		switch (men_ped->tipo) {
 		case PED_MEM_SEG_COD:
-			//todo
-			break;
 		case PED_MEM_IND_ETI:
-			//todo
-			break;
 		case PED_MEM_IND_COD:
-			//todo
-			break;
 		case PED_MEM_SEG_STACK:
-			//todo
+			if (crearSegmento(men_ped) == -1){
+				//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
+				aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
+				socket_send_comun(param->soc,aux_men);
+			}else{
+				switch (men_ped->tipo) {
+					case PED_MEM_SEG_COD:
+						aux_men= crear_men_comun(RESP_MEM_SEG_COD,NULL,0);
+						break;
+					case PED_MEM_IND_ETI:
+						aux_men= crear_men_comun(RESP_MEM_IND_ETI,NULL,0);
+						break;
+					case PED_MEM_IND_COD:
+						aux_men= crear_men_comun(RESP_MEM_IND_COD,NULL,0);
+						break;
+					case PED_MEM_SEG_STACK:
+						aux_men= crear_men_comun(RESP_MEM_SEG_STACK,NULL,0);
+						break;
+					}
+				socket_send_comun(param->soc,men_hs);
+			}
 			break;
 		default:
 			printf("ERROR tipo de dato recibio %i erroneo", men_ped->tipo);
@@ -97,7 +112,7 @@ bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
 void compactar(){
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
-	int x;
+	int32_t x;
 	TabMen *actualizar;
 	void *aux1;
 	void *aux2;
@@ -110,7 +125,7 @@ void compactar(){
 		p2 = list_get(listaAuxiliar,x+1);
 
 		if (p2->ptrInicio != (p1->ptrFin) +1){
-			int aux = (p1->ptrFin)+1;
+			int32_t aux = (p1->ptrFin)+1;
 			aux1 = (&mem_prin + aux);
 			aux = p2->ptrInicio;
 			aux2 = (&mem_prin + aux);
@@ -125,16 +140,25 @@ void compactar(){
 	list_destroy(listaAuxiliar);
 }
 
-void crearSegmento(char *id_Prog, int tamanio){
+int32_t crearSegmento(t_men_ped_seg *men_ped){
 	void *lista;
-	int memEstaOk;
+	int32_t memEstaOk;
+	int32_t tamanio = men_ped->tam_seg;
+	char *id_Prog = string_itoa(men_ped->id_prog);
+
+	/*pregunta si hay memoria, si no la hay retorna -1*/
+	int32_t aux_mem_fisica = asignarMemoria(tamanio);
+	if (aux_mem_fisica == -1)
+		return -1;
+
 	TabMen *nodoTab = malloc(sizeof(TabMen));
 	/*pregunta si en la tabla de programas existe el id de prog,
 		 si no existe se agrega el key al diccionario y si existe
 		 se agrega un nodo a la lista de segmentos, controlando que
 		 la memoria logica no se pise dentro del mismo programa */
+	nodoTab->tipo_seg = men_ped->tipo;
 	nodoTab->longitud = tamanio;
-	nodoTab->memFisica = asignarMemoria(tamanio);
+	nodoTab->memFisica = aux_mem_fisica;
 
 	if (dictionary_has_key(tablaProgramas, id_Prog)){
 		lista = dictionary_get(tablaProgramas,id_Prog);
@@ -152,10 +176,11 @@ void crearSegmento(char *id_Prog, int tamanio){
 		list_add(lista,nodoTab);
 		dictionary_put(tablaProgramas, id_Prog, lista);
 	}
+	return 0;
 }
 
-int controlarMemPisada(void *lista, int numMemoria, int tamanio){
-	int x;
+int32_t controlarMemPisada(void *lista, int32_t numMemoria, int32_t tamanio){
+	int32_t x;
 	TabMen *nodo;
 	for (x=0;list_size(lista)-1;x++){
 		nodo = list_get(lista,x);
@@ -166,16 +191,16 @@ int controlarMemPisada(void *lista, int numMemoria, int tamanio){
 	return 1;
 }
 
-int asignarMemoria(int tamanio){
+int32_t asignarMemoria(int32_t tamanio){
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
-	int x;
-	int espacioDisponible;
-	int hayEspacio;
-	int seCompacto;
+	int32_t x;
+	int32_t espacioDisponible;
+	int32_t hayEspacio;
+	int32_t seCompacto;
 	struct peorEspacio {
-		int espacio;
-		int offset;
+		int32_t espacio;
+		int32_t offset;
 	};
 
 	struct peorEspacio pE;
@@ -225,8 +250,8 @@ int asignarMemoria(int tamanio){
 	return 0;
 }
 
-int asignarMemoriaAleatoria(int tamanio){
-	int numero;
+int32_t asignarMemoriaAleatoria(int32_t tamanio){
+	int32_t numero;
 	numero = (rand());
 	return numero;
 }
@@ -271,14 +296,13 @@ void eliminarElemento(void *elemento){
 	free (elemento);
 }
 
-void *solicitarBytes (int base, int offset, int tamanio){
+void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
 	//se tiene el proceso activo
-	/*revisar como se obtiene la clave id_proceso*/char *id_proceso;
 	void *lista;
 	TabMen *segmento;
 	char *b;
 	b = malloc(tamanio);
-	lista = dictionary_get(tablaProgramas, id_proceso);
+	lista = dictionary_get(tablaProgramas, proc_activo);
 	// encontrar el nodo(segmento) en donde coincide la base y la memoria logica
 	segmento = encontrarSegmento (lista,base);
 	// teniendo el segmento, controlar que no se excedan los limites
@@ -296,8 +320,8 @@ void *solicitarBytes (int base, int offset, int tamanio){
 
 //revisar el tipo que devuelve
 //¿q devolver si no encuentra el segmento?
-TabMen *encontrarSegmento(void *lista, int base){
-	int x;
+TabMen *encontrarSegmento(void *lista, int32_t base){
+	int32_t x;
 	TabMen *nodo;
 	for (x=0;list_size(lista)-1;x++){
 		nodo = list_get(lista,x);
@@ -307,12 +331,11 @@ TabMen *encontrarSegmento(void *lista, int base){
 	}
 }
 
-void almacenarBytes (int base,int offset,int tamanio, char *buffer){
+void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer){
 	//encontrar el segmento al q pertenece la base
-	char *id_proceso;
 	void *lista;
 	TabMen *segmento;
-	lista = dictionary_get(tablaProgramas, id_proceso);
+	lista = dictionary_get(tablaProgramas, proc_activo);
 	segmento = encontrarSegmento (lista,base);
 	//controlar que no se excedan los limites
 	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
@@ -368,7 +391,7 @@ void menuPrincipal(){
 }
 
 void operacion(){
-	int base, offset, tam, id_proc;
+	int32_t base, offset, tam, id_proc;
 
 	//todo creo que aca se puede elegir entre crear/destruir un segmento o solicitar/escribir una pos de memoria
 	printf ("--------------------------------\n");
@@ -397,7 +420,7 @@ void cambiarAlgoritmo(){
 }
 
 void cambiarRetardo(){
-	int t;
+	int32_t t;
 
 	printf ("--------------------------------\n");
 	printf("Ingrese el tiempo:");
@@ -442,14 +465,14 @@ void imp_estructura_mem(){
 			"Elija el id_proceso\n"
 			"Ingrese 0 si desea imprimir todos\n");
 	scanf("%c",&id_proc);
-	int resp = imp_tablas_segmentos(id_proc);
+	int32_t resp = imp_tablas_segmentos(id_proc);
 	if (resp == -1)
 		printf("El proceso no existe");
 }
 
-int imp_tablas_segmentos(int id_proc){
+int32_t imp_tablas_segmentos(int32_t id_proc){
 	//todo hacer funcion q imprimia las tablas de segmento
-	//recibira un int y devuelve -1 si no existe el proceso
+	//recibira un int32_t y devuelve -1 si no existe el proceso
 	return -1;
 }
 
@@ -461,7 +484,7 @@ void imp_mem_prin(){
 }
 
 void imp_cont_mem_prin(){
-	int offset, tam, i;
+	int32_t offset, tam, i;
 
 	printf ("--------------------------------\n"
 			"Ingrese un offset\n");
