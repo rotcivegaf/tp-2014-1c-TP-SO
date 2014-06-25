@@ -50,14 +50,13 @@
 	void compactar();
 	int32_t asignarMemoria(int32_t tamanio);
 	void recorrerTablaSegmentos();
-	void recorrerLista(char *clave, void *ptrLista);
+	void recorrerLista(char *clave, t_list *ptrLista);
 	void insertarNodosBarrera ();
 	int32_t asignarMemoriaAleatoria(int32_t tamanio);
 	int32_t crearSegmento(t_men_seg *men_ped_seg);
 	void destruirSegmentos(char *id_Prog);
-	void eliminarElemento(void *elemento);
-	int32_t controlarMemPisada(void *lista, int32_t numMemoria, int32_t tamanio);
-	void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio);
+	int32_t controlarMemPisada(t_list *lista, int32_t numMemoria, int32_t tamanio);
+	char *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio);
 	void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer);
 
 	typedef struct t_tabMem {
@@ -75,6 +74,6 @@
 
 	void completarListaAuxiliar(TabMen *nodo);
 	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
-	TabMen *encontrarSegmento(void *lista, int32_t base);
+	TabMen *encontrarSegmento(t_list *lista, int32_t base);
 
 #endif /* UMV_H_ */

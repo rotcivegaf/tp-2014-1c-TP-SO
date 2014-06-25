@@ -114,7 +114,7 @@ void compactar(){
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int32_t x;
 	TabMen *actualizar;
-	void *aux1;
+	void *aux1;//TODO se le puede dar algun tipo de dato en ves de el void *
 	void *aux2;
 	/*recorrer tabla de programas y crear una lista auxiliar ordenada, preguntar si hay espacio
 	entre dos nodos, si hay se desplaza la memoria y se actualiza la tabla de programas*/
@@ -141,7 +141,7 @@ void compactar(){
 }
 
 int32_t crearSegmento(t_men_seg *men_ped){
-	void *lista;
+	t_list *lista;
 	int32_t memEstaOk;
 	int32_t tamanio = men_ped->tam_seg;
 	char *id_Prog = string_itoa(men_ped->id_prog);
@@ -179,7 +179,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	return 0;
 }
 
-int32_t controlarMemPisada(void *lista, int32_t numMemoria, int32_t tamanio){
+int32_t controlarMemPisada(t_list *lista, int32_t numMemoria, int32_t tamanio){
 	int32_t x;
 	TabMen *nodo;
 	for (x=0;list_size(lista)-1;x++){
@@ -258,11 +258,11 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio){
 
 void recorrerTablaSegmentos(){
 	listaAuxiliar= list_create();
-	dictionary_iterator(tablaProgramas,recorrerLista);
+	dictionary_iterator(tablaProgramas,(void *)recorrerLista);
 	insertarNodosBarrera();
 }
 
-void recorrerLista(char* clave, void *ptrLista){
+void recorrerLista(char* clave, t_list *ptrLista){
 	list_iterate(ptrLista,(void *)completarListaAuxiliar);
 }
 
@@ -287,18 +287,17 @@ void insertarNodosBarrera (){
 }
 
 void destruirSegmentos(char *id_Prog){
-	void *lista;
+	void eliminarElemento(TabMen *elemento){
+		free (elemento);
+	}
+	t_list *lista;
 	lista = dictionary_get(tablaProgramas, id_Prog);
 	list_destroy_and_destroy_elements(lista, (void *)eliminarElemento);
 }
 
-void eliminarElemento(void *elemento){
-	free (elemento);
-}
-
-void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
+char *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
 	//se tiene el proceso activo
-	void *lista;
+	t_list *lista;
 	TabMen *segmento;
 	char *b;
 	b = malloc(tamanio);
@@ -310,15 +309,14 @@ void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
 		//TODO SEGMENTATION FAULT
 	}
 	else{
-		void *origen;
-		origen = mem_prin+segmento->memFisica+offset;
+		char *origen = mem_prin+segmento->memFisica+offset;
 		memcpy (b,origen,tamanio);
 		//hay q enviar b
 	}
 	return b;
 }
 
-TabMen *encontrarSegmento(void *lista, int32_t base){
+TabMen *encontrarSegmento(t_list *lista, int32_t base){
 	int32_t x;
 	TabMen *nodo;
 	for (x=0;list_size(lista)-1;x++){
@@ -333,20 +331,19 @@ TabMen *encontrarSegmento(void *lista, int32_t base){
 
 void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer){
 	//encontrar el segmento al q pertenece la base
-	void *lista;
+	t_list *lista;
 	TabMen *segmento;
 	lista = dictionary_get(tablaProgramas, proc_activo);
 	segmento = encontrarSegmento (lista,base);
 	//controlar que no se excedan los limites
 	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
-		//SEGMENTATION FAULT
+		//todo SEGMENTATION FAULT
 	}
 	else{
-		void *destino = mem_prin+segmento->memFisica+offset;
+		char *destino = mem_prin+segmento->memFisica+offset;
 		memcpy(destino,buffer,tamanio);
 	}
 }
-// error en iterator, en todas las funciones con orden superior
 
 //consola
 void* crearConsola(){
