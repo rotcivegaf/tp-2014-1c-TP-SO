@@ -50,7 +50,6 @@
 	void compactar();
 	int32_t asignarMemoria(int32_t tamanio);
 	void recorrerTablaSegmentos();
-	void recorrerLista(char *clave, t_list *ptrLista);
 	void insertarNodosBarrera ();
 	int32_t asignarMemoriaAleatoria(int32_t tamanio);
 	int32_t crearSegmento(t_men_seg *men_ped_seg);
@@ -72,8 +71,6 @@
 		void *ptrATabla;
 		} ListAuxiliar;
 
-	void completarListaAuxiliar(TabMen *nodo);
-	bool compararListaAuxiliar(ListAuxiliar* nodo1, ListAuxiliar* nodo2);
 	TabMen *encontrarSegmento(t_list *lista, int32_t base);
 
 #endif /* UMV_H_ */

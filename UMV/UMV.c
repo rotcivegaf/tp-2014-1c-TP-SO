@@ -105,11 +105,10 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	return NULL;
 }
 
-bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
-	return ((nodo1->ptrInicio) < (nodo2->ptrInicio));
-}
-
 void compactar(){
+	bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
+		return ((nodo1->ptrInicio) < (nodo2->ptrInicio));
+	}
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int32_t x;
@@ -184,14 +183,18 @@ int32_t controlarMemPisada(t_list *lista, int32_t numMemoria, int32_t tamanio){
 	TabMen *nodo;
 	for (x=0;list_size(lista)-1;x++){
 		nodo = list_get(lista,x);
-		if ((((nodo->memLogica) <= numMemoria) && ((nodo->memLogica + nodo->longitud) >= numMemoria)) || (((nodo->memLogica) <= numMemoria+tamanio) && ((nodo->memLogica + nodo->longitud) >= numMemoria+tamanio)) || ((numMemoria <= nodo->memLogica) && (numMemoria >= (nodo->memLogica+nodo->longitud)))){
+		if ((((nodo->memLogica) <= numMemoria) && ((nodo->memLogica + nodo->longitud) >= numMemoria))
+			|| (((nodo->memLogica) <= numMemoria+tamanio) && ((nodo->memLogica + nodo->longitud) >= numMemoria+tamanio))
+			|| ((numMemoria <= nodo->memLogica) && (numMemoria >= (nodo->memLogica+nodo->longitud))))
 				return 0;
-		}
 	}
 	return 1;
 }
 
 int32_t asignarMemoria(int32_t tamanio){
+	bool compararListaAuxiliar(ListAuxiliar *nodo1, ListAuxiliar *nodo2){
+		return ((nodo1->ptrInicio) < (nodo2->ptrInicio));
+	}
 	ListAuxiliar *p1 = malloc(sizeof(ListAuxiliar));
 	ListAuxiliar *p2 = malloc(sizeof(ListAuxiliar));
 	int32_t x;
@@ -257,23 +260,21 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio){
 }
 
 void recorrerTablaSegmentos(){
+	void completarListaAuxiliar(TabMen *nodo){
+		ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
+
+		nodoAux->ptrInicio = nodo->memFisica;
+		nodoAux->ptrFin = nodo->memFisica + nodo->longitud;
+		nodoAux->ptrATabla = nodo;
+
+		list_add(listaAuxiliar, nodoAux);
+	}
+	void recorrerLista(char* clave, t_list *ptrLista){
+		list_iterate(ptrLista,(void *)completarListaAuxiliar);
+	}
 	listaAuxiliar= list_create();
 	dictionary_iterator(tablaProgramas,(void *)recorrerLista);
 	insertarNodosBarrera();
-}
-
-void recorrerLista(char* clave, t_list *ptrLista){
-	list_iterate(ptrLista,(void *)completarListaAuxiliar);
-}
-
-void completarListaAuxiliar(TabMen *nodo){
-	ListAuxiliar *nodoAux = malloc(sizeof(ListAuxiliar));
-
-	nodoAux->ptrInicio = nodo->memFisica;
-	nodoAux->ptrFin = nodo->memFisica + nodo->longitud;
-	nodoAux->ptrATabla = nodo;
-
-	list_add(listaAuxiliar, nodoAux);
 }
 //en la lista auxiliar inserta un nodo ficticio al inicio y al final para poder hacer las comparaciones con el primer y ultimo nodo real
 void insertarNodosBarrera (){
