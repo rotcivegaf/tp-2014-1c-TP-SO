@@ -790,12 +790,12 @@ void handshake_cpu(int32_t soc){
 }
 
 void handshake_prog(int32_t soc){
-	t_men_comun *handshake;
-	handshake = socket_recv_comun(soc);
-	if(handshake->tipo != HS_KERNEL_PROG)
-		printf("ERROR HANDSHAKE PROG = %i\n",handshake->tipo);
-
-	socket_send_comun(soc,handshake);
+	t_men_comun *men_hs;
+	men_hs = socket_recv_comun(soc);
+	if(men_hs->tipo != HS_PROG)
+		printf("ERROR se esperaba HS_PROG y se recibio %i\n",men_hs->tipo);
+	men_hs->tipo = HS_KERNEL;
+	socket_send_comun(soc, men_hs);
 }
 
 void *imp_colas (){

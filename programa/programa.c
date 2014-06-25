@@ -47,7 +47,7 @@ int main(int argc, char *argv[]){
 			printf("Ejecucion finalizada");
 			fin_ejecucion = 1;
 			break;
-		case MEM_INSUFICIENTE:
+		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
 			printf("Memoria insuficiente\n");
 			//todo ERROR
@@ -75,11 +75,11 @@ int tamanioArchivo(FILE *archivo){
 }
 
 void handshake_kernel(int soc_kernel){
-	t_men_comun *handshake = crear_men_comun(HS_KERNEL_PROG,"",1);
-	socket_send_comun(soc_kernel,handshake);
+	t_men_comun *men_hs = crear_men_comun(HS_PROG,"",1);
+	socket_send_comun(soc_kernel,men_hs);
 
-	handshake = socket_recv_comun(soc_kernel);
+	men_hs = socket_recv_comun(soc_kernel);
 
-	if(handshake->tipo == HS_KERNEL_PROG)
-		printf("KERNEL conectado\n");
+	if(men_hs->tipo != HS_KERNEL)
+		printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
 }

@@ -17,7 +17,7 @@
 		CPU_DESCONEC = 2,
 		//handshakes
 		HS_KERNEL = 10,
-		HS_KERNEL_PROG = 11,
+		HS_PROG = 11,
 		HS_CPU = 12,
 		HS_UMV =13,
 		IMPRIMIR_VALOR = 21,
