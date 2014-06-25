@@ -26,6 +26,9 @@
 	typedef struct{
 		int32_t soc;
 	}t_param_conec_kernel;
+	typedef struct{
+		int32_t soc;
+	}t_param_conec_cpu;
 
 	//consola
 	void *crearConsola();

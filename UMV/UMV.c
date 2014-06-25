@@ -3,7 +3,7 @@ int32_t quit_sistema = 1;
 char *mem_prin;
 int32_t retardo = 0;
 char alg_actual;
-char *proc_activo = -1;
+char *proc_activo = "0";
 t_dictionary *tablaProgramas;
 t_list *listaAuxiliar;
 t_config *ptrConfig;
@@ -12,7 +12,7 @@ pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 int32_t main(){
 	srand(time(0));
 	//crear configuracion y solicitar memoria
-	ptrConfig = config_create("umv_config.txt");
+	ptrConfig = config_create("./UMV/umv_config.txt");
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
 	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
 	tablaProgramas = dictionary_create();
@@ -58,50 +58,51 @@ void *admin_conecciones(){
 }
 
 void *admin_conec_kernel(t_param_conec_kernel *param){
+	t_men_comun *aux_men;
+	t_men_ped_seg *men_ped;
+
+
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
-	t_men_ped_seg *men_ped;
-	t_men_comun *aux_men;
+	men_hs = socket_recv_comun(param->soc);
+	if (men_hs->tipo == HS_UMV)
+		printf("ERROR se esperaba HS_UMV y se recibio %i\n",men_hs->tipo);
+
 	while(quit_sistema){
 		men_ped = socket_recv_ped_seg(param->soc);
-		switch (men_ped->tipo) {
-		case PED_MEM_SEG_COD:
-		case PED_MEM_IND_ETI:
-		case PED_MEM_IND_COD:
-		case PED_MEM_SEG_STACK:
-			if (crearSegmento(men_ped) == -1){
-				//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
-				aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
-				socket_send_comun(param->soc,aux_men);
-			}else{
-				switch (men_ped->tipo) {
-					case PED_MEM_SEG_COD:
-						aux_men= crear_men_comun(RESP_MEM_SEG_COD,NULL,0);
-						break;
-					case PED_MEM_IND_ETI:
-						aux_men= crear_men_comun(RESP_MEM_IND_ETI,NULL,0);
-						break;
-					case PED_MEM_IND_COD:
-						aux_men= crear_men_comun(RESP_MEM_IND_COD,NULL,0);
-						break;
-					case PED_MEM_SEG_STACK:
-						aux_men= crear_men_comun(RESP_MEM_SEG_STACK,NULL,0);
-						break;
-					}
-				socket_send_comun(param->soc,men_hs);
+		if (crearSegmento(men_ped) == -1){
+			//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
+			aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
+			socket_send_comun(param->soc,aux_men);
+		}else{
+			switch (men_ped->tipo) {
+			case PED_MEM_SEG_COD:
+				aux_men= crear_men_comun(RESP_MEM_SEG_COD,NULL,0);
+				break;
+			case PED_MEM_IND_ETI:
+				aux_men= crear_men_comun(RESP_MEM_IND_ETI,NULL,0);
+				break;
+			case PED_MEM_IND_COD:
+				aux_men= crear_men_comun(RESP_MEM_IND_COD,NULL,0);
+				break;
+			case PED_MEM_SEG_STACK:
+				aux_men= crear_men_comun(RESP_MEM_SEG_STACK,NULL,0);
+				break;
 			}
-			break;
-		default:
-			printf("ERROR tipo de dato recibio %i erroneo", men_ped->tipo);
-			break;
+			socket_send_comun(param->soc,men_hs);
 		}
+		sleep(retardo);
 	}
 	return NULL;
 }
 
-void *admin_conec_cpu(){
+void *admin_conec_cpu(t_param_conec_cpu *param){
+	while(quit_sistema){
+		t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
+		socket_send_comun(param->soc,men_hs);
 
-
+		sleep(retardo);
+	}
 	return NULL;
 }
 
@@ -304,10 +305,10 @@ void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
 	b = malloc(tamanio);
 	lista = dictionary_get(tablaProgramas, proc_activo);
 	// encontrar el nodo(segmento) en donde coincide la base y la memoria logica
-	segmento = encontrarSegmento (lista,base);
+	segmento = encontrarSegmento (lista, base);
 	// teniendo el segmento, controlar que no se excedan los limites
 	if (base+offset > (segmento->memLogica+segmento->longitud) || base+offset+tamanio > (segmento->memLogica+segmento->longitud)){
-		//SEGMENTATION FAULT
+		//TODO SEGMENTATION FAULT
 	}
 	else{
 		void *origen;
@@ -318,8 +319,6 @@ void *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio){
 	return b;
 }
 
-//revisar el tipo que devuelve
-//¿q devolver si no encuentra el segmento?
 TabMen *encontrarSegmento(void *lista, int32_t base){
 	int32_t x;
 	TabMen *nodo;
@@ -329,6 +328,8 @@ TabMen *encontrarSegmento(void *lista, int32_t base){
 			return nodo;
 		}
 	}
+	printf("ERROR no se ha encontrado el segmento con la dit_logica %i",base);
+	return NULL;
 }
 
 void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer){
