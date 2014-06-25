@@ -80,9 +80,9 @@ int main(){
 
 		char* proxInstrucc = solicitarProxSentenciaAUmv();
 
-			if (strcmp(proxInstrucc, "error") ){
+		/*if (strcmp(proxInstrucc, "error") ){
 				errorDeProxInstruccion(socketKernel); // le aviso al pcp que la umv me devolvio error al solicitar prox inst
-				}else{
+				}else{*/
 					pcb->program_counter ++; // aumento el pc
 					if (pcb->program_counter == pcb->cant_instrucciones){ // me fijo si la sentencia a ejecutar es la ultima del script
 						parsearUltimaInstruccion(proxInstrucc, socketKernel);}
@@ -92,7 +92,7 @@ int main(){
 								parsearUnaInstruccion(proxInstrucc);
 								cantIns ++;
 							}
-							salirPorQuantum(socketKernel,pcb);
+							salirPorQuantum();
 
 
 					}
@@ -146,33 +146,25 @@ void destruirDiccionario(){
 	//dictionary_remove_and_destroy(dicVariables, , );
 }
 
-void avisarAlPcp(int unCodigo, int socketKernel){
-	char *pedido = malloc(sizeof(int));
-	u_int32_t id_mensaje = 6;
-	memcpy(pedido, &id_mensaje, sizeof(id_mensaje));
-	send(socketKernel,pedido,sizeof(int),0);
-}
 
-void salirPorQuantum(int socketKernel, t_pcb *pcb){
-	//aviso al pcp que termino mi quantum
-	u_int32_t codigoQuantum =1;
-	avisarAlPcp(codigoQuantum, socketKernel);
-	//le mando el pcb actualizado;
-	send(socketKernel,pcb, sizeof(estructura_pcb),0);
+void salirPorQuantum(){
+	//mando el pcb con un tipo de mensaje que sali por quantum
+	socket_send_quantum_pcb(socketKernel, crear_men_quantum_pcb(FIN_QUANTUM,0, pcb));
+
 
 }
 void parsearUltimaInstruccion(char* ultIns, int socketKernel){
 	analizadorLinea(strdup(ultIns), &functions, &kernel_functions);
 	//avisar al pcp que termino el programa
-	u_int32_t codigoFinProg = 2;
-	avisarAlPcp(codigoFinProg, socketKernel);
+	socket_send_quantum_pcb(socketKernel, crear_men_quantum_pcb(FIN_EJECUCION,0, pcb));
+
 }
 
 void parsearUnaInstruccion(char* unaIns){
 	analizadorLinea(strdup(unaIns), &functions, &kernel_functions);
 }
 
-void errorDeProxInstruccion(int socketKernel){
+/*void errorDeProxInstruccion(int socketKernel){
 	//avisar al pcp que hubo un error de en el pedido de la instruccion
 	u_int32_t codigoErrorEnUmv = 3;
 	avisarAlPcp(codigoErrorEnUmv, socketKernel);
@@ -180,9 +172,10 @@ void errorDeProxInstruccion(int socketKernel){
 	printf("Ocurrio una excepcion en el pedido a la UMV\n");
 	//concluir la ejecucion de un programa
 
-}
+}*/
 
 char* solicitarProxSentenciaAUmv(){
+	char* proxInst = NULL;
 
 	//mandarle a la umv el cambio de proceso activo  pcb->id
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
@@ -197,12 +190,13 @@ char* solicitarProxSentenciaAUmv(){
 
 	//recibir la instruccion a ejecutar
 
-	mess = socket_recv_sol_pos_mem(socketUmv);
+	men = socket_recv_comun(socketUmv);
+	if(men->tipo == PROX_INSTRUCCION){
+		char* proxInst = men->dato;
+		printf("Instruccion que voy a ejecutar %s\n",proxInst);
+	}
 
-	char *inst = mess->
-
-	printf("Instruccion que voy a ejecutar %s\n",mess);
-	return mess;
+	return proxInst;
 }
 
 void signal_handler(int sig){
@@ -319,17 +313,26 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
+	send_men_comun(OBTENER_VALOR, variable, sizeof(variable));
 	//recibo el valor
-	printf("Obteniendo el valor de compartida %s que es %c", variable, CONTENIDO_VARIABLE);
-	return CONTENIDO_VARIABLE;
+	t_valor_variable valor = socket_recv_comun(socketKernel)->dato;
+	printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
+	return valor;
 }
 
 t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_variable valor){
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
+
+	char* pedido = malloc(sizeof(int));
+	memcpy(pedido,variable,sizeof(t_nombre_compartida));
+	memcpy(pedido + sizeof(t_nombre_compartida), &valor, sizeof(t_valor_variable));
+	send_men_comun(socketKernel,crear_men_comun(GRABAR_VALOR,pedido, sizeof(pedido)));
+
 	//recibir el valor que le asigne
-	printf("Asignando a variable compartida %s el valor %c \n", variable, CONTENIDO_VARIABLE);
-	return CONTENIDO_VARIABLE;
+	t_valor_variable val = socket_recv_comun(socketKernel)->dato;
+	printf("Asignando a variable compartida %s el valor %c \n", variable, val);
+	return val;
 	}
 
 
@@ -425,6 +428,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	socket_send_comun(socketKernel,men);
 	//destruir_t_mensaje(men);
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
+	socket_send_quantum_pcb(socketKernel, crear_men_quantum_pcb(NULL, 0, pcb));
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){

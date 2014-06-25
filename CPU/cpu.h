@@ -29,23 +29,6 @@
 
 
 /*typedef struct{
-		u_int32_t id;
-		u_int32_t segmento_codigo;
-		u_int32_t segmento_stack;
-		u_int32_t *cursor_stack;
-		u_int32_t indice_codigo;
-		u_int32_t indice_etiquetas;
-		u_int32_t program_counter;
-		u_int32_t tamanio_context;
-		u_int32_t tamanio_indice_etiquetas;
-		u_int32_t cant_instrucciones;
-		u_int32_t tamanio_script;
-		u_int32_t peso;
-		u_int32_t socket_asociado;
-}estructura_pcb;*/
-
-
-/*typedef struct{
 	char *puertoKernel;
 	char *ipKernel;
 	char *puertoUmv;
@@ -67,7 +50,7 @@ void destruirDiccionario();
 void signal_handler(int sig);
 //t_config *levantarConfiguracion();
 void crearDiccionario();
-void salirPorQuantum(int socketKernel, t_pcb *pcb);
+void salirPorQuantum();
 void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
 void errorDeProxInstruccion(int socketKernel);
