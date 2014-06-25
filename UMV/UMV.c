@@ -70,11 +70,11 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 	while(quit_sistema){
 		men_seg = socket_recv_seg(param->soc);
 		if (men_seg->tipo == DESTR_SEGS){
-			//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
+			destruirSegmentos(string_itoa(men_seg->id_prog));
 			continue;
 		}
 		if (crearSegmento(men_seg) == -1){
-			//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
+			destruirSegmentos(string_itoa(men_seg->id_prog));
 			aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
 			socket_send_comun(param->soc,aux_men);
 		}else{
@@ -103,6 +103,9 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	while(quit_sistema){
 		t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 		socket_send_comun(param->soc,men_hs);
+		men_hs = socket_recv_comun(param->soc);
+		if (men_hs->tipo == HS_CPU)
+			printf("ERROR se esperaba HS_CPU y se recibio %i\n",men_hs->tipo);
 
 		sleep(retardo);
 	}
