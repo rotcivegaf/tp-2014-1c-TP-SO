@@ -15,7 +15,8 @@ int quit_sistema = 1;
 int socketKernel;
 int socketUmv;
 char *prox_inst;
-estructura_pcb *pcb;
+//estructura_pcb *pcb;
+t_pcb *pcb;
 
 AnSISOP_funciones functions = {
 		.AnSISOP_definirVariable		= definirVariable,
@@ -41,8 +42,8 @@ AnSISOP_kernel kernel_functions = {
 
 int main(){
 	prox_inst = malloc(0);
-	t_men_comun *men;
-	estructura_pcb *pcb = malloc(sizeof(estructura_pcb));
+	t_men_quantum_pcb *msj;
+	t_pcb *pcb = malloc(sizeof(t_pcb));
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
 	//t_datos_config *unaConfig = levantarConfiguracion();
@@ -58,17 +59,10 @@ int main(){
 
 	socketKernel = socket_crear_client(puertoKernel, ipKernel);
 	handshake_kernel();
-	//int socketKernel = conectarse(ipKernel,puertoKernel);
 
-	//queda a la espera que el pcp  envie el pcb
-	//recibe el pcb
-	//int i, fdmax;
-	//fdmax=socketKernel;
-
-	//for(i = 3; i <= fdmax; i++) {
 	while(1){
-		men = socket_recv_serealizado(socketKernel);
-		recv_pcb_del_kernel(men);
+
+		recibirUnPcb();
 	}
 	//}
 
@@ -108,8 +102,8 @@ int main(){
 		}
 
 
-/*close(socketKernel);
-close(socketUmv);*/
+socket_cerrar(socketKernel);
+socket_cerrar(socketUmv);
 
 destruirDiccionario();
 
@@ -219,81 +213,55 @@ void signal_handler(int sig){
 	}
 }
 
+void recibirUnPcb(){
+	msj = socket_recv_quantum_pcb(socketKernel);
+	recv_pcb_del_kernel(msj);
+}
 
 
-
-void recv_pcb_del_kernel(t_men_comun *men){
-	switch(men->tipo){
-	case QUANTUM_MAX:
-		quantum = atoi(men->dato);
-		break;
-	case CANT_VAR_CONTEXTO_ACTUAL:
-		//pcb->cant_var_contexto_actual = atoi(men->dato);
-		pcb->tamanio_context = atoi(men->dato);
-		break;
-	case DPBU_CONTEXTO_ACTUAL:
-		//pcb->dir_primer_byte_umv_contexto_actual = atoi(men->dato);
-		*pcb->cursor_stack = atoi(men->dato);
-		break;
-	case DPBU_INDICE_CODIGO:
-		//pcb->dir_primer_byte_umv_indice_codigo = atoi(men->dato);
-		pcb->indice_codigo = atoi(men->dato);
-		break;
-	case DPBU_INDICE_ETIQUETAS:
-		//pcb->dir_primer_byte_umv_indice_etiquetas = atoi(men->dato);
-		pcb->indice_etiquetas = atoi(men->dato);
-		break;
-	case DPBU_SEGMENTO_CODIGO:
-		//pcb->dir_primer_byte_umv_segmento_codigo = atoi(men->dato);
-		pcb->segmento_codigo = atoi(men->dato);
-		break;
-	case DPBU_SEGMENTO_STACK:
-		//pcb->dir_primer_byte_umv_segmento_stack = atoi(men->dato);
-		pcb->segmento_stack = atoi(men->dato);
-		break;
-	case ID_PROG:
-		//pcb->id = atoi(men->dato);
-		pcb->id = atoi(men->dato);
-		break;
-	case PROGRAM_COUNTER:
-		//pcb->program_counter = atoi(men->dato);
-		pcb->program_counter = atoi(men->dato);
-		break;
-	case TAM_INDICE_ETIQUETAS:
-		//pcb->tam_indice_etiquetas = atoi(men->dato);
-		pcb->tamanio_indice_etiquetas = atoi(men->dato);
-		break;
-	default:
-		printf("El tipo de dato enviado es erroneo\n");
-		//deberia avisar al kernel que recibio mal el pcb
-		break;
-	}
+void recv_pcb_del_kernel(t_men_quantum_pcb *men){
+ pcb = men->pcb;
+ quantum = men->quantum;
 }
 
 
  void handshake_umv(){
-	t_men_comun *handshake = crear_men_comun(HS_UMV_CPU,"",1);
+	 t_men_comun *men_hs;
+	 men_hs = socket_recv_comun(socketUmv);
+	 if(men_hs->tipo != HS_UMV)
+		 printf("ERROR se esperaba HS_UMV y se recibio %i\n",men_hs->tipo);
+		 men_hs->tipo = HS_CPU;
+		 socket_send_comun(socketKernel, men_hs);
+
+	 /*t_men_comun *handshake = crear_men_comun(HS_CPU,"",1);//lo mismo que en handshake kernel
 	socket_send_serealizado(socketUmv,handshake);
 
 	handshake = socket_recv_serealizado(socketUmv);
 
-	if(handshake->tipo == HS_UMV_CPU){
+	if(handshake->tipo == HS_UMV){
 		printf("UMV conectada\n");
 	}else{
 		printf("ERROR HANDSHAKE UMV = %i\n",handshake->tipo);
-	}
+	}*/
 }
 
 void handshake_kernel(){
-	t_men_comun *handshake = crear_men_comun(HS_KERNEL_CPU,"",1);
+	 t_men_comun *men_hs;
+		 men_hs = socket_recv_comun(socketKernel);
+		 if(men_hs->tipo != HS_KERNEL)
+		  	printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
+		  men_hs->tipo = HS_CPU;
+		  socket_send_comun(socketKernel, men_hs);
+
+	/*t_men_comun *handshake = crear_men_comun(HS_CPU,"",1);// verificar que HS hay que usar antes habia definido un HS_KERNEL_CPU
 	socket_send_serealizado(socketKernel,handshake);
 
 	handshake = socket_recv_serealizado(socketKernel);
-	if(handshake->tipo == HS_KERNEL_CPU){
+	if(handshake->tipo == HS_KERNEL){
 		printf("KERNEL conectada\n");
 	}else{
 		printf("ERROR HANDSHAKE KERNEL = %i\n",handshake->tipo);
-	}
+	}*/
 }
 
 

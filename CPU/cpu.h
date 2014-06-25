@@ -28,7 +28,7 @@
 
 
 
-typedef struct{
+/*typedef struct{
 		u_int32_t id;
 		u_int32_t segmento_codigo;
 		u_int32_t segmento_stack;
@@ -42,7 +42,8 @@ typedef struct{
 		u_int32_t tamanio_script;
 		u_int32_t peso;
 		u_int32_t socket_asociado;
-}estructura_pcb;
+}estructura_pcb;*/
+
 
 /*typedef struct{
 	char *puertoKernel;
@@ -54,20 +55,21 @@ typedef struct{
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
 t_men_comun *men;
+t_men_quantum_pcb *msj;
 
-
+void recibirUnPcb();
 void handshake_umv();
 void handshake_kernel();
-void recv_pcb_del_kernel(t_men_comun *men);
+void recv_pcb_del_kernel(t_men_quantum_pcb *msj);
 void destruirDiccionario();
 void signal_handler(int sig);
 //t_config *levantarConfiguracion();
 void crearDiccionario();
-void salirPorQuantum(int socketKernel, estructura_pcb *pcb);
+void salirPorQuantum(int socketKernel, t_pcb *pcb);
 void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
 void errorDeProxInstruccion(int socketKernel);
-char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb);
+char* solicitarProxSentenciaAUmv(int socket, t_pcb *pcb);
 
 
 //primitivas anSISOP
