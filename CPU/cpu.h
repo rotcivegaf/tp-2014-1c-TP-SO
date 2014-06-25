@@ -52,10 +52,12 @@
 	char *ipUmv;
 }t_datos_config;*/
 
+t_pcb *pcb;
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
 t_men_comun *men;
 t_men_quantum_pcb *msj;
+t_men_sol_pos_mem *mess;
 
 void recibirUnPcb();
 void handshake_umv();
@@ -69,7 +71,7 @@ void salirPorQuantum(int socketKernel, t_pcb *pcb);
 void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
 void errorDeProxInstruccion(int socketKernel);
-char* solicitarProxSentenciaAUmv(int socket, t_pcb *pcb);
+char* solicitarProxSentenciaAUmv();
 
 
 //primitivas anSISOP

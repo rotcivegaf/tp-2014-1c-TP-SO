@@ -42,8 +42,8 @@ AnSISOP_kernel kernel_functions = {
 
 int main(){
 	prox_inst = malloc(0);
-	t_men_quantum_pcb *msj;
 	t_pcb *pcb = malloc(sizeof(t_pcb));
+
 
 	/*levanta archivo de configuracion para obtener ip y puerto de kernel y umv*/
 	//t_datos_config *unaConfig = levantarConfiguracion();
@@ -62,44 +62,49 @@ int main(){
 
 	while(1){
 
+		/*recibe un pcb del kernel*/
 		recibirUnPcb();
+
+		/*se crea un diccionario para guardar las variables del contexto*/
+		crearDiccionario();
+
+		/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
+		signal(SIGUSR1, signal_handler);
+
+		int cantIns = 0;
+
+		/*conexion con la umv*/
+		socketUmv = socket_crear_client(puertoUmv, ipUmv);
+		handshake_umv();
+
+
+		char* proxInstrucc = solicitarProxSentenciaAUmv();
+
+			if (strcmp(proxInstrucc, "error") ){
+				errorDeProxInstruccion(socketKernel); // le aviso al pcp que la umv me devolvio error al solicitar prox inst
+				}else{
+					pcb->program_counter ++; // aumento el pc
+					if (pcb->program_counter == pcb->cant_instrucciones){ // me fijo si la sentencia a ejecutar es la ultima del script
+						parsearUltimaInstruccion(proxInstrucc, socketKernel);}
+						else{
+							for(;quantum>0;quantum--){
+								//ejecuta tantas instrucciones como quantums tenga
+								parsearUnaInstruccion(proxInstrucc);
+								cantIns ++;
+							}
+							salirPorQuantum(socketKernel,pcb);
+
+
+					}
+
+				}
+
 	}
 	//}
 
 	//recv(socketKernel,pcb, sizeof(estructura_pcb),0);	recv(socketKernel, &quantum, sizeof(int), 0);
 
 	//crear diccionario de variables
-	crearDiccionario();
-
-	signal(SIGUSR1, signal_handler);
-
-	int cantIns = 0;
-
-	/*conexion con la umv*/
-	socketUmv = socket_crear_client(puertoUmv, ipUmv);
-	handshake_umv();
-	//int socketUmv = conectarse(ipUmv,puertoUmv);
-
-	char* proxInstrucc = solicitarProxSentenciaAUmv(socketUmv,pcb);
-
-	if (strcmp(proxInstrucc, "error") ){
-		errorDeProxInstruccion(socketKernel); // le aviso al pcp que la umv me devolvio error al solicitar prox inst
-		}else{
-			pcb->program_counter ++; // aumento el pc
-			if (pcb->program_counter == pcb->cant_instrucciones){ // me fijo si la sentencia a ejecutar es la ultima del script
-				parsearUltimaInstruccion(proxInstrucc, socketKernel);}
-				else{
-					for(;quantum>0;quantum--){
-						//ejecuta tantas instrucciones como quantums tenga
-						parsearUnaInstruccion(proxInstrucc);
-						cantIns ++;
-					}
-					salirPorQuantum(socketKernel,pcb);
-
-
-			}
-
-		}
 
 
 socket_cerrar(socketKernel);
@@ -148,7 +153,7 @@ void avisarAlPcp(int unCodigo, int socketKernel){
 	send(socketKernel,pedido,sizeof(int),0);
 }
 
-void salirPorQuantum(int socketKernel, estructura_pcb *pcb){
+void salirPorQuantum(int socketKernel, t_pcb *pcb){
 	//aviso al pcp que termino mi quantum
 	u_int32_t codigoQuantum =1;
 	avisarAlPcp(codigoQuantum, socketKernel);
@@ -177,29 +182,27 @@ void errorDeProxInstruccion(int socketKernel){
 
 }
 
-char* solicitarProxSentenciaAUmv(int socket, estructura_pcb *pcb){
-	//para decir que se esta conectando una conexion tipo cpu
-	char *pedido = malloc(sizeof(int));
-	u_int32_t id_mensaje = 4; //para saber que le estoy pidiendo prox instruccion a ejecutar
+char* solicitarProxSentenciaAUmv(){
 
 	//mandarle a la umv el cambio de proceso activo  pcb->id
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
-	u_int32_t proxInstBase = pcb->segmento_codigo;
-	u_int32_t proxInstOffset = (pcb->indice_codigo)+ 8*(1-pcb->program_counter);
-	u_int32_t proxInstTamanio = proxInstOffset + 4;
-	memcpy(pedido,&id_mensaje,sizeof(id_mensaje));
-	memcpy(pedido+sizeof(id_mensaje),&proxInstBase,sizeof(proxInstBase));
-	memcpy(pedido+sizeof(id_mensaje)+sizeof(proxInstBase), &proxInstOffset, sizeof(proxInstOffset));
-	memcpy(pedido+sizeof(id_mensaje)+sizeof(proxInstBase)+sizeof(proxInstOffset), &proxInstTamanio, sizeof(proxInstTamanio));
+	int32_t base = pcb->dir_primer_byte_umv_segmento_codigo;
+	int32_t offset = (pcb->dir_primer_byte_umv_indice_codigo)+ 8*(1-pcb->program_counter);
+	int32_t tam = sizeof(uint32_t)*4;
+	mess = crear_men_sol_mem(SOL_BYTES,base, offset, tam);
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
-	send(socket,pedido,sizeof(u_int32_t)*4,0);
+	socket_send_sol_pos_mem(socketUmv, mess); // para que hace return de los bytes que pudo leer?
+
 
 	//recibir la instruccion a ejecutar
-	char* instruccion = malloc(proxInstTamanio);
-	recv(socket,instruccion,sizeof(instruccion),0);
-	printf("Instruccion que voy a ejecutar %s\n",instruccion);
-	return instruccion;
+
+	mess = socket_recv_sol_pos_mem(socketUmv);
+
+	char *inst = mess->
+
+	printf("Instruccion que voy a ejecutar %s\n",mess);
+	return mess;
 }
 
 void signal_handler(int sig){
@@ -398,20 +401,20 @@ void retornar(t_valor_variable retorno){
 void imprimir(t_valor_variable valor_mostrar){
 	char *aux = string_itoa(valor_mostrar);
 	t_men_comun *men = crear_men_comun(IMPRIMIR_VALOR,aux ,string_length(aux));
-	socket_send_serealizado(socketKernel,men);
+	socket_send_comun(socketKernel,men);
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_serealizado(socketKernel,men);
-	destruir_t_mensaje(men);
+	socket_send_comun(socketKernel,men);
+	//destruir_t_mensaje(men);
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
 
 void imprimirTexto(char* texto){
 	t_men_comun *men = crear_men_comun(IMPRIMIR_TEXTO, texto,string_length(texto));
-	socket_send_serealizado(socketKernel,men);
+	socket_send_comun(socketKernel,men);
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_serealizado(socketKernel,men);
-	destruir_t_mensaje(men);
+	socket_send_comun(socketKernel,men);
+	//destruir_t_mensaje(men);
 	printf("Imprimiendo texto: %s", texto);
 	}
 
@@ -419,21 +422,21 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	t_men_comun *men = crear_men_comun(IO_ID, dispositivo,string_length(dispositivo));
 	char *cant_unidades = string_itoa(tiempo);
 	men = crear_men_comun(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
-	socket_send_serealizado(socketKernel,men);
-	destruir_t_mensaje(men);
+	socket_send_comun(socketKernel,men);
+	//destruir_t_mensaje(men);
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
 	t_men_comun *men = crear_men_comun(WAIT, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_serealizado(socketKernel,men);
-	destruir_t_mensaje(men);
+	socket_send_comun(socketKernel,men);
+	//destruir_t_mensaje(men);
 	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
 }
 void mi_signal(t_nombre_semaforo identificador_semaforo){
 	t_men_comun *men = crear_men_comun(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_serealizado(socketKernel,men);
-	destruir_t_mensaje(men);
+	socket_send_comun(socketKernel,men);
+	//destruir_t_mensaje(men);
 	printf("Haciendo signal a semaforo%s\n", identificador_semaforo);
 
 }
