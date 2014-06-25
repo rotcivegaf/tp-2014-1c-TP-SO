@@ -1,9 +1,9 @@
-Puerto_prog=6668
+Puerto_prog=5000
 
-Puerto_CPU=6666
+Puerto_CPU=5001
 
 IP_UMV=127.0.0.1
-Puerto_umv=6667
+Puerto_umv=5002
 
 ID_HIO=[Disco, Impresora, Scanner]
 HIO=[1, 2, 1]
