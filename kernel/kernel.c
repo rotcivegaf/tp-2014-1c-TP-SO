@@ -16,7 +16,7 @@ sem_t buff_multiprog, libre_multiprog, cont_exit;
 int32_t quit_sistema = 1;
 t_list *dispositivos_IO;
 
-int32_t main(void){
+int main(void){
 	t_datos_config *diccionario_config = levantar_config();
 	//semaforos
 	crear_cont(&cont_exit , 0);
@@ -566,8 +566,6 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog){
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
 	resp_sol->memoria_insuficiente = 0;
-
-
 	t_men_comun *resp_mem;
 	t_men_ped_seg *ped_mem;
 	int32_t tam = 0;
@@ -680,6 +678,13 @@ void manejador_IO(t_IO *io){
 }
 
 void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
+	/*todo usar las funciones
+	 * t_men_quantum_pcb *crear_men_quantum_pcb(int32_t tipo, int32_t quantum, t_pcb* pcb);
+	int socket_send_quantum_pcb(int soc,t_men_quantum_pcb *men);
+	t_men_quantum_pcb *socket_recv_quantum_pcb(int soc);
+
+	van alegrar a esta funcion :-D
+	 */
 	t_men_comun *men;
 	men = crear_men_comun(QUANTUM_MAX, string_itoa(quantum),string_length(string_itoa(quantum)));
 	socket_send_comun(soc,men);
@@ -704,7 +709,7 @@ void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
 }
 
 t_datos_config *levantar_config(){
-	int32_t i;
+	int i;
 	t_IO *aux_IO;
 	char **id_hios = malloc(sizeof(char));
 	char **hio_sleeps = malloc(sizeof(char));
@@ -717,14 +722,19 @@ t_datos_config *levantar_config(){
 	ret->cola_IO = queue_create();
 	id_hios = config_get_array_value( diccionario_config, "ID_HIO");
 	hio_sleeps = config_get_array_value( diccionario_config, "HIO");
+
+
+	//todo aca rompeee
 	for (i=0; id_hios[i] != '\0'; i++){
 		t_IO *new_IO = malloc(sizeof(t_IO));
 		new_IO->id_hio = id_hios[i];
 		new_IO->hio_sleep = atoi(hio_sleeps[i]);
-		new_IO->procesos = queue_create();
+		//new_IO->procesos = queue_create();
 		queue_push(ret->cola_IO, new_IO);
-		pthread_create(&(new_IO->hilo), NULL, (void*)manejador_IO, (void*)new_IO);
+		//pthread_create(&(new_IO->hilo), NULL, (void*)manejador_IO, (void*)new_IO);
 	}
+
+
 	ret->semaforos = config_get_array_value( diccionario_config, "SEMAFOROS");
 	ret->valor_semaforos = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
 	ret->multiprogramacion = config_get_int_value( diccionario_config, "MULTIPROGRAMACION");
