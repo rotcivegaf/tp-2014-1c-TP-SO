@@ -99,6 +99,7 @@
 		int32_t id;
 		int32_t program_counter;
 		int32_t tam_indice_etiquetas;
+		int32_t cant_instrucciones;
 	}__attribute__((__packed__)) t_pcb;
 	typedef struct{
 		int32_t tipo;
