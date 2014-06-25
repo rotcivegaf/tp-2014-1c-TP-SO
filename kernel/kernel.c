@@ -528,9 +528,9 @@ t_cpu *get_cpu_libre(int32_t *res){
 }
 
 void umv_destrui_pcb(t_pcb *pcb){
-	t_men_comun *men_dest;
-	men_dest = crear_men_comun(DESTR_SEGS, string_itoa(pcb->id),string_length(string_itoa(pcb->id)));
-	socket_send_comun(soc_umv, men_dest);
+	t_men_seg *men_seg;
+	men_seg = crear_men_seg(DESTR_SEGS, pcb->id, 0);
+	socket_send_seg(soc_umv, men_seg);
 }
 
 t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t *contador_id_programa){
@@ -567,11 +567,11 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
 	resp_sol->memoria_insuficiente = 0;
 	t_men_comun *resp_mem;
-	t_men_ped_seg *ped_mem;
+	t_men_seg *ped_mem;
 	int32_t tam = 0;
 	//pido mem para el codigo del script
-	ped_mem = crear_men_ped_seg(PED_MEM_SEG_COD,id_prog,string_length(script));
-	socket_send_ped_seg(soc_umv, ped_mem);
+	ped_mem = crear_men_seg(PED_MEM_SEG_COD,id_prog,string_length(script));
+	socket_send_seg(soc_umv, ped_mem);
 	t_men_comun *resp_men_cod = socket_recv_comun(soc_umv);
 	if (resp_men_cod->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
@@ -585,8 +585,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	//pido mem para el indice de etiquetas y funciones
 	t_metadata_program* metadata_program = metadata_desde_literal(script);
 	tam = (metadata_program->etiquetas_size);
-	ped_mem = crear_men_ped_seg( PED_MEM_IND_ETI , id_prog, tam);
-	socket_send_ped_seg(soc_umv, ped_mem);
+	ped_mem = crear_men_seg( PED_MEM_IND_ETI , id_prog, tam);
+	socket_send_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
@@ -598,8 +598,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 	//pido mem para el indice de codigo
 	tam = (metadata_program->instrucciones_size*8);
-	ped_mem = crear_men_ped_seg( PED_MEM_IND_COD , id_prog, tam);
-	socket_send_ped_seg(soc_umv, ped_mem);
+	ped_mem = crear_men_seg( PED_MEM_IND_COD , id_prog, tam);
+	socket_send_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
@@ -610,8 +610,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	resp_sol->dir_primer_byte_umv_indice_codigo = atoi(resp_mem->dato);
 
 	//pido mem para el stack
-	ped_mem = crear_men_ped_seg( PED_MEM_SEG_STACK , id_prog, tam_stack);
-	socket_send_ped_seg(soc_umv, ped_mem);
+	ped_mem = crear_men_seg( PED_MEM_SEG_STACK , id_prog, tam_stack);
+	socket_send_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;

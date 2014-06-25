@@ -59,8 +59,7 @@ void *admin_conecciones(){
 
 void *admin_conec_kernel(t_param_conec_kernel *param){
 	t_men_comun *aux_men;
-	t_men_ped_seg *men_ped;
-
+	t_men_seg *men_seg;//malloc??? todo
 
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
@@ -69,13 +68,17 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 		printf("ERROR se esperaba HS_UMV y se recibio %i\n",men_hs->tipo);
 
 	while(quit_sistema){
-		men_ped = socket_recv_ped_seg(param->soc);
-		if (crearSegmento(men_ped) == -1){
+		men_seg = socket_recv_seg(param->soc);
+		if (men_seg->tipo == DESTR_SEGS){
+			//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
+			continue;
+		}
+		if (crearSegmento(men_seg) == -1){
 			//todo buscar y destruir todos los segmentos que pertenescan a este id_prog
 			aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
 			socket_send_comun(param->soc,aux_men);
 		}else{
-			switch (men_ped->tipo) {
+			switch (men_seg->tipo) {
 			case PED_MEM_SEG_COD:
 				aux_men= crear_men_comun(RESP_MEM_SEG_COD,NULL,0);
 				break;
@@ -141,7 +144,7 @@ void compactar(){
 	list_destroy(listaAuxiliar);
 }
 
-int32_t crearSegmento(t_men_ped_seg *men_ped){
+int32_t crearSegmento(t_men_seg *men_ped){
 	void *lista;
 	int32_t memEstaOk;
 	int32_t tamanio = men_ped->tam_seg;

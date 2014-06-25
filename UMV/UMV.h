@@ -52,7 +52,7 @@
 	void recorrerLista(char *clave, void *ptrLista);
 	void insertarNodosBarrera ();
 	int32_t asignarMemoriaAleatoria(int32_t tamanio);
-	int32_t crearSegmento(t_men_ped_seg *men_ped_seg);
+	int32_t crearSegmento(t_men_seg *men_ped_seg);
 	void destruirSegmentos(char *id_Prog);
 	void eliminarElemento(void *elemento);
 	int32_t controlarMemPisada(void *lista, int32_t numMemoria, int32_t tamanio);
