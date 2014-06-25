@@ -48,7 +48,6 @@ void *admin_conecciones(){
 		}
 		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
 			//todo crear hilo para administrar la cpu nueva
-			//acordarse de responder el handshake
 			continue;
 		}
 		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
@@ -59,13 +58,10 @@ void *admin_conecciones(){
 
 void *admin_conec_kernel(t_param_conec_kernel *param){
 	t_men_comun *aux_men;
-	t_men_seg *men_seg;//malloc??? todo
+	t_men_seg *men_seg;
 
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
-	men_hs = socket_recv_comun(param->soc);
-	if (men_hs->tipo == HS_UMV)
-		printf("ERROR se esperaba HS_UMV y se recibio %i\n",men_hs->tipo);
 
 	while(quit_sistema){
 		men_seg = socket_recv_seg(param->soc);
@@ -103,9 +99,6 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	while(quit_sistema){
 		t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 		socket_send_comun(param->soc,men_hs);
-		men_hs = socket_recv_comun(param->soc);
-		if (men_hs->tipo == HS_CPU)
-			printf("ERROR se esperaba HS_CPU y se recibio %i\n",men_hs->tipo);
 
 		sleep(retardo);
 	}
@@ -466,21 +459,48 @@ void imprimirDump(){
 }
 
 void imp_estructura_mem(){
-	char id_proc;
+	int id_prog;
 
 	printf ("--------------------------------\n"
 			"Elija el id_proceso\n"
 			"Ingrese 0 si desea imprimir todos\n");
-	scanf("%c",&id_proc);
-	int32_t resp = imp_tablas_segmentos(id_proc);
+	scanf("%i",&id_prog);
+	int32_t resp = imp_tablas_segmentos(id_prog);
 	if (resp == -1)
-		printf("El proceso no existe");
+		printf("El proceso no existe\n");
 }
 
-int32_t imp_tablas_segmentos(int32_t id_proc){
-	//todo hacer funcion q imprimia las tablas de segmento
-	//recibira un int32_t y devuelve -1 si no existe el proceso
-	return -1;
+int32_t imp_tablas_segmentos(int32_t id_prog){
+	//todo usar semaforos para la tabla de programas
+	if (id_prog == 0){
+		dictionary_iterator(tablaProgramas, (void *)imp_lista);
+		return 1;
+	}
+	t_list *lista_seg_prog = dictionary_get(tablaProgramas, string_itoa(id_prog));
+	if (lista_seg_prog == NULL) //todo probar que funke
+		return -1;
+	imp_lista(string_itoa(id_prog), lista_seg_prog);
+	return 1;
+}
+
+void imp_lista(char *id_prog, t_list *lista_seg){
+	int i, tam_list;
+	TabMen *aux_tab_mem = malloc(sizeof(TabMen));
+	printf("llegueACAAA\n");
+	tam_list = list_size(lista_seg);
+	if (tam_list == 0)
+		printf("ERROR tabla de segmentos vacia\n");
+	for (i=0; i<tam_list;i++){
+		aux_tab_mem = list_get(lista_seg, i);
+		printf("TIPO | ID  |DIR_F| TAM |DIR_L|\n");
+		printf(" %i  |",aux_tab_mem->tipo_seg);
+		printf(" %s  |",id_prog);
+		printf(" %i  |",aux_tab_mem->memFisica);
+		printf(" %i  |",aux_tab_mem->longitud);
+		printf(" %i  |\n",aux_tab_mem->memLogica);
+	}
+	printf("--------------------------------------------------------\n");
+	//todo destruir lista, si lo destruyo pasa algo malo?
 }
 
 void imp_mem_prin(){
