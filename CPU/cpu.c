@@ -57,8 +57,11 @@ int main(){
 
 	/*conexion con el kernel*/
 
-	socketKernel = socket_crear_client(puertoKernel, ipKernel);
-	handshake_kernel();
+	handshake_kernel(puertoKernel, ipKernel);
+
+	/*conexion con la umv*/
+	handshake_umv(puertoUmv, ipUmv);
+
 
 	while(1){
 
@@ -71,12 +74,7 @@ int main(){
 		/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
 		signal(SIGUSR1, signal_handler);
 
-		int cantIns = 0;
-
-		/*conexion con la umv*/
-		socketUmv = socket_crear_client(puertoUmv, ipUmv);
-		handshake_umv();
-
+		int32_t cantIns = 0;
 
 		char* proxInstrucc = solicitarProxSentenciaAUmv();
 
@@ -110,7 +108,7 @@ int main(){
 socket_cerrar(socketKernel);
 socket_cerrar(socketUmv);
 
-destruirDiccionario();
+dictionary_destroy(dic_Variables);
 
 return 0;
 
@@ -133,18 +131,31 @@ return 0;
 }*/
 
 void crearDiccionario(){
-	//t_dictionary *dicVariables = dictionary_create();
+	dic_Variables = dictionary_create();
 	//si el tamaño de contexto es distinto de cero
+	int32_t tam_contexto = pcb->cant_var_contexto_actual;
+	int32_t i = 0;
+	if (tam_contexto != 0){
 		// for (de tamaño de contexto a 0){
+		for(0;i<= tam_contexto; i++){
 			//pedir a umv, base= stack offset=(i-1)x5 tamanio=1
+			int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
+			int32_t offset = (i-1)*5 ;
+			int32_t tam = 1;
+			t_men_sol_pos_mem *msj = crear_men_sol_pos_mem(SOL_BYTES, base, offset, tam);
+			socket_send_sol_pos_mem(socketUmv, msj);
 			//recibir de la umv key
+			t_men_sol_pos_mem *m = socket_recv_sol_pos_mem(socketUmv);
 			//dictionary_put(dicVariables,key, stack + (i-1))
-	//}
+			dictionary_put(dic_Variables, (base + (i-1)),
+					//datoquemedevuelvelaumv
+					);
+		}
+
+	}
+
 }
 
-void destruirDiccionario(){
-	//dictionary_remove_and_destroy(dicVariables, , );
-}
 
 
 void salirPorQuantum(){
@@ -182,10 +193,10 @@ char* solicitarProxSentenciaAUmv(){
 	int32_t base = pcb->dir_primer_byte_umv_segmento_codigo;
 	int32_t offset = (pcb->dir_primer_byte_umv_indice_codigo)+ 8*(1-pcb->program_counter);
 	int32_t tam = sizeof(uint32_t)*4;
-	mess = crear_men_sol_mem(SOL_BYTES,base, offset, tam);
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
-	socket_send_sol_pos_mem(socketUmv, mess); // para que hace return de los bytes que pudo leer?
+	t_men_sol_pos_mem *m = crear_men_sol_pos_mem(SOL_BYTES,base, offset, tam);
+	socket_send_sol_pos_mem(socketUmv, m); // para que hace return de los bytes que pudo leer?
 
 
 	//recibir la instruccion a ejecutar
@@ -222,44 +233,35 @@ void recv_pcb_del_kernel(t_men_quantum_pcb *men){
 }
 
 
- void handshake_umv(){
-	 t_men_comun *men_hs;
-	 men_hs = socket_recv_comun(socketUmv);
-	 if(men_hs->tipo != HS_UMV)
-		 printf("ERROR se esperaba HS_UMV y se recibio %i\n",men_hs->tipo);
-		 men_hs->tipo = HS_CPU;
-		 socket_send_comun(socketKernel, men_hs);
-
-	 /*t_men_comun *handshake = crear_men_comun(HS_CPU,"",1);//lo mismo que en handshake kernel
-	socket_send_serealizado(socketUmv,handshake);
-
-	handshake = socket_recv_serealizado(socketUmv);
-
-	if(handshake->tipo == HS_UMV){
+void handshake_umv(char *ip_umv, char *puerto_umv){
+	//envio a la UMV
+	socketUmv = socket_crear_client(puerto_umv,ip_umv);
+	t_men_comun *mensaje_inicial = crear_men_comun(HS_CPU,"",string_length(""));
+	socket_send_comun(socketUmv,mensaje_inicial);
+	//espero coneccion de la UMV
+	mensaje_inicial = socket_recv_comun(socketUmv);
+	if(mensaje_inicial->tipo == HS_UMV){
 		printf("UMV conectada\n");
 	}else{
-		printf("ERROR HANDSHAKE UMV = %i\n",handshake->tipo);
-	}*/
+		printf("ERROR HANDSHAKE");
+	}
 }
 
-void handshake_kernel(){
-	 t_men_comun *men_hs;
-		 men_hs = socket_recv_comun(socketKernel);
-		 if(men_hs->tipo != HS_KERNEL)
-		  	printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
-		  men_hs->tipo = HS_CPU;
-		  socket_send_comun(socketKernel, men_hs);
 
-	/*t_men_comun *handshake = crear_men_comun(HS_CPU,"",1);// verificar que HS hay que usar antes habia definido un HS_KERNEL_CPU
-	socket_send_serealizado(socketKernel,handshake);
-
-	handshake = socket_recv_serealizado(socketKernel);
-	if(handshake->tipo == HS_KERNEL){
-		printf("KERNEL conectada\n");
+void handshake_kernel(char *ip_k, char *puerto_k){
+	//envio al kernel
+	socketKernel = socket_crear_client(puerto_k,ip_k);
+	t_men_comun *mensaje_inicial = crear_men_comun(HS_CPU,"",string_length(""));
+	socket_send_comun(socketKernel,mensaje_inicial);
+	//espero conexion de kernel
+	mensaje_inicial = socket_recv_comun(socketKernel);
+	if(mensaje_inicial->tipo == HS_KERNEL){
+		printf("Kernel conectado\n");
 	}else{
-		printf("ERROR HANDSHAKE KERNEL = %i\n",handshake->tipo);
-	}*/
+		printf("ERROR HANDSHAKE");
+	}
 }
+
 
 
 //Primitivas ANSISOP
@@ -313,9 +315,12 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	send_men_comun(OBTENER_VALOR, variable, sizeof(variable));
+	t_men_comun *m = crear_men_comun(OBTENER_VALOR, variable, sizeof(variable));
+	socket_send_comun(socketKernel, m);
 	//recibo el valor
-	t_valor_variable valor = socket_recv_comun(socketKernel)->dato;
+	t_men_comun *respuesta = socket_recv_comun(socketKernel);
+	char *c = respuesta->dato;
+	t_valor_variable valor = atoi(c);
 	printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
 	return valor;
 }
@@ -323,15 +328,17 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_variable valor){
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
-
-	char* pedido = malloc(sizeof(int));
-	memcpy(pedido,variable,sizeof(t_nombre_compartida));
-	memcpy(pedido + sizeof(t_nombre_compartida), &valor, sizeof(t_valor_variable));
-	send_men_comun(socketKernel,crear_men_comun(GRABAR_VALOR,pedido, sizeof(pedido)));
+	t_men_comun *var =crear_men_comun(GRABAR_VALOR, variable, sizeof(variable));
+	char *c =  itoa(valor);
+	t_men_comun *val_asignado = crear_men_comun(VALOR_ASIGNADO, c, sizeof(c));
+	socket_send_comun(socketKernel,var);
+	socket_send_comun(socketKernel, val_asignado);
 
 	//recibir el valor que le asigne
-	t_valor_variable val = socket_recv_comun(socketKernel)->dato;
-	printf("Asignando a variable compartida %s el valor %c \n", variable, val);
+	t_men_comun *ms = socket_recv_comun(socketKernel);
+	//char *dato = ms->dato;
+	t_valor_variable val = atoi(ms->dato);
+	printf("Asignando a variable compartida %s el valor %d \n", variable, val);
 	return val;
 	}
 
@@ -428,7 +435,8 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	socket_send_comun(socketKernel,men);
 	//destruir_t_mensaje(men);
 	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
-	socket_send_quantum_pcb(socketKernel, crear_men_quantum_pcb(NULL, 0, pcb));
+	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
+	socket_send_quantum_pcb(socketKernel, mpcb);
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
