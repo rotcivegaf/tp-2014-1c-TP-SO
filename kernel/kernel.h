@@ -127,7 +127,7 @@
 	void *entrar_IO();
 	t_cpu *get_cpu_libre(int32_t  *res);
 	t_pcb_otros *get_peso_min();
-	void umv_destrui_pcb(t_pcb *pcb);
+	void umv_destrui_pcb(int32_t id_pcb);
 	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
 
 #endif /* KERNEL_H_ */

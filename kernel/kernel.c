@@ -18,11 +18,11 @@ t_list *dispositivos_IO;
 
 int main(void){
 	t_datos_config *diccionario_config = levantar_config();
-	//semaforos
+	//Inicializacion semaforos
 	crear_cont(&cont_exit , 0);
 	crear_cont(&buff_multiprog , 0);
 	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion);
-	//colas
+	//Creacion de colas
 	cola_cpu = queue_create();
 	colas = malloc(sizeof(t_colas));
 	colas->cola_new = queue_create();
@@ -38,7 +38,7 @@ int main(void){
 	t_param_plp *param_plp = ini_pram_plp(diccionario_config);
 	t_param_pcp *param_pcp = ini_pram_pcp(diccionario_config);
 
-	//hilos
+	//Creacion de hilos
 	pthread_t hilo_imp_colas, hilo_plp, hilo_pcp;
 	pthread_create(&hilo_imp_colas, NULL, imp_colas , NULL);
 	pthread_create(&hilo_plp, NULL, plp, (void *)param_plp);
@@ -51,23 +51,27 @@ int main(void){
 }
 
 void *plp(t_param_plp *param_plp){
+
+	//Creacion del hilo que maneja el pasaje de pcbs de new a ready
 	pthread_t hilo_new_ready;
 	t_param_new_ready *param_new_ready = malloc(sizeof(t_param_new_ready));
 	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
 
 	int32_t contador_prog = 1;
-	fd_set master;   // conjunto maestro de descriptores de fichero
-	fd_set read_fds; // conjunto temporal de descriptores de fichero para select()
-	int32_t fdmax;        // número máximo de descriptores de fichero
+	fd_set master;   // conjunto maestro de sockets
+	fd_set read_fds; // conjunto temporal de sockets para select()
+	int32_t fdmax;        // socket con el mayor valor
 
+	//Conecta con la umv
 	handshake_umv(param_plp->ip_umv, param_plp->puerto_umv);
 
+	//Abre un server para escuchar las conexiones de los programas
 	int32_t listener_prog = socket_crear_server(param_plp->puerto_prog);
 
     int32_t prog_new_fd;
 
-	FD_ZERO(&master);    // borra los conjuntos maestro y temporal
+	FD_ZERO(&master);    // borra los conjuntos maestro y temporal de sockets
 	FD_ZERO(&read_fds);
 	FD_SET(listener_prog, &master);
 
@@ -75,34 +79,35 @@ void *plp(t_param_plp *param_plp){
 
 	int32_t i = 0;
 	while(quit_sistema){
-		read_fds = master; // cópialo
+		read_fds = master; // Copia el conjunto maestro al temporal
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PLP-select");
 			exit(1);
 		}
 		for(i = 3; i <= fdmax; i++) {
-			if (FD_ISSET(i, &read_fds)) { // ¡¡tenemos datos!!
-				if (i == listener_prog) {
-					// gestionar nuevas conexiones
+			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
+				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
 					prog_new_fd = socket_accept(listener_prog);
 					handshake_prog(prog_new_fd);
-					FD_SET(prog_new_fd, &master); // añadir al conjunto maestro
-					if (prog_new_fd > fdmax)// actualizar el máximo
+					FD_SET(prog_new_fd, &master);
+					if (prog_new_fd > fdmax) // Actualiza el socket maximo
 						fdmax = prog_new_fd;
 				}else{
-					// gestionar datos de un cliente
+					// Sino, es el socket de un programa ya conectado que manda datos
 					t_men_comun *men_cod_prog = socket_recv_comun(i);
 					if (men_cod_prog->tipo == CONEC_CERRADA) {
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
 						socket_cerrar(i);
-						FD_CLR(i, &master); // eliminar del conjunto maestro
+						FD_CLR(i, &master); // Elimina al socket del conjunto maestro
 						break;
 					}
 					printf("PLP-select: nuevo prog con socket n°%i\n", i);
 					contador_prog++;
+					//Pide mem para el prog
 					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog->dato, param_plp->tam_stack,contador_prog);
 					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
+						//Avisa a la umv para que destruya los seg creados y al prog
 						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
 						men_no_hay_mem->tipo = MEM_OVERLOAD;
 						men_no_hay_mem->dato = string_itoa(contador_prog);
@@ -110,6 +115,7 @@ void *plp(t_param_plp *param_plp){
 						socket_send_comun(i, men_no_hay_mem);
 						free(men_no_hay_mem);
 					}else{
+						//Crea el pcb y lo pone en new
 						t_pcb_otros *pcb_otros = malloc(sizeof(t_pcb_otros));
 						pcb_otros->n_socket = i;
 						pcb_otros->pcb = crear_pcb_escribir_seg_UMV(men_cod_prog,resp_sol, &contador_prog);
@@ -131,11 +137,14 @@ void *plp(t_param_plp *param_plp){
 void *pcp(t_param_pcp *param_pcp){
 	int32_t i, fdmax, cpu_new_fd;
 	fd_set master, read_fds;
+
+	// Crea el hilo que pasa los pcb de ready a exec
 	pthread_t hilo_ready_exec;
 	t_param_ready_exec *param_ready_exec = malloc(sizeof(t_param_ready_exec));
 	param_ready_exec->quantum = param_pcp->quantum;
 	pthread_create(&hilo_ready_exec, NULL, manejador_ready_exec, (void *)param_ready_exec);
 
+	// Crea el hilo que maneja las llegadas de pcbs a exit
 	pthread_t hilo_exit;
 	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 
@@ -145,37 +154,41 @@ void *pcp(t_param_pcp *param_pcp){
 	FD_SET(listener_cpu, &master);
 	fdmax = listener_cpu;
 	while(quit_sistema){
-		read_fds = master; // copialo
+		read_fds = master;
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PCP-select");
 			exit(1);
 		}
 		for(i = 3; i <= fdmax; i++) {
 			if (FD_ISSET(i, &read_fds)) {
-				if (i == listener_cpu) {
-					// gestionar nuevas conexiones
+				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus:
 					cpu_new_fd = socket_accept(listener_cpu);
 					handshake_cpu(cpu_new_fd);
 					t_cpu *cpu = malloc(sizeof(t_cpu));
+					// Arma estructura con el n° de socket del cpu y el id del prog que esta ejecutando
 					cpu->soc_cpu = cpu_new_fd;
 					cpu->id_prog_exec = 0;
+					// Pone la estructura en la cola de cpus (cola con cpus libres)
 					pthread_mutex_lock(&mutex_uso_cola_cpu);
 					queue_push(cola_cpu, cpu);
 					pthread_mutex_unlock(&mutex_uso_cola_cpu);
 					pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
-					FD_SET(cpu_new_fd, &master); // añadir al conjunto maestro
-					if (cpu_new_fd > fdmax)// actualizar el máximo
+					FD_SET(cpu_new_fd, &master);
+					if (cpu_new_fd > fdmax)
 						fdmax = cpu_new_fd;
 				}else{
-					// gestionar datos de un cliente
+					// Sino, es un cpu mandando datos
 					t_men_comun *men_cpu = socket_recv_comun(i);
 					if (men_cpu->tipo == CONEC_CERRADA) {
 						printf("PCP-select: CPU desconectada n°socket %i\n", i);
+						// Agarra el cpu a partir de su n° de socket
 						t_cpu *aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
+							// Saca el pcb que corresponde de la cola de ejec a partir del id
 							t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 							t_men_comun *men = crear_men_comun(CPU_DESCONEC, "", 1);
+							// Le manda msj al prog y pone el pcb en exit
 							socket_send_comun(aux_pcb_otros->n_socket, men);
 							pthread_mutex_lock(&mutex_exit);
 							queue_push(colas->cola_exit, aux_pcb_otros);
@@ -189,25 +202,35 @@ void *pcp(t_param_pcp *param_pcp){
 					if (men_cpu->tipo == FIN_QUANTUM){
 						t_cpu *aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
+							// Saca el pcb de la cola de ejec a partir del id
 							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+							// Actualiza el pcb
 							(aux_pcb_otros->pcb) = (socket_recv_quantum_pcb(i)->pcb);
 
+							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
 
+							// Pone el pcb en ready
 							pthread_mutex_lock(&mutex_ready);
 							queue_push(colas->cola_ready,aux_pcb_otros);
 							pthread_mutex_unlock(&mutex_ready);
 							pthread_mutex_unlock(&mutex_ready_vacia);
 
+							// Pone el cpu devuelta en la cola de cpus
 							pthread_mutex_lock(&mutex_uso_cola_cpu);
 							queue_push(cola_cpu,aux_cpu);
 							pthread_mutex_unlock(&mutex_uso_cola_cpu);
 							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						}
 					}
+					/*
+					 * Primero recibe un msj con el id de la llamada al sistema y el valor,
+					 * dsp otro msj con el id del prog al que le quiere mandar eso
+					 * Manda entonces un msj al prog para que imprima el dato.
+					 */
 					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
 						t_men_comun *aux_men_cpu = socket_recv_comun(i);
-						if (men_cpu->tipo != ID_PROG)
+						if (aux_men_cpu->tipo != ID_PROG)
 							printf("Se esperaba el tipo de dato %i y se obtuvo %i\n",ID_PROG,men_cpu->tipo);
 						t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
 						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
@@ -450,7 +473,7 @@ void *manejador_exit(){
 				soc_prog = aux_pcb_otros->n_socket;
 				socket_send_comun(soc_prog , men);
 			}
-			umv_destrui_pcb(aux_pcb_otros->pcb);
+			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free (aux_pcb_otros);
 		}
@@ -498,7 +521,9 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 			}else{
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
-				socket_send_quantum_pcb(cpu->soc_cpu,crear_men_quantum_pcb(PCB_Y_QUANTUM, param->quantum, aux_pcb_otros->pcb));
+				//todo ver si el quantum siempre es el mismo, sino habria que agregarlo a pcb_otros
+				//para que se actualice cuando llega desde el pcb
+				socket_send_pcb(cpu->soc_cpu,aux_pcb_otros->pcb,param->quantum);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -527,9 +552,9 @@ t_cpu *get_cpu_libre(int32_t *res){
 	return cpu;
 }
 
-void umv_destrui_pcb(t_pcb *pcb){
+void umv_destrui_pcb(int32_t id_pcb){
 	t_men_seg *men_seg;
-	men_seg = crear_men_seg(DESTR_SEGS, pcb->id, 0);
+	men_seg = crear_men_seg(DESTR_SEGS, id_pcb, 0);
 	socket_send_seg(soc_umv, men_seg);
 }
 
@@ -537,17 +562,22 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	t_men_comun* men;
 	char *etis = metadata_program->etiquetas;
+
+	// Escribe el segmento de codigo
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
+	men = crear_men_comun(ALM_SEG_COD,men_cod_prog->dato,men_cod_prog->tam_dato);
 	socket_send_comun(soc_umv, men_cod_prog);
 
+	// Escribe el segmento de indice de etiquetas
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
 	men = crear_men_comun(IND_ETI_FUNC,etis,metadata_program->etiquetas_size);
-
-	socket_send_comun(soc_umv, men);
-	int32_t tam_total = metadata_program->instrucciones_size*8;
-	char *dato = malloc(tam_total);
-	memcpy(dato,metadata_program->instrucciones_serializado,tam_total);
-	men = crear_men_comun(IND_COD,dato,tam_total);
 	socket_send_comun(soc_umv, men);
 
+	// Escribe el segmento de indice de codigo
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
+	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
+	men = crear_men_comun(IND_COD,metadata_program->instrucciones_serializado,tam_ind_cod);
+	socket_send_comun(soc_umv, men_cod_prog);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = *contador_id_programa;
@@ -678,34 +708,7 @@ void manejador_IO(t_IO *io){
 }
 
 void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
-	/*todo usar las funciones
-	 * t_men_quantum_pcb *crear_men_quantum_pcb(int32_t tipo, int32_t quantum, t_pcb* pcb);
-	int socket_send_quantum_pcb(int soc,t_men_quantum_pcb *men);
-	t_men_quantum_pcb *socket_recv_quantum_pcb(int soc);
-
-	van alegrar a esta funcion :-D
-	 */
-	t_men_comun *men;
-	men = crear_men_comun(QUANTUM_MAX, string_itoa(quantum),string_length(string_itoa(quantum)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(CANT_VAR_CONTEXTO_ACTUAL, string_itoa(pcb->cant_var_contexto_actual), string_length(string_itoa(pcb->cant_var_contexto_actual)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(DPBU_CONTEXTO_ACTUAL, string_itoa(pcb->dir_primer_byte_umv_contexto_actual), string_length(string_itoa(pcb->dir_primer_byte_umv_contexto_actual)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(DPBU_INDICE_CODIGO, string_itoa(pcb->dir_primer_byte_umv_indice_codigo), string_length(string_itoa(pcb->dir_primer_byte_umv_indice_codigo)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(DPBU_INDICE_ETIQUETAS, string_itoa(pcb->dir_primer_byte_umv_indice_etiquetas), string_length(string_itoa(pcb->dir_primer_byte_umv_indice_etiquetas)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(DPBU_SEGMENTO_CODIGO, string_itoa(pcb->dir_primer_byte_umv_segmento_codigo), string_length(string_itoa(pcb->dir_primer_byte_umv_segmento_codigo)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(DPBU_SEGMENTO_STACK, string_itoa(pcb->dir_primer_byte_umv_segmento_stack), string_length(string_itoa(pcb->dir_primer_byte_umv_segmento_stack)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(PROGRAM_COUNTER , string_itoa(pcb->program_counter), string_length(string_itoa(pcb->program_counter)));
-	socket_send_comun(soc,men);
-	men = crear_men_comun(TAM_INDICE_ETIQUETAS, string_itoa(pcb->tam_indice_etiquetas), string_length(string_itoa(pcb->tam_indice_etiquetas)));
-	socket_send_comun(soc,men);
+	socket_send_quantum_pcb(soc,crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb));
 }
 
 t_datos_config *levantar_config(){
@@ -785,7 +788,7 @@ void handshake_cpu(int32_t soc){
 	handshake = socket_recv_comun(soc);
 	if(handshake->tipo != HS_CPU)
 		printf("ERROR HANDSHAKE CPU = %i\n",handshake->tipo);
-
+	handshake->tipo=HS_KERNEL;
 	socket_send_comun(soc,handshake);
 }
 
