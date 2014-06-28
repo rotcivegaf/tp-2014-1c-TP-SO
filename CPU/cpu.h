@@ -10,7 +10,6 @@
 
 #include <parser/metadata_program.h>
 #include <parser/parser.h>
-#include "funciones.h"
 #include <commons/config.h>
 #include <commons/string.h>
 #include <commons/collections/dictionary.h>
@@ -35,6 +34,23 @@
 	char *ipUmv;
 }t_datos_config;*/
 
+//Tipos de datos
+	typedef u_int32_t t_puntero;
+	typedef u_int32_t t_size;
+	typedef u_int32_t t_puntero_instruccion;
+
+	typedef char t_nombre_variable;
+	typedef int t_valor_variable;
+
+	typedef t_nombre_variable* t_nombre_semaforo;
+	typedef t_nombre_variable* t_nombre_etiqueta;
+	typedef  t_nombre_variable* t_nombre_compartida;
+	typedef  t_nombre_variable* t_nombre_dispositivo;
+
+
+
+
+t_dictionary *dic_Variables;
 t_pcb *pcb;
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
@@ -43,11 +59,12 @@ t_men_quantum_pcb *msj;
 t_men_sol_pos_mem *mess;
 
 void recibirUnPcb();
-void handshake_umv();
-void handshake_kernel();
+void handshake_umv(char *ip_umv, char *puerto_umv);
+void handshake_kernel(char *ip_k, char *puerto_k);
 void recv_pcb_del_kernel(t_men_quantum_pcb *msj);
-void destruirDiccionario();
+
 void signal_handler(int sig);
+
 //t_config *levantarConfiguracion();
 void crearDiccionario();
 void salirPorQuantum();
