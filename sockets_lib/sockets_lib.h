@@ -1,3 +1,7 @@
+/*agregar en el .bashrc
+ * export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/workspace/tp-2014-1c-hashtaggers/sockets_lib/Debug
+ */
+
 #ifndef SOCKETS_LIB_H_
 #define SOCKETS_LIB_H_
 	#include <sys/socket.h>
@@ -48,6 +52,10 @@
 		PED_MEM_IND_COD = 202,
 		PED_MEM_SEG_STACK = 203,
 		DESTR_SEGS = 204,
+		ESCRIBIR_SEG = 205,
+		ALM_SEG_COD = 206,
+		ALM_IND_ETI = 207,
+		ALM_IND_COD = 208,
 		//mensajes enviados por la UMV al KERNEL
 		RESP_MEM_SEG_COD = 250,
 		RESP_MEM_IND_ETI = 251,
@@ -113,34 +121,21 @@
 	char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self);
 	t_men_quantum_pcb *men_deserealizer_quantum_pcb(char *stream);
 
-	//para los mensaje que solicitan bytes de la umv
-	typedef struct{
-		int32_t tipo;
-		int32_t base;
-		int32_t offset;
-		int32_t tam;
-	}__attribute__((__packed__)) t_men_sol_pos_mem;
+	//para los mensaje que solicitan/almacenan bytes en la umv
 
-	t_men_sol_pos_mem *crear_men_sol_pos_mem(int32_t tipo, int32_t base, int32_t offset, int32_t tam);
-	int socket_send_sol_pos_mem(int soc,t_men_sol_pos_mem *men);
-	t_men_sol_pos_mem *socket_recv_sol_pos_mem(int soc);
-	char *men_serealizer_sol_pos_mem(t_men_sol_pos_mem *self);
-	t_men_sol_pos_mem *men_deserealizer_sol_pos_mem(char *stream);
-
-	//para los mensaje que envian bytes para ser almacenados en la umv
 	typedef struct{
 		int32_t tipo;
 		int32_t base;
 		int32_t offset;
 		int32_t tam;
 		char *buffer;
-	}__attribute__((__packed__)) t_men_sol_alm_bytes;
+	}__attribute__((__packed__)) t_men_cpu_umv;
 
-	t_men_sol_alm_bytes *crear_men_sol_alm_bytes(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer);
-	int socket_send_sol_alm_bytes(int soc,t_men_sol_alm_bytes *men);
-	t_men_sol_alm_bytes *socket_recv_sol_alm_bytes(int soc);
-	char *men_serealizer_sol_alm_bytes(t_men_sol_alm_bytes *self);
-	t_men_sol_alm_bytes *men_deserealizer_sol_alm_bytes(char *stream);
+	t_men_cpu_umv *crear_men_cpu_umv(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer);
+	int socket_send_cpu_umv(int soc,t_men_cpu_umv *men);
+	t_men_cpu_umv *socket_recv_cpu_umv(int soc);
+	char *men_serealizer_cpu_umv(t_men_cpu_umv *self);
+	t_men_cpu_umv *men_deserealizer_cpu_umv(char *stream);
 
 	typedef struct{
 		int32_t tipo;

@@ -319,111 +319,11 @@ t_men_quantum_pcb *men_deserealizer_quantum_pcb(char *stream){
 }
 
 /*
- * recibe tipo de mensaje, una base un offset y el tamanio de la solicitud
- * retorna un t_men_sol_pos_mem
+ * recibe tipo de mensaje, una base un offset, el tamanio a almacenar, buffer a almacenar("0" si es un solicitud de bytes)
+ * retorna un t_men_cpu_umv
  */
-t_men_sol_pos_mem *crear_men_sol_pos_mem(int32_t tipo, int32_t base, int32_t offset, int32_t tam){
-	t_men_sol_pos_mem *men = malloc(sizeof(t_men_sol_pos_mem));
-	men->tipo = tipo;
-	men->base = base;
-	men->offset = offset;
-	men->tam = tam;
-	return men;
-}
-
-/*envia un mensaje para solicitar porcion de memoria a la umv
- *retorna los bytes que pudo mandar
- */
-int socket_send_sol_pos_mem(int soc,t_men_sol_pos_mem *men){
-	char *stream = men_serealizer_sol_pos_mem(men);
-	int32_t length;
-	memcpy(&length, stream, sizeof(int32_t));
-	int pude_enviar = send(soc, stream, length, 0);
-	if (pude_enviar == -1){
-		perror("send");
-		exit(1);
-	}
-	if (pude_enviar != length)
-		printf("NO PUDE MANDAR TODO\n");
-	free(stream);
-	return pude_enviar;
-}
-
-/*recibe un mensaje para solicitar una porcion de memoria a la umv
- *retorna el mensaje recibido o
- *retorna un mensaje con tipo CONEC_CERRADA, si se desconecta el socket
- */
-t_men_sol_pos_mem *socket_recv_sol_pos_mem(int soc){
-	int32_t length = 0;
-	char *aux_len = malloc(sizeof(int32_t));
-	int resultado_recv = recv(soc, aux_len, sizeof(int32_t), MSG_PEEK);
-	if (resultado_recv == -1){
-		perror("recv");
-		exit(1);
-	}
-	if (resultado_recv == 0)
-		return crear_men_sol_pos_mem(CONEC_CERRADA,0,0,0);
-	memcpy(&length, aux_len, sizeof(int32_t));
-	free(aux_len);
-	char stream[length];
-	resultado_recv = recv(soc, stream, length, MSG_WAITALL);
-	if (resultado_recv == -1){
-		perror("recv");
-		exit(1);
-	}
-	if (resultado_recv == 0)
-		return crear_men_sol_pos_mem(CONEC_CERRADA,0,0,0);
-	if (resultado_recv != length)
-		printf("NO PUDE RECIBIR TODO\n");
-	t_men_sol_pos_mem *mensaje = men_deserealizer_sol_pos_mem(stream);
-	return mensaje;
-}
-
-/*serealiza un mensaje de solicitud de mem
- * retorna un char * serealizado
- */
-char *men_serealizer_sol_pos_mem(t_men_sol_pos_mem *self){
-	int length = sizeof(int32_t)*5;//lenght+tipo+base+offset+tam = 5
-	int32_t offset = 0, tmp_size = 0;
-	char *stream = malloc(length);
-
-	memcpy(stream, &length, tmp_size = sizeof(int32_t));
-	offset = tmp_size;
-	memcpy(stream + offset, &self->tipo, tmp_size = sizeof(int32_t));
-	offset = offset+tmp_size;
-	memcpy(stream+offset, &self->base, tmp_size = sizeof(int32_t));
-	offset = offset+tmp_size;
-	memcpy(stream+offset, &self->offset, tmp_size = sizeof(int32_t));
-	offset = offset+tmp_size;
-	memcpy(stream+offset, &self->tam, tmp_size = sizeof(int32_t));
-
-	return stream;
-}
-
-/*deserealiza stream de solicitud de memoria
- *retorna un t_men_sol_pos_mem
- */
-t_men_sol_pos_mem *men_deserealizer_sol_pos_mem(char *stream){
-	t_men_sol_pos_mem *self = malloc(sizeof(t_men_sol_pos_mem));
-	int32_t offset = sizeof(int32_t), tmp_size = 0;
-
-	memcpy(&self->tipo, stream+offset, tmp_size = sizeof(int32_t));
-	offset = offset + tmp_size;
-	memcpy(&self->base, stream+offset, tmp_size = sizeof(int32_t));
-	offset = offset + tmp_size;
-	memcpy(&self->offset, stream+offset, tmp_size = sizeof(int32_t));
-	offset = offset + tmp_size;
-	memcpy(&self->tam, stream+offset, tmp_size = sizeof(int32_t));
-
-	return self;
-}
-
-/*
- * recibe tipo de mensaje, una base un offset, el tamanio a almacenar, buffer a almacenar
- * retorna un t_men_sol_alm_bytes
- */
-t_men_sol_alm_bytes *crear_men_sol_alm_bytes(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer){
-	t_men_sol_alm_bytes *men = malloc(sizeof(t_men_sol_alm_bytes));
+t_men_cpu_umv *crear_men_cpu_umv(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer){
+	t_men_cpu_umv *men = malloc(sizeof(t_men_cpu_umv));
 	men->tipo = tipo;
 	men->base = base;
 	men->offset = offset;
@@ -436,8 +336,8 @@ t_men_sol_alm_bytes *crear_men_sol_alm_bytes(int32_t tipo, int32_t base, int32_t
 /*envia un mensaje para almacenar un buffer en la memoria a la umv
  *retorna los bytes que pudo mandar
  */
-int socket_send_sol_alm_bytes(int soc,t_men_sol_alm_bytes *men){
-	char *stream = men_serealizer_sol_alm_bytes(men);
+int socket_send_cpu_umv(int soc,t_men_cpu_umv *men){
+	char *stream = men_serealizer_cpu_umv(men);
 	int32_t length;
 	memcpy(&length, stream, sizeof(int32_t));
 	int pude_enviar = send(soc, stream, length, 0);
@@ -455,7 +355,7 @@ int socket_send_sol_alm_bytes(int soc,t_men_sol_alm_bytes *men){
  *retorna el mensaje recibido o
  *retorna un mensaje con tipo CONEC_CERRADA, si se desconecta el socket
  */
-t_men_sol_alm_bytes *socket_recv_sol_alm_bytes(int soc){
+t_men_cpu_umv *socket_recv_cpu_umv(int soc){
 	int32_t length = 0;
 	char *aux_len = malloc(sizeof(int32_t));
 	int resultado_recv = recv(soc, aux_len, sizeof(int32_t), MSG_PEEK);
@@ -464,7 +364,7 @@ t_men_sol_alm_bytes *socket_recv_sol_alm_bytes(int soc){
 		exit(1);
 	}
 	if (resultado_recv == 0)
-		return crear_men_sol_alm_bytes(CONEC_CERRADA,0,0,0,NULL);
+		return crear_men_cpu_umv(CONEC_CERRADA,0,0,0,NULL);
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
@@ -474,17 +374,17 @@ t_men_sol_alm_bytes *socket_recv_sol_alm_bytes(int soc){
 		exit(1);
 	}
 	if (resultado_recv == 0)
-		return crear_men_sol_alm_bytes(CONEC_CERRADA,0,0,0,NULL);
+		return crear_men_cpu_umv(CONEC_CERRADA,0,0,0,NULL);
 	if (resultado_recv != length)
 		printf("NO PUDE RECIBIR TODO\n");
-	t_men_sol_alm_bytes *men = men_deserealizer_sol_alm_bytes(stream);
+	t_men_cpu_umv *men = men_deserealizer_cpu_umv(stream);
 	return men;
 }
 
 /*serealiza un mensaje de solicitud de almacenamiento de bytes
  * retorna un char * serealizado
  */
-char *men_serealizer_sol_alm_bytes(t_men_sol_alm_bytes *self){
+char *men_serealizer_cpu_umv(t_men_cpu_umv *self){
 	int length = (sizeof(int32_t)*5)+self->tam;//lenght+tipo+base+offset+tam = 5
 	int32_t offset = 0, tmp_size = 0;
 	char *stream = malloc(length);
@@ -507,8 +407,8 @@ char *men_serealizer_sol_alm_bytes(t_men_sol_alm_bytes *self){
 /*deserealiza stream de solicitud de almacenamiento de bytes
  *retorna un t_men_sol_pos_mem
  */
-t_men_sol_alm_bytes *men_deserealizer_sol_alm_bytes(char *stream){
-	t_men_sol_alm_bytes *self = malloc(sizeof(t_men_sol_alm_bytes));
+t_men_cpu_umv *men_deserealizer_cpu_umv(char *stream){
+	t_men_cpu_umv *self = malloc(sizeof(t_men_cpu_umv));
 	int32_t offset = sizeof(int32_t), tmp_size = 0;
 
 	memcpy(&self->tipo, stream+offset, tmp_size = sizeof(int32_t));
