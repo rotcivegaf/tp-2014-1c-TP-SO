@@ -21,7 +21,8 @@
 	//hilos
 	#include <pthread.h>
 
-	#define MAX 50
+	#define FIRST_FIT 1
+	#define WORST_FIT 2
 
 	typedef struct{
 		int32_t soc;
@@ -29,6 +30,29 @@
 	typedef struct{
 		int32_t soc;
 	}t_param_conec_cpu;
+	typedef struct {
+		int32_t id_proc;
+		int32_t dir_logica;
+		int32_t dir_fisica;
+		int32_t tam_seg;
+		int32_t tipo_seg;
+	} t_seg;
+
+	void *admin_conecciones();
+	void *admin_conec_kernel();
+	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel);
+	void gestionar_alm_seg(int32_t id_proc, int32_t soc_kernel);
+	void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc);
+	t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc);
+	void *admin_conec_cpu();
+	void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t proc_activo);
+	void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo);
+	void compactar();
+	int32_t crearSegmento(t_men_seg *men_ped_seg);
+	int32_t asignarMemoriaAleatoria(int32_t tamanio);
+	t_list *obtener_lista_seg_ord_dir_fisica();
+	int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar);
+	void destruirSegmentos(int id_prog);
 
 	//consola
 	void *crearConsola();
@@ -36,41 +60,15 @@
 	void cambiarAlgoritmo();
 	void cambiarRetardo();
 	void operacion();
+	void operacion_segmentos(char opcion);
+	void operacion_memoria(char opcion);
 	void imprimirDump();
 	void imp_estructura_mem();
 	void imp_mem_prin();
 	void imp_cont_mem_prin();
 	int32_t imp_tablas_segmentos(int32_t id_proc);
-	void imp_lista(char *id_prog, t_list *lista_seg);
+	void imp_seg();
 
 	void encabezado(long byte, char *modo);
-	void *admin_conecciones();
-	void *admin_conec_kernel();
-	void *admin_conec_cpu();
-	void compactar();
-	int32_t asignarMemoria(int32_t tamanio);
-	void recorrerTablaSegmentos();
-	void insertarNodosBarrera ();
-	int32_t asignarMemoriaAleatoria(int32_t tamanio);
-	int32_t crearSegmento(t_men_seg *men_ped_seg);
-	void destruirSegmentos(char *id_Prog);
-	int32_t controlarMemPisada(t_list *lista, int32_t numMemoria, int32_t tamanio);
-	char *solicitarBytes (int32_t base, int32_t offset, int32_t tamanio);
-	void almacenarBytes (int32_t base,int32_t offset,int32_t tamanio, char *buffer);
-
-	typedef struct t_tabMem {
-		int32_t memLogica;
-		int32_t memFisica;
-		int32_t longitud;
-		int32_t tipo_seg;
-		} TabMen;
-
-	typedef struct t_auxiliar {
-		int32_t ptrInicio;
-		int32_t ptrFin;
-		void *ptrATabla;
-		} ListAuxiliar;
-
-	TabMen *encontrarSegmento(t_list *lista, int32_t base);
 
 #endif /* UMV_H_ */
