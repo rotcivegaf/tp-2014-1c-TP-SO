@@ -19,15 +19,21 @@ int32_t main(){
 
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-	pthread_create( &hilo_conecciones, NULL, admin_conecciones,NULL);
-	pthread_create( &hilo_consola, NULL, crearConsola, NULL);
-	pthread_join( hilo_conecciones, NULL);
+	crear_hilo(&hilo_conecciones,  admin_conecciones,  NULL);
+	crear_hilo(&hilo_consola,  crearConsola,  NULL);
+
 	pthread_join( hilo_consola, NULL);
 
 	destruir_lista_segmento(list_seg);
 	config_destroy(ptrConfig);
 	free(mem_prin);
 	return 0;
+}
+
+void crear_hilo(pthread_t *hilo,  void *_funcion (void *),  void *param){
+	int resp = pthread_create( hilo, NULL, _funcion, param);
+	if (resp != 0)
+		perror("crear hilo");
 }
 
 void *admin_conecciones(){
@@ -47,12 +53,12 @@ void *admin_conecciones(){
 		}
 		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
 			param_kernel->soc = new_soc;
-			pthread_create( &hilo_conec_kernel, NULL, admin_conec_kernel,param_kernel);
+			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, param_kernel);
 			continue;
 		}
 		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
 			param_cpu->soc = new_soc;
-			pthread_create( &hilo_conec_cpu, NULL, admin_conec_cpu,param_cpu);
+			crear_hilo(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
 			continue;
 		}
 		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);

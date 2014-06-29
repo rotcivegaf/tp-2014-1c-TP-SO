@@ -38,6 +38,7 @@
 		int32_t tipo_seg;
 	} t_seg;
 
+	void crear_hilo(pthread_t *hilo,  void *_funcion (void *),  void *param);
 	void *admin_conecciones();
 	void *admin_conec_kernel();
 	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel);
