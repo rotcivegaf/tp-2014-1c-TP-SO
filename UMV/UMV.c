@@ -13,7 +13,7 @@ int32_t main(){
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("./UMV/umv_config.txt");
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
-	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
+	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));//todo liberar
 	list_seg = list_create();
 	alg_actual = config_get_int_value(ptrConfig,"modo");
 
@@ -33,8 +33,8 @@ void *admin_conecciones(){
 	t_men_comun *men_hs;
 	pthread_t hilo_conec_kernel;
 	pthread_t hilo_conec_cpu;
-	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
-	t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
+	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));//todo liberar
+	t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));//todo liberar
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
@@ -61,7 +61,7 @@ void *admin_conecciones(){
 void *admin_conec_kernel(t_param_conec_kernel *param){
 	t_men_seg *men_seg;
 
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);//todo destruir
 	socket_send_comun(param->soc,men_hs);
 
 	while(quit_sistema){
@@ -129,7 +129,7 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	bool _es_tipo_seg(t_seg *seg){
 		return seg->tipo_seg == tipo_seg;
 	}
-	t_seg *ret = malloc(sizeof(t_seg));//malloc?
+	t_seg *ret = malloc(sizeof(t_seg));//todo liberar
 	t_list *list_aux = list_create();
 	list_aux = list_filter(list_seg, (void*)_es_el_proc);
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
@@ -146,10 +146,10 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel)
 		pthread_mutex_lock(&mutex_list_seg);
 		destruirSegmentos(men_seg->id_prog);
 		pthread_mutex_unlock(&mutex_list_seg);
-		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
+		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
 		socket_send_comun(soc_kernel,aux_men);
 	}else{
-		aux_men = crear_men_comun(tipo_resp,string_itoa(resp_dir_mem),sizeof(string_itoa(resp_dir_mem)));
+		aux_men = crear_men_comun(tipo_resp,string_itoa(resp_dir_mem),sizeof(string_itoa(resp_dir_mem)));//todo destruir
 		socket_send_comun(soc_kernel,aux_men);
 	}
 }
@@ -158,7 +158,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	t_men_cpu_umv *men_bytes;
 	int32_t proc_activo = 0;
 
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);//todo destruir
 	socket_send_comun(param->soc,men_hs);
 
 	while(quit_sistema){
@@ -190,18 +190,18 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	t_men_comun *aux_men;
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
-	char  *bytes = malloc(men_bytes->tam);
+	char  *bytes = malloc(men_bytes->tam);//todo liberar
 
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
-		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
+		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&bytes,&mem_prin[pos],men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
-		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);
+		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
 	}
@@ -214,14 +214,14 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
-		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);
+		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],men_bytes->buffer,men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
-		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);
+		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
 	}
@@ -247,7 +247,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 		}
 	}
 	pthread_mutex_unlock(&mutex_list_seg);
-	t_seg *aux_seg = malloc(sizeof(t_seg));
+	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
 	switch(men_ped->tipo){
 	case PED_MEM_SEG_COD:
 		aux_seg->tipo_seg = CODIGO_SCRIPT;
@@ -284,7 +284,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 	int32_t ind_mem=0,j;
 	int32_t tam_seg = 0;
 	int32_t mem_total = config_get_int_value(ptrConfig,"tamanio");
-	t_seg *aux_seg = malloc(sizeof(t_seg));
+	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
 
 	ordenar_lista_seg_por_dir_fisica();
 
@@ -328,7 +328,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 void compactar(){
 	int i,j;
 	int ind_mem=0, aux_dir_fisica;
-	t_seg *aux_seg = malloc(sizeof(t_seg));
+	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
 
 	ordenar_lista_seg_por_dir_fisica();
 	for(i=0;i < list_size(list_seg);i++){
@@ -436,7 +436,7 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 		scanf("%i",&tipo_seg);
 		printf("Tamaño:");
 		scanf("%d",&tam);
-		men_seg = crear_men_seg(tipo_seg, id_proc, tam);
+		men_seg = crear_men_seg(tipo_seg, id_proc, tam);//todo destruir
 		pthread_mutex_lock(&mutex_list_seg);
 		crearSegmento(men_seg);
 		pthread_mutex_unlock(&mutex_list_seg);
@@ -467,7 +467,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 		if ((offset+tam+base)>config_get_int_value(ptrConfig,"tamanio")){
 			printf("MEMORY OVERLOAD\n");
 		}else{
-			buffer = malloc(tam);
+			buffer = malloc(tam);//todo liberar
 			pthread_mutex_lock(&mutex_mem_prin);
 			memcpy(&mem_prin[pos],buffer,tam);
 			pthread_mutex_unlock(&mutex_mem_prin);
@@ -477,7 +477,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 	}else{
 		printf("Tamaño a escribir:");
 		scanf("%i",&tam);
-		buffer = malloc(tam);
+		buffer = malloc(tam);//todo liberar
 		printf("Buffer:");
 		scanf("%s",buffer);
 		pos = base + offset;
@@ -586,7 +586,7 @@ int32_t imp_tablas_segmentos(int32_t id_prog){
 
 void imp_mem_prin(){
 	int32_t ind_mem=0,j,i;
-	t_seg *aux_seg = malloc(sizeof(t_seg));
+	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
 	pthread_mutex_lock(&mutex_list_seg);
 	ordenar_lista_seg_por_dir_fisica();
 
