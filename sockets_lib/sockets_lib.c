@@ -84,17 +84,18 @@ void socket_cerrar(int soc){
  * retorna un t_men_comun
  */
 t_men_comun *crear_men_comun(int32_t tipo, char *dato, int32_t tam_dato){
-	t_men_comun *mensaje = malloc(sizeof(t_men_comun));
-	mensaje->tipo = tipo;
-	mensaje->tam_dato = tam_dato;
-	if (dato == NULL){
-		mensaje->dato = malloc(sizeof(char));
-		mensaje->dato = "";
-	}else{
-		mensaje->dato = malloc(tam_dato);
-		mensaje->dato = dato;
-	}
-	return mensaje;
+	t_men_comun *men = malloc(sizeof(t_men_comun));
+	men->tipo = tipo;
+	men->tam_dato = tam_dato;
+	men->dato = malloc(tam_dato);
+	memcpy(men->dato, dato ,tam_dato);
+
+	return men;
+}
+
+void destruir_men_comun(t_men_comun *men_comun){
+	free(men_comun->dato);
+	free(men_comun);
 }
 
 /*envia un mensaje comun al socket conectado
@@ -176,13 +177,12 @@ t_men_comun *men_deserealizer_comun(char *stream){
 	offset = offset + tmp_size;
 	memcpy(&self->tam_dato, stream+offset, tmp_size = sizeof(int32_t));
 	offset = offset+ tmp_size;
-	self->dato = malloc(self->tam_dato);
 	if (self->tam_dato == 0){
 		self->dato = NULL;
-		return self;
+	}else{
+		self->dato = malloc(self->tam_dato);
+		memcpy(self->dato, stream + offset, self->tam_dato);
 	}
-	memcpy(self->dato, stream + offset, self->tam_dato);
-
 	return self;
 }
 
@@ -193,8 +193,15 @@ t_men_quantum_pcb *crear_men_quantum_pcb(int32_t tipo, int32_t quantum, t_pcb *p
 	t_men_quantum_pcb *men_quantum_pcb = malloc(sizeof(t_men_quantum_pcb));
 	men_quantum_pcb->tipo = tipo;
 	men_quantum_pcb->quantum = quantum;
-	men_quantum_pcb->pcb =pcb;
+	men_quantum_pcb->pcb = malloc(sizeof(t_pcb));
+	memcpy(men_quantum_pcb->pcb, pcb ,sizeof(t_pcb));
+
 	return men_quantum_pcb;
+}
+
+void destruir_quantum_pcb(t_men_quantum_pcb *men_pcb){
+	free(men_pcb->pcb);
+	free(men_pcb);
 }
 
 /*envia un mensaje con el quantum y el pcb al socket conectado
@@ -203,16 +210,15 @@ t_men_quantum_pcb *crear_men_quantum_pcb(int32_t tipo, int32_t quantum, t_pcb *p
 int socket_send_quantum_pcb(int soc,t_men_quantum_pcb *men){
 	char *stream = men_serealizer_quantum_pcb(men);
 	int32_t length;
-
 	memcpy(&length, stream, sizeof(int32_t));
 	int pude_enviar = send(soc, stream, length, 0);
+	free(stream);
 	if (pude_enviar == -1){
 		perror("send");
 		exit(1);
 	}
 	if (pude_enviar != length)
 		printf("NO PUDE MANDAR TODO\n");
-	free(stream);
 	return pude_enviar;
 }
 
@@ -250,13 +256,13 @@ t_men_quantum_pcb *socket_recv_quantum_pcb(int soc){
  * retorna un char * serealizado
  */
 char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self){
-	int length = sizeof(int32_t)*13;//length total del mensaje+tipo+quantum+10int (por el pcb)
+	int length = (sizeof(int32_t)*13);//length total del mensaje + tipo + quantum+10int (por el pcb)
 	int32_t offset = 0, tmp_size = 0;
 	char *stream = malloc(length);
 
 	memcpy(stream, &length, tmp_size = sizeof(int32_t));
 	offset = tmp_size;
-	memcpy(stream+offset, &self->tipo, tmp_size = sizeof(int32_t));//empieso desde el 4 para reserbar el length
+	memcpy(stream+offset, &self->tipo, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
 	memcpy(stream+offset, &self->quantum, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
@@ -276,9 +282,9 @@ char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self){
 	offset = offset+tmp_size;
 	memcpy(stream+offset, &self->pcb->program_counter, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
-	memcpy(stream+offset, &self->pcb->tam_indice_etiquetas	, tmp_size = sizeof(int32_t));
+	memcpy(stream+offset, &self->pcb->tam_indice_etiquetas, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
-	memcpy(stream+offset, &self->pcb->cant_instrucciones	, tmp_size = sizeof(int32_t));
+	memcpy(stream+offset, &self->pcb->cant_instrucciones, sizeof(int32_t));
 
 	return stream;
 }
@@ -328,9 +334,21 @@ t_men_cpu_umv *crear_men_cpu_umv(int32_t tipo, int32_t base, int32_t offset, int
 	men->base = base;
 	men->offset = offset;
 	men->tam = tam;
-	men->buffer = malloc(tam);
-	men->buffer = buffer;
+	if (buffer == NULL){
+		men->tam = 0;
+		men->buffer = malloc(men->tam);
+		memcpy(men->buffer, buffer ,men->tam);
+	}else{
+		men->buffer = malloc(tam);
+		memcpy(men->buffer, buffer ,tam);
+	}
+
 	return men;
+}
+
+void destruir_men_cpu_umv(t_men_cpu_umv *men_sol){
+	free(men_sol->buffer);
+	free(men_sol);
 }
 
 /*envia un mensaje para almacenar un buffer en la memoria a la umv
@@ -399,7 +417,7 @@ char *men_serealizer_cpu_umv(t_men_cpu_umv *self){
 	offset = offset+tmp_size;
 	memcpy(stream+offset, &self->tam, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
-	memcpy(stream + offset, self->buffer, tmp_size = self->tam);
+	memcpy(stream + offset, self->buffer, self->tam);
 
 	return stream;
 }
@@ -419,9 +437,13 @@ t_men_cpu_umv *men_deserealizer_cpu_umv(char *stream){
 	offset = offset + tmp_size;
 	memcpy(&self->tam, stream+offset, tmp_size = sizeof(int32_t));
 	offset = offset+ tmp_size;
-	self->buffer = malloc(self->tam);
-	memcpy(self->buffer, stream + offset, self->tam);
-
+	if(self->tam==0){
+		//self->buffer = malloc(self->tam);
+		self->buffer=NULL;
+	}else{
+		self->buffer = malloc(self->tam);
+		memcpy(self->buffer, stream + offset, self->tam);
+	}
 	return self;
 }
 
@@ -435,6 +457,10 @@ t_men_seg *crear_men_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg){
 	men->id_prog = id_prog;
 	men->tam_seg = tam_seg;
 	return men;
+}
+
+void destruir_men_seg(t_men_seg *men_seg){
+	free(men_seg);
 }
 
 /*envia un mensaje de pedido de segmento al socket conectado
@@ -492,6 +518,7 @@ char *men_serealizer_seg(t_men_seg *self){
 	int length = (sizeof(int32_t)*4);//lenght+tipo+id_prog+tam del sego
 	int32_t offset = 0, tmp_size = 0;
 	char *stream = malloc(length);
+
 	memcpy(stream, &length, tmp_size = sizeof(int32_t));
 	offset = tmp_size;
 	memcpy(stream+offset, &self->tipo, tmp_size = sizeof(int32_t));

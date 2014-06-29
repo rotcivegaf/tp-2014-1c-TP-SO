@@ -94,7 +94,7 @@
 	t_men_comun *socket_recv_comun(int soc);
 	char *men_serealizer_comun(t_men_comun *self);
 	t_men_comun *men_deserealizer_comun(char *stream);
-
+	void destruir_men_comun(t_men_comun *men_comun);
 
 	//para los mensajes que contienen el pcb + quantum
 	typedef int32_t  t_dir_mem;
@@ -121,6 +121,7 @@
 	t_men_quantum_pcb *socket_recv_quantum_pcb(int soc);
 	char *men_serealizer_quantum_pcb(t_men_quantum_pcb *self);
 	t_men_quantum_pcb *men_deserealizer_quantum_pcb(char *stream);
+	void destruir_quantum_pcb(t_men_quantum_pcb *men_pcb);
 
 	//para los mensaje que solicitan/almacenan bytes en la umv
 
@@ -137,6 +138,7 @@
 	t_men_cpu_umv *socket_recv_cpu_umv(int soc);
 	char *men_serealizer_cpu_umv(t_men_cpu_umv *self);
 	t_men_cpu_umv *men_deserealizer_cpu_umv(char *stream);
+	void destruir_men_cpu_umv(t_men_cpu_umv *men_sol);
 
 	typedef struct{
 		int32_t tipo;
@@ -149,5 +151,6 @@
 	t_men_seg *socket_recv_seg(int soc);
 	char *men_serealizer_seg(t_men_seg *self);
 	t_men_seg *men_deserealizer_seg(char *stream);
+	void destruir_men_seg(t_men_seg *men_seg);
 
 #endif
