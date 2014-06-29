@@ -73,9 +73,7 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 			break;
 		}
 		if (men_seg->tipo == DESTR_SEGS){
-			pthread_mutex_lock(&mutex_list_seg);
 			destruirSegmentos(men_seg->id_prog);
-			pthread_mutex_unlock(&mutex_list_seg);
 			continue;
 		}
 		if (men_seg->tipo == PED_MEM_SEG_COD){
@@ -143,9 +141,7 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel)
 	int resp_dir_mem = crearSegmento(men_seg);
 
 	if (resp_dir_mem == -1){
-		pthread_mutex_lock(&mutex_list_seg);
 		destruirSegmentos(men_seg->id_prog);
-		pthread_mutex_unlock(&mutex_list_seg);
 		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
 		socket_send_comun(soc_kernel,aux_men);
 	}else{
@@ -194,16 +190,16 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
+		pthread_mutex_unlock(&mutex_list_seg);
 		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
-		pthread_mutex_unlock(&mutex_list_seg);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&bytes,&mem_prin[pos],men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
 		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);//todo destruir
-		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
+		socket_send_comun(soc_cpu, aux_men);
 	}
 }
 
@@ -214,16 +210,16 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
+		pthread_mutex_unlock(&mutex_list_seg);
 		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
 		socket_send_comun(soc_cpu, aux_men);
-		pthread_mutex_unlock(&mutex_list_seg);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],men_bytes->buffer,men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
 		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);//todo destruir
-		socket_send_comun(soc_cpu, aux_men);
 		pthread_mutex_unlock(&mutex_list_seg);
+		socket_send_comun(soc_cpu, aux_men);
 	}
 }
 
@@ -246,7 +242,6 @@ int32_t crearSegmento(t_men_seg *men_ped){
 			return -1;
 		}
 	}
-	pthread_mutex_unlock(&mutex_list_seg);
 	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
 	switch(men_ped->tipo){
 	case PED_MEM_SEG_COD:
@@ -269,7 +264,6 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	aux_seg->tam_seg = men_ped->tam_seg;
 	aux_seg->dir_fisica = resp;
 	aux_seg->dir_logica = asignarMemoriaAleatoria(men_ped->tam_seg);
-	pthread_mutex_lock(&mutex_list_seg);
 	list_add(list_seg, aux_seg);
 	pthread_mutex_unlock(&mutex_list_seg);
 	return aux_seg->dir_logica;
@@ -353,8 +347,10 @@ void destruirSegmentos(int id_prog){
 	void destruir_t_seg(t_seg *seg){
 		free(seg);
 	}
+	pthread_mutex_lock(&mutex_list_seg);
 	while(list_any_satisfy(list_seg, (void*)es_id_prog))
 		list_remove_and_destroy_by_condition(list_seg, (void*)es_id_prog, (void*)destruir_t_seg);
+	pthread_mutex_unlock(&mutex_list_seg);
 }
 
 //consola
@@ -435,15 +431,11 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 		printf("Tipo de segmento:");
 		scanf("%i",&tipo_seg);
 		printf("Tamaño:");
-		scanf("%d",&tam);
+		scanf("%i",&tam);
 		men_seg = crear_men_seg(tipo_seg, id_proc, tam);//todo destruir
-		pthread_mutex_lock(&mutex_list_seg);
 		crearSegmento(men_seg);
-		pthread_mutex_unlock(&mutex_list_seg);
 	}else{
-		pthread_mutex_lock(&mutex_list_seg);
 		destruirSegmentos(id_proc);
-		pthread_mutex_unlock(&mutex_list_seg);
 	}
 	printf ("--------------------------------\n");
 }
@@ -559,7 +551,7 @@ int32_t imp_tablas_segmentos(int32_t id_prog){
 		return seg->id_proc == id_prog;
 	}
 	void imp_seg(t_seg *seg){
-		printf(" %i  |",seg->tipo_seg);
+		printf(" %i   |",seg->tipo_seg);
 		printf(" %i  |",seg->id_proc);
 		printf(" %i  |",seg->dir_fisica);
 		printf(" %i  |",seg->tam_seg);
@@ -569,7 +561,7 @@ int32_t imp_tablas_segmentos(int32_t id_prog){
 	if (id_prog == 0){
 		printf("TIPO | ID  |DIR_F| TAM |DIR_L|\n");
 		list_iterate(list_seg, (void *)imp_seg);
-		printf("--------------------------------------------------------\n");
+		pthread_mutex_unlock(&mutex_list_seg);
 		return 1;
 	}
 	//si no existe el proceso retorna -1
@@ -578,7 +570,6 @@ int32_t imp_tablas_segmentos(int32_t id_prog){
 	//crea una lista con los segmentos del proceso y la imprime
 	printf("TIPO | ID  |DIR_F| TAM |DIR_L|\n");
 	list_iterate(list_filter(list_seg, (void*)_es_del_proc), (void *)imp_seg);
-	printf("--------------------------------------------------------\n");
 	pthread_mutex_unlock(&mutex_list_seg);
 
 	return 1;
