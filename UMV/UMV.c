@@ -11,10 +11,10 @@ pthread_mutex_t mutex_list_seg = PTHREAD_MUTEX_INITIALIZER;
 int32_t main(){
 	srand(time(0));
 	//crear configuracion y solicitar memoria
-	ptrConfig = config_create("./UMV/umv_config.txt");//todo destruir
+	ptrConfig = config_create("./UMV/umv_config.txt");
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
 	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
-	list_seg = list_create();//todo destruir
+	list_seg = list_create();
 	alg_actual = config_get_int_value(ptrConfig,"modo");
 
 	pthread_t hilo_consola;
@@ -24,7 +24,8 @@ int32_t main(){
 	pthread_join( hilo_conecciones, NULL);
 	pthread_join( hilo_consola, NULL);
 
-
+	destruir_lista_segmento(list_seg);
+	config_destroy(ptrConfig);
 	free(mem_prin);
 	return 0;
 }
@@ -35,8 +36,8 @@ void *admin_conecciones(){
 	t_men_comun *men_hs;
 	pthread_t hilo_conec_kernel;
 	pthread_t hilo_conec_cpu;
-	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));//todo liberar
-	t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));//todo liberar
+	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
+	t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
@@ -55,7 +56,10 @@ void *admin_conecciones(){
 			continue;
 		}
 		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
+		destruir_men_comun(men_hs);
 	}
+	free(param_kernel);
+	free(param_cpu);
 	socket_cerrar(listen_soc);
 	return NULL;
 }
@@ -63,8 +67,9 @@ void *admin_conecciones(){
 void *admin_conec_kernel(t_param_conec_kernel *param){
 	t_men_seg *men_seg;
 
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);//todo destruir
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
+	destruir_men_comun(men_hs);
 
 	while(quit_sistema){
 		men_seg = socket_recv_seg(param->soc);
@@ -99,6 +104,7 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 			continue;
 		}
 		printf("ERROR al recibir el tipo de dato %i\n", men_seg->tipo);
+		destruir_men_seg(men_seg);
 	}
 	return NULL;
 }
@@ -109,6 +115,8 @@ void gestionar_alm_seg(int32_t id_proc, int32_t soc_kernel){
 	pthread_mutex_lock(&mutex_list_seg);
 	almacenar_segmento(aux_men, id_proc);
 	pthread_mutex_unlock(&mutex_list_seg);
+
+	destruir_men_comun(aux_men);
 }
 
 void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
@@ -135,7 +143,15 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
 	if(ret == NULL)
 		printf("ERROR no se a encontrado el tipo de segmento n°%i del proceso %i",tipo_seg,id_proc);
+	//destruir_lista_segmento(list_aux);
 	return ret;
+}
+
+void destruir_lista_segmento(t_list *list_seg){
+	void destruir_t_seg(t_seg *seg){
+		free(seg);
+	}
+	list_destroy_and_destroy_elements(list_seg, (void*)destruir_t_seg);
 }
 
 void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel){
@@ -144,20 +160,22 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel)
 
 	if (resp_dir_mem == -1){
 		destruirSegmentos(men_seg->id_prog);
-		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
+		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
 		socket_send_comun(soc_kernel,aux_men);
 	}else{
-		aux_men = crear_men_comun(tipo_resp,string_itoa(resp_dir_mem),sizeof(string_itoa(resp_dir_mem)));//todo destruir
+		aux_men = crear_men_comun(tipo_resp,string_itoa(resp_dir_mem),sizeof(string_itoa(resp_dir_mem)));
 		socket_send_comun(soc_kernel,aux_men);
 	}
+	destruir_men_comun(aux_men);
 }
 
 void *admin_conec_cpu(t_param_conec_cpu *param){
 	t_men_cpu_umv *men_bytes;
 	int32_t proc_activo = 0;
 
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);//todo destruir
+	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
+	destruir_men_comun(men_hs);
 
 	while(quit_sistema){
 		men_bytes = socket_recv_cpu_umv(param->soc);
@@ -179,6 +197,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 			continue;
 		}
 		printf("ERROR al recibir el tipo de dato %i\n", men_bytes->tipo);
+		destruir_men_cpu_umv(men_bytes);
 	}
 	socket_cerrar(param->soc);
 	return NULL;
@@ -193,16 +212,17 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
-		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);//todo destruir
+		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&bytes,&mem_prin[pos],men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
-		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);//todo destruir
+		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);
 		pthread_mutex_unlock(&mutex_list_seg);
 		socket_send_comun(soc_cpu, aux_men);
 	}
+	destruir_men_comun(aux_men);
 }
 
 void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo){
@@ -213,16 +233,17 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
-		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);//todo destruir
+		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],men_bytes->buffer,men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
-		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);//todo destruir
+		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);
 		pthread_mutex_unlock(&mutex_list_seg);
 		socket_send_comun(soc_cpu, aux_men);
 	}
+	destruir_men_comun(aux_men);
 }
 
 void ordenar_lista_seg_por_dir_fisica(){
@@ -437,8 +458,9 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 		scanf("%i",&tipo_seg);
 		printf("Tamaño:");
 		scanf("%i",&tam);
-		men_seg = crear_men_seg(tipo_seg, id_proc, tam);//todo destruir
+		men_seg = crear_men_seg(tipo_seg, id_proc, tam);
 		crearSegmento(men_seg);
+		destruir_men_seg(men_seg);
 	}else{
 		printf ("--------------------------------\n"
 				"Ingrese 0 si desea destruir todos\n"

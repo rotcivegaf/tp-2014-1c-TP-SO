@@ -44,6 +44,7 @@
 	void gestionar_alm_seg(int32_t id_proc, int32_t soc_kernel);
 	void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc);
 	t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc);
+	void destruir_lista_segmento(t_list *list_seg);
 	void *admin_conec_cpu();
 	void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t proc_activo);
 	void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo);
