@@ -11,10 +11,10 @@ pthread_mutex_t mutex_list_seg = PTHREAD_MUTEX_INITIALIZER;
 int32_t main(){
 	srand(time(0));
 	//crear configuracion y solicitar memoria
-	ptrConfig = config_create("./UMV/umv_config.txt");
+	ptrConfig = config_create("./UMV/umv_config.txt");//todo destruir
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
-	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));//todo liberar
-	list_seg = list_create();
+	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
+	list_seg = list_create();//todo destruir
 	alg_actual = config_get_int_value(ptrConfig,"modo");
 
 	pthread_t hilo_consola;
@@ -24,6 +24,8 @@ int32_t main(){
 	pthread_join( hilo_conecciones, NULL);
 	pthread_join( hilo_consola, NULL);
 
+
+	free(mem_prin);
 	return 0;
 }
 
@@ -128,7 +130,7 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 		return seg->tipo_seg == tipo_seg;
 	}
 	t_seg *ret = malloc(sizeof(t_seg));//todo liberar
-	t_list *list_aux = list_create();
+	t_list *list_aux = list_create();//todo destruir
 	list_aux = list_filter(list_seg, (void*)_es_el_proc);
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
 	if(ret == NULL)
@@ -348,8 +350,12 @@ void destruirSegmentos(int id_prog){
 		free(seg);
 	}
 	pthread_mutex_lock(&mutex_list_seg);
-	while(list_any_satisfy(list_seg, (void*)es_id_prog))
-		list_remove_and_destroy_by_condition(list_seg, (void*)es_id_prog, (void*)destruir_t_seg);
+	if (id_prog == 0){//si es 0 destruye todos los segmentos
+		list_clean_and_destroy_elements(list_seg, (void*)destruir_t_seg);
+	}else{
+		while(list_any_satisfy(list_seg, (void*)es_id_prog))
+			list_remove_and_destroy_by_condition(list_seg, (void*)es_id_prog, (void*)destruir_t_seg);
+	}
 	pthread_mutex_unlock(&mutex_list_seg);
 }
 
@@ -393,8 +399,7 @@ void menuPrincipal(){
 			"	3.Cambiar Algoritmo\n"
 			"	4.Compactacion\n"
 			"	5.Dump\n"
-			"	6.Salir\n"
-			"--------------------------------\n");
+			"	6.Salir\n");
 }
 
 void operacion(){
@@ -425,9 +430,9 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 	int32_t tipo_seg, tam, id_proc;
 	t_men_seg *men_seg;
 
-	printf("ID del proceso:");
-	scanf("%i",&id_proc);
 	if (opcion == '1'){
+		printf("ID del proceso:");
+		scanf("%i",&id_proc);
 		printf("Tipo de segmento:");
 		scanf("%i",&tipo_seg);
 		printf("Tamaño:");
@@ -435,9 +440,12 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 		men_seg = crear_men_seg(tipo_seg, id_proc, tam);//todo destruir
 		crearSegmento(men_seg);
 	}else{
+		printf ("--------------------------------\n"
+				"Ingrese 0 si desea destruir todos\n"
+				"ID proceso: \n");
+		scanf("%i",&id_proc);
 		destruirSegmentos(id_proc);
 	}
-	printf ("--------------------------------\n");
 }
 
 void operacion_memoria(char opcion){//todo hay algo q no me cierra
@@ -481,11 +489,9 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 			pthread_mutex_unlock(&mutex_mem_prin);
 		}
 	}
-	printf ("--------------------------------\n");
 }
 
 void cambiarAlgoritmo(){
-	printf ("--------------------------------\n");
 	if(alg_actual == WORST_FIT){
 		alg_actual = FIRST_FIT;
 		printf("Algoritmo cambiado a = First-Fit\n");
@@ -515,8 +521,7 @@ void imprimirDump(){
 			"Elija lo que desea imprimir:\n"
 			"	1.Estructuras de memoria\n"
 			"	2.Memoria principal\n"
-			"	3.Contenido memoria principal\n"
-			"--------------------------------\n");
+			"	3.Contenido memoria principal\n");
 	do {
 		scanf("%c", &opcion);
 	} while (opcion<'1' || opcion>'3');
@@ -538,8 +543,8 @@ void imp_estructura_mem(){
 	int id_prog;
 
 	printf ("--------------------------------\n"
-			"Elija el id_proceso\n"
-			"Ingrese 0 si desea imprimir todos\n");
+			"Ingrese 0 si desea imprimir todos\n"
+			"ID proceso: ");
 	scanf("%i",&id_prog);
 	int32_t resp = imp_tablas_segmentos(id_prog);
 	if (resp == -1)
@@ -599,10 +604,9 @@ void imp_mem_prin(){
 void imp_cont_mem_prin(){
 	int32_t offset, tam, i;
 
-	printf ("--------------------------------\n"
-			"Ingrese un offset\n");
+	printf ("Offset: ");
 	scanf("%i",&offset);
-	printf ("Ingrese una cantidad de bytes\n");
+	printf ("Cantidad de bytes: ");
 	scanf("%i",&tam);
 	if (tam + offset > config_get_int_value(ptrConfig,"tamanio")){
 		printf ("Segmentation Fault\n");
