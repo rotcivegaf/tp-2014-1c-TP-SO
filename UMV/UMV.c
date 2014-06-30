@@ -19,14 +19,15 @@ int32_t main(){
 
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-	crear_hilo(&hilo_conecciones,  admin_conecciones,  NULL);
 	crear_hilo(&hilo_consola,  crearConsola,  NULL);
+	crear_hilo(&hilo_conecciones,  admin_conecciones,  NULL);
 
 	pthread_join( hilo_consola, NULL);
 
 	destruir_lista_segmento(list_seg);
 	config_destroy(ptrConfig);
 	free(mem_prin);
+
 	return 0;
 }
 
@@ -40,10 +41,7 @@ void *admin_conecciones(){
 	int32_t listen_soc = socket_crear_server(config_get_string_value(ptrConfig,"puerto"));
 	int32_t new_soc;
 	t_men_comun *men_hs;
-	pthread_t hilo_conec_kernel;
-	pthread_t hilo_conec_cpu;
-	t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
-	t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
+
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
@@ -52,11 +50,15 @@ void *admin_conecciones(){
 			continue;
 		}
 		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
+			pthread_t hilo_conec_kernel;
+			t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
 			param_kernel->soc = new_soc;
 			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, param_kernel);
 			continue;
 		}
 		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
+			pthread_t hilo_conec_cpu;
+			t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
 			param_cpu->soc = new_soc;
 			crear_hilo(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
 			continue;
@@ -64,8 +66,7 @@ void *admin_conecciones(){
 		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
 		destruir_men_comun(men_hs);
 	}
-	free(param_kernel);
-	free(param_cpu);
+
 	socket_cerrar(listen_soc);
 	return NULL;
 }
@@ -112,6 +113,7 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 		printf("ERROR al recibir el tipo de dato %i\n", men_seg->tipo);
 		destruir_men_seg(men_seg);
 	}
+	free(param);
 	return NULL;
 }
 
@@ -143,8 +145,8 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	bool _es_tipo_seg(t_seg *seg){
 		return seg->tipo_seg == tipo_seg;
 	}
-	t_seg *ret = malloc(sizeof(t_seg));//todo liberar
-	t_list *list_aux = list_create();//todo destruir
+	t_seg *ret;
+	t_list *list_aux;
 	list_aux = list_filter(list_seg, (void*)_es_el_proc);
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
 	if(ret == NULL)
@@ -205,6 +207,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 		printf("ERROR al recibir el tipo de dato %i\n", men_bytes->tipo);
 		destruir_men_cpu_umv(men_bytes);
 	}
+	free(param);
 	socket_cerrar(param->soc);
 	return NULL;
 }
@@ -213,7 +216,7 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	t_men_comun *aux_men;
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
-	char  *bytes = malloc(men_bytes->tam);//todo liberar
+	char *bytes = malloc(men_bytes->tam);
 
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
@@ -228,6 +231,7 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 		pthread_mutex_unlock(&mutex_list_seg);
 		socket_send_comun(soc_cpu, aux_men);
 	}
+	free(bytes);
 	destruir_men_comun(aux_men);
 }
 
@@ -271,7 +275,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 			return -1;
 		}
 	}
-	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
+	t_seg *aux_seg = malloc(sizeof(t_seg));
 	switch(men_ped->tipo){
 	case PED_MEM_SEG_COD:
 		aux_seg->tipo_seg = CODIGO_SCRIPT;
@@ -298,7 +302,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	return aux_seg->dir_logica;
 }
 
-int32_t asignarMemoriaAleatoria(int32_t tamanio){//todo puede q se pisen pero es 1 en 256 a la 4
+int32_t asignarMemoriaAleatoria(int32_t tamanio){//puede q se pisen pero es 1 en 256 a la 4
 	int32_t ret = (rand());
 	return ret;
 }
@@ -307,7 +311,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 	int32_t ind_mem=0,j;
 	int32_t tam_seg = 0;
 	int32_t mem_total = config_get_int_value(ptrConfig,"tamanio");
-	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
+	t_seg *aux_seg;
 
 	ordenar_lista_seg_por_dir_fisica();
 
@@ -351,7 +355,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 void compactar(){
 	int i,j;
 	int ind_mem=0, aux_dir_fisica;
-	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
+	t_seg *aux_seg;
 
 	ordenar_lista_seg_por_dir_fisica();
 	for(i=0;i < list_size(list_seg);i++){
@@ -415,6 +419,10 @@ void* crearConsola(){
 				break;
 			}
 	}while (opcion != '6');
+
+	//salida de la UMV
+	quit_sistema = 0;
+
 	return NULL;
 }
 
@@ -495,17 +503,18 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 		if ((offset+tam+base)>config_get_int_value(ptrConfig,"tamanio")){
 			printf("MEMORY OVERLOAD\n");
 		}else{
-			buffer = malloc(tam);//todo liberar
+			buffer = malloc(tam);
 			pthread_mutex_lock(&mutex_mem_prin);
 			memcpy(&mem_prin[pos],buffer,tam);
 			pthread_mutex_unlock(&mutex_mem_prin);
 			for (i=0;i<tam;i++)
 				printf("%i",buffer[i]);
+			printf("\n");
 		}
 	}else{
 		printf("Tamaño a escribir:");
 		scanf("%i",&tam);
-		buffer = malloc(tam);//todo liberar
+		buffer = malloc(tam);
 		printf("Buffer:");
 		scanf("%s",buffer);
 		pos = base + offset;
@@ -517,6 +526,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 			pthread_mutex_unlock(&mutex_mem_prin);
 		}
 	}
+	free(buffer);
 }
 
 void cambiarAlgoritmo(){
@@ -610,7 +620,7 @@ int32_t imp_tablas_segmentos(int32_t id_prog){
 
 void imp_mem_prin(){
 	int32_t ind_mem=0,j,i;
-	t_seg *aux_seg = malloc(sizeof(t_seg));//todo liberar
+	t_seg *aux_seg;
 	pthread_mutex_lock(&mutex_list_seg);
 	ordenar_lista_seg_por_dir_fisica();
 
@@ -627,6 +637,7 @@ void imp_mem_prin(){
 		printf("■");
 	printf("\n");
 	pthread_mutex_unlock(&mutex_list_seg);
+
 }
 
 void imp_cont_mem_prin(){
