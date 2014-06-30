@@ -68,6 +68,7 @@ void *admin_conecciones(){
 	}
 
 	socket_cerrar(listen_soc);
+
 	return NULL;
 }
 
@@ -149,17 +150,18 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	t_list *list_aux;
 	list_aux = list_filter(list_seg, (void*)_es_el_proc);
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
+
 	if(ret == NULL)
 		printf("ERROR no se a encontrado el tipo de segmento n°%i del proceso %i",tipo_seg,id_proc);
-	//destruir_lista_segmento(list_aux);
+	list_destroy(list_aux);
 	return ret;
 }
 
-void destruir_lista_segmento(t_list *list_seg){
+void destruir_lista_segmento(t_list *lista_seg){
 	void destruir_t_seg(t_seg *seg){
 		free(seg);
 	}
-	list_destroy_and_destroy_elements(list_seg, (void*)destruir_t_seg);
+	list_destroy_and_destroy_elements(lista_seg, (void*)destruir_t_seg);
 }
 
 void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel){
@@ -299,6 +301,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	aux_seg->dir_logica = asignarMemoriaAleatoria(men_ped->tam_seg);
 	list_add(list_seg, aux_seg);
 	pthread_mutex_unlock(&mutex_list_seg);
+
 	return aux_seg->dir_logica;
 }
 
@@ -356,6 +359,9 @@ void compactar(){
 	int i,j;
 	int ind_mem=0, aux_dir_fisica;
 	t_seg *aux_seg;
+	void destruir_t_seg(t_seg *seg){
+		free(seg);
+	}
 
 	ordenar_lista_seg_por_dir_fisica();
 	for(i=0;i < list_size(list_seg);i++){
@@ -366,7 +372,7 @@ void compactar(){
 				mem_prin[ind_mem]= mem_prin[aux_seg->dir_fisica+j];
 			aux_seg->dir_fisica = aux_dir_fisica;
 			ind_mem = ind_mem+aux_seg->tam_seg;
-			list_replace(list_seg, i, aux_seg);
+			list_replace_and_destroy_element(list_seg, i, aux_seg, (void*)destruir_t_seg);
 		}else{
 			ind_mem = ind_mem+aux_seg->tam_seg;
 		}
