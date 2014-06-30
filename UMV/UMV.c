@@ -158,10 +158,10 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 }
 
 void destruir_lista_segmento(t_list *lista_seg){
-	void destruir_t_seg(t_seg *seg){
+	void _destruir_t_seg(t_seg *seg){
 		free(seg);
 	}
-	list_destroy_and_destroy_elements(lista_seg, (void*)destruir_t_seg);
+	list_destroy_and_destroy_elements(lista_seg, (void*)_destruir_t_seg);
 }
 
 void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel){
@@ -358,18 +358,19 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 void compactar(){
 	int i;
 	int ind_mem=0, aux_dir_fisica;
+	int tam_list = list_size(list_seg);
 	t_seg *aux_seg;
 
 	ordenar_lista_seg_por_dir_fisica();
-	for(i=0;i < list_size(list_seg);i++){
+	for(i=0;i < tam_list;i++){
 		aux_seg = list_get(list_seg, i);
 		aux_dir_fisica = ind_mem;
 		if (ind_mem == aux_seg->dir_fisica){
 			ind_mem= ind_mem + aux_seg->tam_seg;
 		}else{
-			for(;ind_mem < aux_seg->dir_fisica;ind_mem++);
+			ind_mem = aux_seg->dir_fisica;
 			memcpy(mem_prin+aux_dir_fisica,&aux_seg,aux_seg->tam_seg);
-			ind_mem = ind_mem+aux_seg->tam_seg;
+			ind_mem = aux_dir_fisica+aux_seg->tam_seg;
 			aux_seg->dir_fisica = aux_dir_fisica;
 			list_replace(list_seg, i, aux_seg);
 		}
