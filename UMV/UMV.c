@@ -274,7 +274,7 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	txt_write_in_file(umv_file_log,", Tamanio:");
 	txt_write_in_file(umv_file_log,string_itoa(men_bytes->tam));
 	txt_write_in_file(umv_file_log,", Tipo:");
-	traducir_tipo_men_bytes_y_logear(aux_men->tipo);
+	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,"\n");
 
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
@@ -318,7 +318,7 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	txt_write_in_file(umv_file_log,", Tamanio:");
 	txt_write_in_file(umv_file_log,string_itoa(men_bytes->tam));
 	txt_write_in_file(umv_file_log,", Tipo:");
-	traducir_tipo_men_bytes_y_logear(aux_men->tipo);
+	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,", buffer:");
 	for(i=0;i < men_bytes->tam;i++)
 				txt_write_in_file(umv_file_log,string_itoa(men_bytes->buffer[i]));
