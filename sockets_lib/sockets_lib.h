@@ -54,18 +54,15 @@
 		PED_MEM_SEG_STACK = 203,
 		DESTR_SEGS = 204,
 		ESCRIBIR_SEG = 205,
-		ALM_SEG_COD = 206,
-		ALM_IND_ETI = 207,
-		ALM_IND_COD = 208,
+		CODIGO_SCRIPT = 206,
+		IND_ETI_FUNC = 207,
+		IND_COD = 208,
+		IND_STACK = 209,
 		//mensajes enviados por la UMV al KERNEL
 		RESP_MEM_SEG_COD = 250,
 		RESP_MEM_IND_ETI = 251,
 		RESP_MEM_IND_COD = 252,
 		RESP_MEM_SEG_STACK = 253,
-		CODIGO_SCRIPT = 254,
-		IND_ETI_FUNC = 255,
-		IND_COD = 256,
-		IND_STACK = 257,
 		//mensajes recibidos por la UMV departe del CPU
 		SOL_BYTES = 300,
 		ALM_BYTES = 301,
@@ -74,7 +71,8 @@
 		R_SOL_BYTES = 350,
 		R_ALM_BYTES = 351,
 		MEM_OVERLOAD = 352,		//tambien es enviado al kernel
-		SEGMEN_FAULT = 353
+		SEGMEN_FAULT = 353,
+		QUIT_SISTEMA_UMV = 500
 	} tipo_datos;
 
 	int socket_crear_server(char *puerto);
