@@ -356,25 +356,22 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 }
 
 void compactar(){
-	int i,j;
+	int i;
 	int ind_mem=0, aux_dir_fisica;
 	t_seg *aux_seg;
-	void destruir_t_seg(t_seg *seg){
-		free(seg);
-	}
 
 	ordenar_lista_seg_por_dir_fisica();
 	for(i=0;i < list_size(list_seg);i++){
 		aux_seg = list_get(list_seg, i);
-		if(ind_mem != aux_seg->dir_fisica){
-			aux_dir_fisica = ind_mem;
-			for (j=0;j<aux_seg->tam_seg;j++)
-				mem_prin[ind_mem]= mem_prin[aux_seg->dir_fisica+j];
-			aux_seg->dir_fisica = aux_dir_fisica;
-			ind_mem = ind_mem+aux_seg->tam_seg;
-			list_replace_and_destroy_element(list_seg, i, aux_seg, (void*)destruir_t_seg);
+		aux_dir_fisica = ind_mem;
+		if (ind_mem == aux_seg->dir_fisica){
+			ind_mem= ind_mem + aux_seg->tam_seg;
 		}else{
+			for(;ind_mem < aux_seg->dir_fisica;ind_mem++);
+			memcpy(mem_prin+aux_dir_fisica,&aux_seg,aux_seg->tam_seg);
 			ind_mem = ind_mem+aux_seg->tam_seg;
+			aux_seg->dir_fisica = aux_dir_fisica;
+			list_replace(list_seg, i, aux_seg);
 		}
 	}
 }
@@ -484,7 +481,7 @@ void operacion_segmentos(char opcion){//todo hay algo q no me cierra
 	}else{
 		printf ("--------------------------------\n"
 				"Ingrese 0 si desea destruir todos\n"
-				"ID proceso: \n");
+				"ID proceso: ");
 		scanf("%i",&id_proc);
 		destruirSegmentos(id_proc);
 	}
@@ -639,7 +636,7 @@ void imp_mem_prin(){
 		for(i=0;i < aux_seg->tam_seg;i++,ind_mem++)
 			printf("%i",aux_seg->id_proc);
 	}
-	for(i=0;i < config_get_int_value(ptrConfig,"tamanio");i++,ind_mem++)
+	for(;ind_mem < config_get_int_value(ptrConfig,"tamanio");ind_mem++)
 		printf("■");
 	printf("\n");
 	pthread_mutex_unlock(&mutex_list_seg);
