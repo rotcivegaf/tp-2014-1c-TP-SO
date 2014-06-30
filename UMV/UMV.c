@@ -181,7 +181,7 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 
 	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
 	txt_write_in_file(umv_file_log,string_itoa(id_proc));
-	txt_write_in_file(umv_file_log," del tipo:");
+	txt_write_in_file(umv_file_log," del tipo: ");
 	txt_write_in_file(umv_file_log,string_itoa(tipo_seg));
 	txt_write_in_file(umv_file_log,"\n");
 
@@ -392,7 +392,6 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	txt_write_in_file(umv_file_log,string_itoa(men_ped->tam_seg));
 	txt_write_in_file(umv_file_log," y tipo: ");
 	traducir_tipo_de_seg_y_logear(men_ped->tipo);
-	txt_write_in_file(umv_file_log,string_itoa(men_ped->tipo));
 	txt_write_in_file(umv_file_log,"\n");
 
 	return aux_seg->dir_logica;
@@ -647,6 +646,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 			txt_write_in_file(consola_file_log,"	");
 			for (i=0;i<tam;i++){
 				txt_write_in_file(consola_file_log,string_itoa(buffer[i]));
+				txt_write_in_file(consola_file_log,"-");
 			}
 			txt_write_in_file(consola_file_log,"\n");
 			free(buffer);
@@ -677,7 +677,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 			pthread_mutex_lock(&mutex_mem_prin);
 			memcpy(&mem_prin[pos],buffer,tam);
 			pthread_mutex_unlock(&mutex_mem_prin);
-			txt_write_in_file(consola_file_log,"Se escribio corectamente");
+			txt_write_in_file(consola_file_log,"	Se escribio corectamente\n");
 			free(buffer);
 		}
 	}
@@ -838,8 +838,10 @@ void imp_cont_mem_prin(){
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		txt_write_in_file(consola_file_log,"	");
-		for(i=offset;i<(offset+tam);i++)
+		for(i=offset;i<(offset+tam);i++){
 			txt_write_in_file(consola_file_log,string_itoa(mem_prin[i]));
+			txt_write_in_file(consola_file_log,"-");
+		}
 		txt_write_in_file(consola_file_log,"\n");
 		pthread_mutex_unlock(&mutex_mem_prin);
 	}
@@ -856,12 +858,15 @@ void encabezado(long byte, char *modo){
 void traducir_tipo_de_seg_y_logear(int32_t tipo){
 	switch(tipo){
 	case PED_MEM_SEG_COD:
+	case CODIGO_SCRIPT:
 		txt_write_in_file(umv_file_log,"CODIGO_SCRIPT");
 		break;
 	case PED_MEM_IND_ETI:
+	case IND_ETI_FUNC:
 		txt_write_in_file(umv_file_log,"IND_ETI_FUNC");
 		break;
 	case PED_MEM_IND_COD:
+	case IND_COD:
 		txt_write_in_file(umv_file_log,"IND_COD");
 		break;
 	case PED_MEM_SEG_STACK:
