@@ -12,6 +12,6 @@
 	#include <commons/collections/dictionary.h>
 
 	int tamanioArchivo(FILE *archivo);
-	void handshake_kernel(int soc_kernel);
+	void handshake_kernel();
 
 #endif /* PROGRAMA_H_ */

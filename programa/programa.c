@@ -1,33 +1,39 @@
 #include "programa.h"
 
-#define IP "127.0.0.1" //Esto hay que cargarlo por archivo de config, que esta en la variable de entorno ANSISOP_CONFIG
-#define PUERTO "5000"
+int soc_kernel;
 
 int main(int argc, char *argv[]){
-	/*t_config *config=config_create("configuracion.conf");
-	char *ipKernel=config_get_string_value(config, "IP");
-	char *puertoKernel = config_get_int_value(config, "PUERTO");*/
+	t_config *config=config_create("./programa/programa_config");//todo creo q esta ruta tendria q ser guardada en la variable de entorno ANSISOP_CONFIG
+	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
+	char *ip_kernel=config_get_string_value(config, "IP_Kernel");
+	char *puerto_kernel = config_get_string_value(config, "Puerto_Kernel");
+	printf("	IP Kernel     = %s\n", ip_kernel);
+	printf("	Puerto Kernel = %s\n", puerto_kernel);
+	printf("------------------------------------------------------------------------------------\n\n");
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript=tamanioArchivo(scriptAProcesar);
 	char *script = malloc(tamanioScript);
 
-	int socket_kernel=socket_crear_client(PUERTO,IP);
-	handshake_kernel(socket_kernel);
+	soc_kernel=socket_crear_client(puerto_kernel, ip_kernel);
+	handshake_kernel(soc_kernel);
 
 	int i=0;
 	//Lee el script
 	while(!feof(scriptAProcesar))
 		script[i++]=fgetc(scriptAProcesar);
+	fclose(scriptAProcesar);
 
 	t_men_comun *mensaje_cod_prog = crear_men_comun(CODIGO_SCRIPT,script,tamanioScript);
-	socket_send_comun(socket_kernel,mensaje_cod_prog);
+	socket_send_comun(soc_kernel,mensaje_cod_prog);
+	destruir_men_comun(mensaje_cod_prog);
+	free(script);
 
 	//espero la respuesta del kernel
 	int fin_ejecucion = 0;
 	t_men_comun *mensaje_recibido;
 	while (fin_ejecucion != 1){
-		mensaje_recibido = socket_recv_comun(socket_kernel);
+		mensaje_recibido = socket_recv_comun(soc_kernel);
 
 		switch(mensaje_recibido->tipo){
 		case IMPRIMIR_VALOR:
@@ -49,8 +55,7 @@ int main(int argc, char *argv[]){
 			break;
 		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
-			printf("Memoria insuficiente\n");
-			//todo ERROR
+			printf("Memory Overload\n");
 			break;
 		default:
 			sleep(1);
@@ -58,12 +63,11 @@ int main(int argc, char *argv[]){
 			printf("El tipo de dato recibido es erroneo\n");
 			break;
 		}
+		destruir_men_comun(mensaje_recibido);
 	}
 
-	close(socket_kernel);
-	fclose(scriptAProcesar);
-	free(script);
-	//config_destroy(config);
+	close(soc_kernel);
+	config_destroy(config);
 	return 0;
 }
 
@@ -74,12 +78,14 @@ int tamanioArchivo(FILE *archivo){
 	return tamanio;
 }
 
-void handshake_kernel(int soc_kernel){
+void handshake_kernel(){
 	t_men_comun *men_hs = crear_men_comun(HS_PROG,"",1);
 	socket_send_comun(soc_kernel,men_hs);
+	destruir_men_comun(men_hs);
 
 	men_hs = socket_recv_comun(soc_kernel);
 
 	if(men_hs->tipo != HS_KERNEL)
 		printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
+	destruir_men_comun(men_hs);
 }
