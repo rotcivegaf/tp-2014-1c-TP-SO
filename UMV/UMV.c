@@ -3,30 +3,28 @@ int32_t quit_sistema = 1;
 char *mem_prin;
 int32_t retardo = 0;
 char alg_actual;
+int32_t soc_kernel;
 t_list *list_seg;
 t_config *ptrConfig;
 pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_list_seg = PTHREAD_MUTEX_INITIALIZER;
 
 FILE *consola_file_log;
-FILE *list_seg_file_log;
-FILE *mem_prin_file_log;
+FILE *umv_file_log;
 
 int32_t main(){
 	srand(time(0));
 	//creo los logs
-	list_seg_file_log = txt_open_for_append("./UMV/logs/lista_segmento.logs");
-	txt_write_in_file(list_seg_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
-	mem_prin_file_log = txt_open_for_append("./UMV/logs/memoria_principal.logs");
-	txt_write_in_file(mem_prin_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	umv_file_log = txt_open_for_append("./UMV/logs/umv.logs");
+	txt_write_in_file(umv_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("./UMV/umv_config.txt");
 	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
 
-	txt_write_in_file(mem_prin_file_log,"Creo la memoria principal\n");
+	txt_write_in_file(umv_file_log,"Creo la memoria principal\n");
 	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
 
-	txt_write_in_file(list_seg_file_log,"Creo la lista de segmentos\n");
+	txt_write_in_file(umv_file_log,"Creo la lista de segmentos\n");
 	list_seg = list_create();
 	alg_actual = config_get_int_value(ptrConfig,"modo");
 
@@ -37,16 +35,14 @@ int32_t main(){
 
 	pthread_join( hilo_consola, NULL);
 
-	txt_write_in_file(list_seg_file_log,"Destruyo la lista de segmentos\n");
+	txt_write_in_file(umv_file_log,"Destruyo la lista de segmentos\n");
 	destruir_lista_segmento(list_seg);
 	config_destroy(ptrConfig);
-	txt_write_in_file(mem_prin_file_log,"Destruyo la memoria principal\n");
+	txt_write_in_file(umv_file_log,"Destruyo la memoria principal\n");
 	free(mem_prin);
 
-	txt_write_in_file(mem_prin_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
-	txt_write_in_file(list_seg_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
-	txt_close_file(mem_prin_file_log);
-	txt_close_file(list_seg_file_log);
+	txt_write_in_file(umv_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
+	txt_close_file(umv_file_log);
 
 	return 0;
 }
@@ -65,18 +61,24 @@ void *admin_conecciones(){
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
+
 		if (men_hs->tipo == CONEC_CERRADA){
 			printf("Socket nº%i desconectado",new_soc);
 			continue;
 		}
 		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
+			txt_write_in_file(umv_file_log,"SOCKETS: Kernel conectado, socket nº");
+			txt_write_in_file(umv_file_log,string_itoa(new_soc));
+			txt_write_in_file(umv_file_log,"\n");
 			pthread_t hilo_conec_kernel;
-			t_param_conec_kernel *param_kernel = malloc(sizeof(t_param_conec_kernel));
-			param_kernel->soc = new_soc;
-			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, param_kernel);
+			soc_kernel = new_soc;
+			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, NULL);
 			continue;
 		}
 		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
+			txt_write_in_file(umv_file_log,"SOCKETS: Nueva CPU conectada, socket nº");
+			txt_write_in_file(umv_file_log,string_itoa(new_soc));
+			txt_write_in_file(umv_file_log,"\n");
 			pthread_t hilo_conec_cpu;
 			t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
 			param_cpu->soc = new_soc;
@@ -92,18 +94,19 @@ void *admin_conecciones(){
 	return NULL;
 }
 
-void *admin_conec_kernel(t_param_conec_kernel *param){
+void *admin_conec_kernel(){
 	t_men_seg *men_seg;
 
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
-	socket_send_comun(param->soc,men_hs);
+	socket_send_comun(soc_kernel,men_hs);
 	destruir_men_comun(men_hs);
 
 	while(quit_sistema){
-		men_seg = socket_recv_seg(param->soc);
+		men_seg = socket_recv_seg(soc_kernel);
+
 		sleep(retardo);
 		if(men_seg->tipo == CONEC_CERRADA){
-			printf("El Kernel cerro la coneccion\n");
+			txt_write_in_file(umv_file_log,"El Kernel cerro la coneccion\n");
 			quit_sistema = 0;
 			break;
 		}
@@ -112,38 +115,43 @@ void *admin_conec_kernel(t_param_conec_kernel *param){
 			continue;
 		}
 		if (men_seg->tipo == PED_MEM_SEG_COD){
-			gestionar_ped_seg(men_seg, RESP_MEM_SEG_COD, param->soc);
+			gestionar_ped_seg(men_seg, RESP_MEM_SEG_COD);
 			continue;
 		}
 		if (men_seg->tipo == PED_MEM_IND_ETI){
-			gestionar_ped_seg(men_seg, RESP_MEM_IND_ETI, param->soc);
+			gestionar_ped_seg(men_seg, RESP_MEM_IND_ETI);
 			continue;
 		}
 		if (men_seg->tipo == PED_MEM_IND_COD){
-			gestionar_ped_seg(men_seg, RESP_MEM_IND_COD, param->soc);
+			gestionar_ped_seg(men_seg, RESP_MEM_IND_COD);
 			continue;
 		}
 		if (men_seg->tipo == PED_MEM_SEG_STACK){
-			gestionar_ped_seg(men_seg, RESP_MEM_SEG_STACK, param->soc);
+			gestionar_ped_seg(men_seg, RESP_MEM_SEG_STACK);
 			continue;
 		}
 		if (men_seg->tipo == ESCRIBIR_SEG){
-			gestionar_alm_seg(men_seg->id_prog,param->soc);
+			gestionar_alm_seg(men_seg->id_prog);
 			continue;
 		}
 		printf("ERROR al recibir el tipo de dato %i\n", men_seg->tipo);
 		destruir_men_seg(men_seg);
 	}
-	free(param);
 	return NULL;
 }
 
-void gestionar_alm_seg(int32_t id_proc, int32_t soc_kernel){
+void gestionar_alm_seg(int32_t id_proc){
 	t_men_comun *aux_men = socket_recv_comun(soc_kernel);
 
 	pthread_mutex_lock(&mutex_list_seg);
 	almacenar_segmento(aux_men, id_proc);
 	pthread_mutex_unlock(&mutex_list_seg);
+
+	txt_write_in_file(umv_file_log,"Almaceno el segmento del proceso nº");
+	txt_write_in_file(umv_file_log,string_itoa(id_proc));
+	txt_write_in_file(umv_file_log," del tipo: ");
+	traducir_tipo_de_seg_y_logear(aux_men->tipo);
+	txt_write_in_file(umv_file_log,"\n");
 
 	destruir_men_comun(aux_men);
 }
@@ -171,9 +179,22 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	list_aux = list_filter(list_seg, (void*)_es_el_proc);
 	ret = list_find(list_aux, (void*)_es_tipo_seg);
 
-	if(ret == NULL)
-		printf("ERROR no se a encontrado el tipo de segmento n°%i del proceso %i",tipo_seg,id_proc);
+	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
+	txt_write_in_file(umv_file_log,string_itoa(id_proc));
+	txt_write_in_file(umv_file_log," del tipo:");
+	txt_write_in_file(umv_file_log,string_itoa(tipo_seg));
+	txt_write_in_file(umv_file_log,"\n");
+
+	if(ret == NULL){
+		printf("ERROR no se a encontrado el tipo de segmento n°%i del proceso %i\n",tipo_seg,id_proc);
+		txt_write_in_file(umv_file_log,"	No se a encontrado el segmento del proceso nº");
+		txt_write_in_file(umv_file_log,string_itoa(id_proc));
+		txt_write_in_file(umv_file_log," del tipo:");
+		txt_write_in_file(umv_file_log,string_itoa(tipo_seg));
+		txt_write_in_file(umv_file_log,"\n");
+	}
 	list_destroy(list_aux);
+
 	return ret;
 }
 
@@ -184,7 +205,7 @@ void destruir_lista_segmento(t_list *lista_seg){
 	list_destroy_and_destroy_elements(lista_seg, (void*)_destruir_t_seg);
 }
 
-void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel){
+void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 	t_men_comun *aux_men;
 	int resp_dir_mem = crearSegmento(men_seg);
 
@@ -214,10 +235,8 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 			proc_activo = men_bytes->base;
 			continue;
 		}
-		if( men_bytes->tipo == CONEC_CERRADA){
-			printf("El CPU n° %i se ha desconectado\n",param->soc);
+		if( men_bytes->tipo == CONEC_CERRADA)
 			break;//probar q se desconecta realmente todo
-		}
 		if( men_bytes->tipo == SOL_BYTES){
 			gestionar_solicitud_bytes(param->soc, men_bytes, proc_activo);
 			continue;
@@ -231,6 +250,9 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	}
 	free(param);
 	socket_cerrar(param->soc);
+	txt_write_in_file(umv_file_log,"El CPU n°");
+	txt_write_in_file(umv_file_log,string_itoa(param->soc));
+	txt_write_in_file(umv_file_log," se ha desconectado\n");
 	return NULL;
 }
 
@@ -239,20 +261,41 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
 	char *bytes = malloc(men_bytes->tam);
+	int i;
+
+	txt_write_in_file(umv_file_log,"Bytes solicitados por el CPU nº");
+	txt_write_in_file(umv_file_log,string_itoa(soc_cpu));
+	txt_write_in_file(umv_file_log," del proceso nº");
+	txt_write_in_file(umv_file_log,string_itoa(proc_activo));
+	txt_write_in_file(umv_file_log,", con base:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->base));
+	txt_write_in_file(umv_file_log,", Offset:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->offset));
+	txt_write_in_file(umv_file_log,", Tamanio:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->tam));
+	txt_write_in_file(umv_file_log,", Tipo:");
+	traducir_tipo_men_bytes_y_logear(aux_men->tipo);
+	txt_write_in_file(umv_file_log,"\n");
 
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
+	txt_write_in_file(umv_file_log,"Respuesta solicitud bytes: ");
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
 		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
+		txt_write_in_file(umv_file_log,"Segmentation Fault\n");
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&bytes,&mem_prin[pos],men_bytes->tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
 		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);
 		pthread_mutex_unlock(&mutex_list_seg);
+		for(i=0;i < men_bytes->tam;i++)
+			txt_write_in_file(umv_file_log,string_itoa(bytes[i]));
+		txt_write_in_file(umv_file_log,"\n");
 		socket_send_comun(soc_cpu, aux_men);
 	}
+
 	free(bytes);
 	destruir_men_comun(aux_men);
 }
@@ -262,11 +305,30 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
 	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
+	int i;
+
+	txt_write_in_file(umv_file_log,"Bytes a almacenar por el CPU nº");
+	txt_write_in_file(umv_file_log,string_itoa(soc_cpu));
+	txt_write_in_file(umv_file_log," del proceso nº");
+	txt_write_in_file(umv_file_log,string_itoa(proc_activo));
+	txt_write_in_file(umv_file_log,", con base:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->base));
+	txt_write_in_file(umv_file_log,", Offset:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->offset));
+	txt_write_in_file(umv_file_log,", Tamanio:");
+	txt_write_in_file(umv_file_log,string_itoa(men_bytes->tam));
+	txt_write_in_file(umv_file_log,", Tipo:");
+	traducir_tipo_men_bytes_y_logear(aux_men->tipo);
+	txt_write_in_file(umv_file_log,", buffer:");
+	for(i=0;i < men_bytes->tam;i++)
+				txt_write_in_file(umv_file_log,string_itoa(men_bytes->buffer[i]));
+	txt_write_in_file(umv_file_log,"\n");
 
 	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
 		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
+		txt_write_in_file(umv_file_log,"Memory Overload");
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],men_bytes->buffer,men_bytes->tam);
@@ -274,6 +336,7 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);
 		pthread_mutex_unlock(&mutex_list_seg);
 		socket_send_comun(soc_cpu, aux_men);
+		txt_write_in_file(umv_file_log,"Bytes almacenados");
 	}
 	destruir_men_comun(aux_men);
 }
@@ -294,6 +357,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 		resp = buscar_espacio_mem_prin(men_ped->tam_seg);
 		if (resp==-1){
 			pthread_mutex_unlock(&mutex_list_seg);
+			txt_write_in_file(umv_file_log,"Memory Overload\n");
 			return -1;
 		}
 	}
@@ -321,6 +385,15 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	aux_seg->dir_logica = asignarMemoriaAleatoria(men_ped->tam_seg);
 	list_add(list_seg, aux_seg);
 	pthread_mutex_unlock(&mutex_list_seg);
+
+	txt_write_in_file(umv_file_log,"Creo el segmento del proceso nº");
+	txt_write_in_file(umv_file_log,string_itoa(men_ped->id_prog));
+	txt_write_in_file(umv_file_log," de tamanio: ");
+	txt_write_in_file(umv_file_log,string_itoa(men_ped->tam_seg));
+	txt_write_in_file(umv_file_log," y tipo: ");
+	traducir_tipo_de_seg_y_logear(men_ped->tipo);
+	txt_write_in_file(umv_file_log,string_itoa(men_ped->tipo));
+	txt_write_in_file(umv_file_log,"\n");
 
 	return aux_seg->dir_logica;
 }
@@ -395,6 +468,7 @@ void compactar(){
 			list_replace(list_seg, i, aux_seg);
 		}
 	}
+	txt_write_in_file(umv_file_log,"Memoria compactada\n");
 }
 
 void destruirSegmentos(int id_prog){
@@ -404,14 +478,20 @@ void destruirSegmentos(int id_prog){
 	void destruir_t_seg(t_seg *seg){
 		free(seg);
 	}
-	pthread_mutex_lock(&mutex_list_seg);
 	if (id_prog == 0){//si es 0 destruye todos los segmentos
+		pthread_mutex_lock(&mutex_list_seg);
 		list_clean_and_destroy_elements(list_seg, (void*)destruir_t_seg);
+		pthread_mutex_unlock(&mutex_list_seg);
+		txt_write_in_file(umv_file_log,"Todos los segmentos destruido\n");
 	}else{
+		pthread_mutex_lock(&mutex_list_seg);
 		while(list_any_satisfy(list_seg, (void*)es_id_prog))
 			list_remove_and_destroy_by_condition(list_seg, (void*)es_id_prog, (void*)destruir_t_seg);
+		pthread_mutex_unlock(&mutex_list_seg);
+		txt_write_in_file(umv_file_log,"Segmentos del proceso nº");
+		txt_write_in_file(umv_file_log,string_itoa(id_prog));
+		txt_write_in_file(umv_file_log," destruidos\n");
 	}
-	pthread_mutex_unlock(&mutex_list_seg);
 }
 
 //consola
@@ -771,4 +851,40 @@ void encabezado(long byte, char *modo){
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
 	printf("------------------------------------------------------------------\n\n");
+}
+
+void traducir_tipo_de_seg_y_logear(int32_t tipo){
+	switch(tipo){
+	case PED_MEM_SEG_COD:
+		txt_write_in_file(umv_file_log,"CODIGO_SCRIPT");
+		break;
+	case PED_MEM_IND_ETI:
+		txt_write_in_file(umv_file_log,"IND_ETI_FUNC");
+		break;
+	case PED_MEM_IND_COD:
+		txt_write_in_file(umv_file_log,"IND_COD");
+		break;
+	case PED_MEM_SEG_STACK:
+		txt_write_in_file(umv_file_log,"IND_STACK");
+		break;
+	default:
+		txt_write_in_file(umv_file_log,string_itoa(tipo));
+		txt_write_in_file(umv_file_log," (PUEDE QUE ALLA UN ERROR)");
+		break;
+	}
+}
+
+void traducir_tipo_men_bytes_y_logear(int32_t tipo){
+	switch(tipo){
+	case SOL_BYTES:
+		txt_write_in_file(umv_file_log,"SOL_BYTES");
+		break;
+	case ALM_BYTES:
+		txt_write_in_file(umv_file_log,"ALM_BYTES");
+		break;
+	default:
+		txt_write_in_file(umv_file_log,string_itoa(tipo));
+		txt_write_in_file(umv_file_log," (PUEDE QUE ALLA UN ERROR)");
+		break;
+	}
 }

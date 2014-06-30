@@ -27,9 +27,6 @@
 
 	typedef struct{
 		int32_t soc;
-	}t_param_conec_kernel;
-	typedef struct{
-		int32_t soc;
 	}t_param_conec_cpu;
 	typedef struct {
 		int32_t id_proc;
@@ -42,8 +39,8 @@
 	void crear_hilo(pthread_t *hilo,  void *_funcion (void *),  void *param);
 	void *admin_conecciones();
 	void *admin_conec_kernel();
-	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp, int32_t soc_kernel);
-	void gestionar_alm_seg(int32_t id_proc, int32_t soc_kernel);
+	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp);
+	void gestionar_alm_seg(int32_t id_proc);
 	void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc);
 	t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc);
 	void destruir_lista_segmento(t_list *list_seg);
@@ -73,5 +70,7 @@
 	void imp_seg();
 
 	void encabezado(long byte, char *modo);
+	void traducir_tipo_de_seg_y_logear(int32_t tipo);
+	void traducir_tipo_men_bytes_y_logear(int32_t tipo);
 
 #endif /* UMV_H_ */
