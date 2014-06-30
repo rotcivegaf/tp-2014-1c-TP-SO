@@ -13,6 +13,7 @@
 	//commons
 	#include <commons/string.h>
 	#include <commons/config.h>
+	#include <commons/txt.h>
 	#include <commons/collections/dictionary.h>
 	#include <commons/collections/list.h>
 	//parser-ansisop
@@ -68,7 +69,7 @@
 	void imp_estructura_mem();
 	void imp_mem_prin();
 	void imp_cont_mem_prin();
-	int32_t imp_tablas_segmentos(int32_t id_proc);
+	void imp_tablas_segmentos(int32_t id_proc);
 	void imp_seg();
 
 	void encabezado(long byte, char *modo);
