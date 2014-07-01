@@ -4,6 +4,9 @@ int soc_kernel;
 t_log *logger;
 
 int main(int argc, char *argv[]){
+	logger = log_create("programa.log",argv[1],true,LOG_LEVEL_INFO);
+	log_info(logger,"Inicio de ejecicion");
+
 	t_config *config=config_create("./programa/programa_config");//todo creo q esta ruta tendria q ser guardada en la variable de entorno ANSISOP_CONFIG
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
 	char *ip_kernel=config_get_string_value(config, "IP_Kernel");
@@ -11,8 +14,6 @@ int main(int argc, char *argv[]){
 	printf("	IP Kernel     = %s\n", ip_kernel);
 	printf("	Puerto Kernel = %s\n", puerto_kernel);
 	printf("------------------------------------------------------------------------------------\n\n");
-
-	logger = log_create("logPrograma","Log Programa",true,LOG_LEVEL_INFO);
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript=tamanioArchivo(scriptAProcesar);
@@ -58,7 +59,7 @@ int main(int argc, char *argv[]){
 			break;
 		case FIN_EJECUCION:
 			printf("Ejecucion finalizada");
-			log_info(logger,"Finalizo la ejecucion del programa correctamente");
+			log_info(logger,"Finalizo la ejecucion del script correctamente");
 			fin_ejecucion = 1;
 			break;
 		case MEM_OVERLOAD:
@@ -71,6 +72,7 @@ int main(int argc, char *argv[]){
 			printf("%i\n",mensaje_recibido->tipo);
 			printf("El tipo de dato recibido es erroneo\n");
 			log_error(logger,"Se recibio un msj del kernel de tipo erroneo");
+			fin_ejecucion = 1;
 			break;
 		}
 		destruir_men_comun(mensaje_recibido);
@@ -78,6 +80,7 @@ int main(int argc, char *argv[]){
 
 	close(soc_kernel);
 	config_destroy(config);
+	log_info(logger,"Fin de ejecucion");
 	log_destroy(logger);
 	return 0;
 }
@@ -99,8 +102,7 @@ void handshake_kernel(){
 	if(men_hs->tipo != HS_KERNEL){		
 		printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
 		log_error(logger,"No se establecio correctamente la conexion con el kernel");
-	}
-	else
+	}else
 		log_info(logger,"Se establecio la conexion con el kernel");
 	destruir_men_comun(men_hs);
 }
