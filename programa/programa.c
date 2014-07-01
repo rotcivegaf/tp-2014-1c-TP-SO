@@ -1,6 +1,7 @@
 #include "programa.h"
 
 int soc_kernel;
+t_log *logger;
 
 int main(int argc, char *argv[]){
 	t_config *config=config_create("./programa/programa_config");//todo creo q esta ruta tendria q ser guardada en la variable de entorno ANSISOP_CONFIG
@@ -10,6 +11,8 @@ int main(int argc, char *argv[]){
 	printf("	IP Kernel     = %s\n", ip_kernel);
 	printf("	Puerto Kernel = %s\n", puerto_kernel);
 	printf("------------------------------------------------------------------------------------\n\n");
+
+	logger = log_create("logPrograma","Log Programa",true,LOG_LEVEL_INFO);
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript=tamanioArchivo(scriptAProcesar);
@@ -24,12 +27,14 @@ int main(int argc, char *argv[]){
 		script[i++]=fgetc(scriptAProcesar);
 	fclose(scriptAProcesar);
 
+	//Envio del script serializado
 	t_men_comun *mensaje_cod_prog = crear_men_comun(CODIGO_SCRIPT,script,tamanioScript);
 	socket_send_comun(soc_kernel,mensaje_cod_prog);
+	log_info(logger,"Se envió el codigo del script al kernel");
 	destruir_men_comun(mensaje_cod_prog);
 	free(script);
 
-	//espero la respuesta del kernel
+	//Espero mensajes del kernel
 	int fin_ejecucion = 0;
 	t_men_comun *mensaje_recibido;
 	while (fin_ejecucion != 1){
@@ -44,23 +49,28 @@ int main(int argc, char *argv[]){
 			break;
 		case CPU_DESCONEC:
 			printf("CPU DESCONECTADA\n");
+			log_error(logger,"Se desconecto la CPU que estaba ejecutando el programa");
 			fin_ejecucion = 1;
 			break;
 		case CONEC_CERRADA:
+			log_error(logger,"Se cayó la conexion con el kernel");
 			fin_ejecucion = 1;
 			break;
 		case FIN_EJECUCION:
 			printf("Ejecucion finalizada");
+			log_info(logger,"Finalizo la ejecucion del programa correctamente");
 			fin_ejecucion = 1;
 			break;
 		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
 			printf("Memory Overload\n");
+			log_error(logger,"No hay memoria suficiente para ejecutar el programa");
 			break;
 		default:
 			sleep(1);
 			printf("%i\n",mensaje_recibido->tipo);
 			printf("El tipo de dato recibido es erroneo\n");
+			log_error(logger,"Se recibio un msj del kernel de tipo erroneo");
 			break;
 		}
 		destruir_men_comun(mensaje_recibido);
@@ -68,6 +78,7 @@ int main(int argc, char *argv[]){
 
 	close(soc_kernel);
 	config_destroy(config);
+	log_destroy(logger);
 	return 0;
 }
 
@@ -85,7 +96,11 @@ void handshake_kernel(){
 
 	men_hs = socket_recv_comun(soc_kernel);
 
-	if(men_hs->tipo != HS_KERNEL)
+	if(men_hs->tipo != HS_KERNEL){		
 		printf("ERROR se esperaba HS_KERNEL y se recibio %i\n",men_hs->tipo);
+		log_error(logger,"No se establecio correctamente la conexion con el kernel");
+	}
+	else
+		log_info(logger,"Se establecio la conexion con el kernel");
 	destruir_men_comun(men_hs);
 }
