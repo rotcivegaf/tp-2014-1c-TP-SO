@@ -44,6 +44,9 @@ int32_t main(){
 	txt_write_in_file(umv_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
 	txt_close_file(umv_file_log);
 
+	pthread_mutex_destroy(&mutex_mem_prin);
+	pthread_mutex_destroy(&mutex_list_seg);
+
 	return 0;
 }
 
@@ -61,21 +64,21 @@ void *admin_conecciones(){
 	while(quit_sistema){
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
-
-		if (men_hs->tipo == CONEC_CERRADA){
+		sleep(retardo);
+		switch(men_hs->tipo){
+		case CONEC_CERRADA:
 			printf("Socket nº%i desconectado",new_soc);
-			continue;
-		}
-		if (men_hs->tipo >= HS_KERNEL){//si se conecta el kernel
+			close(new_soc);
+			break;
+		case HS_KERNEL:
 			txt_write_in_file(umv_file_log,"SOCKETS: Kernel conectado, socket nº");
 			txt_write_in_file(umv_file_log,string_itoa(new_soc));
 			txt_write_in_file(umv_file_log,"\n");
 			pthread_t hilo_conec_kernel;
 			soc_kernel = new_soc;
 			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, NULL);
-			continue;
-		}
-		if (men_hs->tipo >= HS_CPU){//si es una cpu nueva
+			break;
+		case HS_CPU:
 			txt_write_in_file(umv_file_log,"SOCKETS: Nueva CPU conectada, socket nº");
 			txt_write_in_file(umv_file_log,string_itoa(new_soc));
 			txt_write_in_file(umv_file_log,"\n");
@@ -83,12 +86,13 @@ void *admin_conecciones(){
 			t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
 			param_cpu->soc = new_soc;
 			crear_hilo(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
-			continue;
+			break;
+		default:
+			printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
+			break;
 		}
-		printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
 		destruir_men_comun(men_hs);
 	}
-
 	socket_cerrar(listen_soc);
 
 	return NULL;
@@ -103,38 +107,34 @@ void *admin_conec_kernel(){
 
 	while(quit_sistema){
 		men_seg = socket_recv_seg(soc_kernel);
-
 		sleep(retardo);
-		if(men_seg->tipo == CONEC_CERRADA){
+		switch(men_seg->tipo){
+		case CONEC_CERRADA:
 			txt_write_in_file(umv_file_log,"El Kernel cerro la coneccion\n");
 			quit_sistema = 0;
 			break;
-		}
-		if (men_seg->tipo == DESTR_SEGS){
+		case DESTR_SEGS:
 			destruirSegmentos(men_seg->id_prog);
-			continue;
-		}
-		if (men_seg->tipo == PED_MEM_SEG_COD){
+			break;
+		case PED_MEM_SEG_COD:
 			gestionar_ped_seg(men_seg, RESP_MEM_SEG_COD);
-			continue;
-		}
-		if (men_seg->tipo == PED_MEM_IND_ETI){
+			break;
+		case PED_MEM_IND_ETI:
 			gestionar_ped_seg(men_seg, RESP_MEM_IND_ETI);
-			continue;
-		}
-		if (men_seg->tipo == PED_MEM_IND_COD){
+			break;
+		case PED_MEM_IND_COD:
 			gestionar_ped_seg(men_seg, RESP_MEM_IND_COD);
-			continue;
-		}
-		if (men_seg->tipo == PED_MEM_SEG_STACK){
+			break;
+		case PED_MEM_SEG_STACK:
 			gestionar_ped_seg(men_seg, RESP_MEM_SEG_STACK);
-			continue;
-		}
-		if (men_seg->tipo == ESCRIBIR_SEG){
+			break;
+		case ESCRIBIR_SEG:
 			gestionar_alm_seg(men_seg->id_prog);
-			continue;
+			break;
+		default:
+			printf("ERROR al recibir del kernel el tipo de dato %i\n", men_seg->tipo);
+			break;
 		}
-		printf("ERROR al recibir el tipo de dato %i\n", men_seg->tipo);
 		destruir_men_seg(men_seg);
 	}
 	return NULL;
@@ -168,16 +168,11 @@ void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
 }
 
 t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
-	bool _es_el_proc(t_seg *seg){
-		return seg->id_proc == id_proc;
-	}
-	bool _es_tipo_seg(t_seg *seg){
-		return seg->tipo_seg == tipo_seg;
+	bool _es_el_proc_y_el_tipo_seg(t_seg *seg){
+		return (seg->tipo_seg == tipo_seg)&&(seg->id_proc == id_proc);
 	}
 	t_seg *ret;
-	t_list *list_aux;
-	list_aux = list_filter(list_seg, (void*)_es_el_proc);
-	ret = list_find(list_aux, (void*)_es_tipo_seg);
+	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
 
 	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
 	txt_write_in_file(umv_file_log,string_itoa(id_proc));
@@ -193,7 +188,6 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 		txt_write_in_file(umv_file_log,string_itoa(tipo_seg));
 		txt_write_in_file(umv_file_log,"\n");
 	}
-	list_destroy(list_aux);
 
 	return ret;
 }
@@ -222,37 +216,39 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 
 void *admin_conec_cpu(t_param_conec_cpu *param){
 	t_men_cpu_umv *men_bytes;
-	int32_t proc_activo = 0;
+	int32_t proc_activo = 0, este_conectada = 1;
 
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
 	destruir_men_comun(men_hs);
 
-	while(quit_sistema){
+	while(este_conectada){
 		men_bytes = socket_recv_cpu_umv(param->soc);
 		sleep(retardo);
-		if( men_bytes->tipo == CAMBIO_PA){
+		switch(men_bytes->tipo){
+		case CONEC_CERRADA:
+			este_conectada = 0;
+			break;
+		case CAMBIO_PA:
 			proc_activo = men_bytes->base;
-			continue;
-		}
-		if( men_bytes->tipo == CONEC_CERRADA)
-			break;//probar q se desconecta realmente todo
-		if( men_bytes->tipo == SOL_BYTES){
+			break;
+		case SOL_BYTES:
 			gestionar_solicitud_bytes(param->soc, men_bytes, proc_activo);
-			continue;
-		}
-		if( men_bytes->tipo == ALM_BYTES){
+			break;
+		case ALM_BYTES:
 			gestionar_almacenamiento_bytes(param->soc, men_bytes, proc_activo);
-			continue;
+			break;
+		default:
+			printf("ERROR al recibir de la CPU el tipo de dato %i\n", men_bytes->tipo);
+			break;
 		}
-		printf("ERROR al recibir el tipo de dato %i\n", men_bytes->tipo);
 		destruir_men_cpu_umv(men_bytes);
 	}
-	free(param);
 	socket_cerrar(param->soc);
 	txt_write_in_file(umv_file_log,"El CPU n°");
 	txt_write_in_file(umv_file_log,string_itoa(param->soc));
 	txt_write_in_file(umv_file_log," se ha desconectado\n");
+	free(param);
 	return NULL;
 }
 
@@ -673,6 +669,7 @@ void operacion_memoria(char opcion){//todo hay algo q no me cierra
 		pos = base + offset;
 		if ((offset+tam+base)>config_get_int_value(ptrConfig,"tamanio")){
 			txt_write_in_file(consola_file_log,"	MEMORY OVERLOAD\n");
+			free(buffer);
 		}else{
 			pthread_mutex_lock(&mutex_mem_prin);
 			memcpy(&mem_prin[pos],buffer,tam);
@@ -704,7 +701,6 @@ void cambiarRetardo(){
 	}else{
 		printf("Tiempo no válido.\n");
 	}
-
 }
 
 void imprimirDump(){
