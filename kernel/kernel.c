@@ -111,7 +111,6 @@ void *plp(t_param_plp *param_plp){
 						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
 						men_no_hay_mem->tipo = MEM_OVERLOAD;
 						men_no_hay_mem->dato = string_itoa(contador_prog);
-						socket_send_comun(soc_umv, men_no_hay_mem);
 						socket_send_comun(i, men_no_hay_mem);
 						free(men_no_hay_mem);
 					}else{
@@ -563,10 +562,10 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	t_men_comun* men;
 	char *etis = metadata_program->etiquetas;
 
-	// Escribe el segmento de codigo
+	//Escribir el segmento de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
-	men = crear_men_comun(ALM_SEG_COD,men_cod_prog->dato,men_cod_prog->tam_dato);
-	socket_send_comun(soc_umv, men_cod_prog);
+	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
+	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de etiquetas
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
@@ -576,8 +575,8 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	// Escribe el segmento de indice de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
-	men = crear_men_comun(IND_COD,metadata_program->instrucciones_serializado,tam_ind_cod);
-	socket_send_comun(soc_umv, men_cod_prog);
+	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);//ver si funca todo
+	socket_send_comun(soc_umv, men);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = *contador_id_programa;
