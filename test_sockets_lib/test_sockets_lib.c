@@ -153,8 +153,10 @@ int main(){
 			"	Tamanio |  0   |  %i\n",men_dest->tipo,men_dest->id_prog,men_dest->tam_seg);
 	destruir_men_seg(men_dest);
 
-
 	socket_cerrar(soc_envio);
+	men_dest = socket_recv_seg(soc_mensaje);
+	destruir_men_seg(men_dest);
+
 	socket_cerrar(soc_escucha);
 	socket_cerrar(soc_mensaje);
 	return 0;
