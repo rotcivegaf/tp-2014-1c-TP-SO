@@ -49,14 +49,15 @@
 
 
 
-
 t_dictionary *dic_Variables;
 t_pcb *pcb;
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
 t_men_comun *men;
 t_men_quantum_pcb *msj;
-t_men_sol_pos_mem *mess;
+t_men_cpu_umv *m;
+int32_t base, offset, tam;
+
 
 void recibirUnPcb();
 void handshake_umv(char *ip_umv, char *puerto_umv);

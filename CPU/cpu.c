@@ -142,10 +142,12 @@ void crearDiccionario(){
 			int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
 			int32_t offset = (i-1)*5 ;
 			int32_t tam = 1;
-			t_men_sol_pos_mem *msj = crear_men_sol_pos_mem(SOL_BYTES, base, offset, tam);
-			socket_send_sol_pos_mem(socketUmv, msj);
+			t_men_cpu_umv *m = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+			socket_send_cpu_umv(socketUmv, m);
+			destruir_men_cpu_umv(m);
+
 			//recibir de la umv key
-			t_men_sol_pos_mem *m = socket_recv_sol_pos_mem(socketUmv);
+			t_men_cpu_umv *m = socket_recv_cpu_umv(socketUmv);
 			//dictionary_put(dicVariables,key, stack + (i-1))
 			dictionary_put(dic_Variables, (base + (i-1)),
 					//datoquemedevuelvelaumv
@@ -195,16 +197,18 @@ char* solicitarProxSentenciaAUmv(){
 	int32_t tam = sizeof(uint32_t)*4;
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
-	t_men_sol_pos_mem *m = crear_men_sol_pos_mem(SOL_BYTES,base, offset, tam);
-	socket_send_sol_pos_mem(socketUmv, m); // para que hace return de los bytes que pudo leer?
-
+	t_men_cpu_umv *sol_inst = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	socket_send_cpu_umv(socketUmv, sol_inst);
+	destruir_men_cpu_umv(sol_inst);
 
 	//recibir la instruccion a ejecutar
-
-	men = socket_recv_comun(socketUmv);
-	if(men->tipo == PROX_INSTRUCCION){
-		char* proxInst = men->dato;
+	t_men_cpu_umv *rec_inst = socket_recv_cpu_umv(socketUmv);
+	if(rec_inst->tipo == PROX_INSTRUCCION){
+		char* proxInst = rec_inst->dato;
 		printf("Instruccion que voy a ejecutar %s\n",proxInst);
+	}
+	if(rec_inst->tipo == CONEC_CERRADA){
+		printf("Se cerro la conexion de la umv\n");
 	}
 
 	return proxInst;
@@ -268,19 +272,35 @@ void handshake_kernel(char *ip_k, char *puerto_k){
 
 
 t_puntero definirVariable(t_nombre_variable identificador_variable){
-	// almacenar en umv base=stack  offset= tamaño= buffer=
+
+	char *dato=malloc(1);
+	dato[0]= identificador_variable;
+	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
+	int32_t offset= (pcb->cant_var_contexto_actual)*5 ;
+	int32_t tam = 5;
+	t_men_cpu_umv *alm_bytes = crear_men_cpu_umv(ALM_BYTES, base, offset,tam, dato);
+	free(dato);
+	socket_send_cpu_umv(socketUmv,alm_bytes);
+	destruir_men_cpu_umv(alm_bytes);
 	//solicitar a la umv
-	//recibir de la umv un puntero a la nueva variable = puntNuevo
-	//dictionary_put(dicVariables, identificador_variable, puntNuevo)
-	//pcb->tamanio_context ++;
-	//return puntNuevo
+	t_men_cpu_umv *sol_bytes = crear_men_cpu_umv(SOL_BYTES, base, offset, sizeof(identificador_variable), NULL);
+	socket_send_cpu_umv(socketUmv, sol_bytes);
+
+	t_men_cpu_umv *rec_bytes = socket_recv_cpu_umv(socketUmv);
+	int32_t dir = atoi(rec_bytes->buffer);
+	//recibir de la umv la posicion de la variable
+	dictionary_put(dicVariables, identificador_variable, dir)
+	(pcb->cant_var_contexto_actual) ++;
+
 	printf("definir la variable %c\n",identificador_variable);
-	return POSICION_MEMORIA;
+	return dir;
 }
 
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	printf("Obtener posicion de %c\n", identificador_variable);
+
+
 	return POSICION_MEMORIA;
 	//return dictionary_get(diccionario, identificador de variable)
 	/*t_puntero posicionVariable = *dictionary_get(dicVariables, identificador_variable);
@@ -297,16 +317,40 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 
 t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
-	//solictar a umv base=contexto_actual  offset=direccion_variable tamaño=4 bytes
+	t_men_cpu_umv *m;
+	t_valor_variable valor;
+
+	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
+	int32_t offset = direccion_variable;
+	int32_t tam= sizeof(int32_t);
+
+	*m = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
+	//solictar a umv
+	send_men_cpu_umv(socketUmv, m);
+	destruir_men_cpu_umv(m);
 	//recibir de umv 4 bytes de valor_variable
-	// return valor_variable
-	printf("Dereferenciar %d y su valor es: %d\n",direccion_variable, CONTENIDO_VARIABLE);
-	return CONTENIDO_VARIABLE;
+
+	t_men_comun *resp = socket_recv_comun(socketUmv);
+	if (resp->tipo == R_SOL_BYTES){
+
+		valor = atoi(resp->dato);
+	}
+	destruir_men_comun(resp);
+	printf("Dereferenciar %d y su valor es: %d\n",direccion_variable,valor);
+
+	return valor;
 }
 
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
+	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
+	int32_t offset = direccion_variable;
+	int32_t tam = sizeof(t_valor_variable);
+	char* buffer = string_itoa(valor);
+	t_men_cpu_umv *m = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
+	send_men_cpu_umv(socketUmv, m);
+	destruir_men_cpu_umv(m);
 	//cambiar va
 	printf("Asignando en el valor \n");
 }
@@ -329,7 +373,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
 	t_men_comun *var =crear_men_comun(GRABAR_VALOR, variable, sizeof(variable));
-	char *c =  itoa(valor);
+	char *c =  string_itoa(valor);
 	t_men_comun *val_asignado = crear_men_comun(VALOR_ASIGNADO, c, sizeof(c));
 	socket_send_comun(socketKernel,var);
 	socket_send_comun(socketKernel, val_asignado);
@@ -344,7 +388,11 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 
 void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){
+
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
+	base = pcb->dir_primer_byte_umv_indice_etiquetas
+	offset = metadata_buscar_etiqueta(t_nombre_etiqueta, pcb->dir_primer_byte_umv_indice_etiquetas, pcb->tam_indice_etiquetas);
+	*m = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
 	/* Cambia la linea de ejecucion a la correspondiente de la etiqueta buscada.
 			 * @sintax	TEXT_GOTO (goto )
 			 * @param	t_nombre_etiqueta	Nombre de la etiqueta
@@ -356,14 +404,17 @@ void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	/*Preserva el contexto de ejecución actual para poder retornar luego al mismo.
-			 * Modifica las estructuras correspondientes para mostrar un nuevo contexto vacío.
-			 *
-			 * Los parámetros serán definidos luego de esta instrucción de la misma manera que una variable local, con identificadores numéricos empezando por el 0.
-			 *
-			 * @sintax	Sin sintaxis particular, se invoca cuando no coresponde a ninguna de las otras reglas sintacticas
-			 * @param	etiqueta	Nombre de la funcion
-			 * @return	void
-			 */
+	* Modifica las estructuras correspondientes para mostrar un nuevo contexto vacío.
+	* Los parámetros serán definidos luego de esta instrucción de la misma manera que una variable local, con identificadores numéricos empezando por el 0.
+    enviar a la umv el valor del cursor del contexto actual  y
+    progrma counter aumentado en uno
+    actualiza el cursor del contexto para que apunte al final de los valores que mande a guardar a la umv
+    actualiza el valor del program counter con lo que me devuelve el irallabel
+
+    reutilizar definir y asginar
+    */
+
+
 	printf("Llamando sin retorno a etiqueta\n");
 	}
 
@@ -382,28 +433,26 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 }
 
 void finalizar(void){
-	/*
-			 * FINALIZAR
-			 *
-			 * Cambia el Contexto de Ejecución Actual para volver al Contexto anterior al que se está ejecutando, recuperando el Cursor de Contexto Actual y el Program Counter previamente apilados en el Stack.
-			 * En caso de estar finalizando el Contexto principal (el ubicado al inicio del Stack), deberá finalizar la ejecución del programa.
-			 *
-			 * @sintax	TEXT_END (end )
-			 * @param	void
-			 * @return	void
+	/* Cambia el Contexto de Ejecución Actual para
+	 * volver al Contexto anterior al que se está ejecutando,
+	 * recuperando el Cursor de Contexto Actual y el Program Counter previamente apilados en el Stack.
+	 * En caso de estar finalizando el Contexto principal (el ubicado al inicio del Stack),
+	 *  deberá finalizar la ejecución del programa.
+
 			 */
 	printf("Finalizando");
 }
 
 void retornar(t_valor_variable retorno){
-	/*
-			 * RETORNAR
-			 *
-			 * Cambia el Contexto de Ejecución Actual para volver al Contexto anterior al que se está ejecutando, recuperando el Cursor de Contexto Actual, el Program Counter y la direccion donde retornar, asignando el valor de retorno en esta, previamente apilados en el Stack.
-			 *
-			 * @sintax	TEXT_RETURN (return )
-			 * @param	retorno	Valor a ingresar en la posicion corespondiente
-			 * @return	void
+	/*Cambia el Contexto de Ejecución Actual para
+	 * volver al Contexto anterior al que se está
+	 * ejecutando, recuperando el Cursor de Contexto Actual,
+	 * el Program Counter y la direccion donde retornar,
+	 * asignando el valor de retorno en esta,
+	 * previamente apilados en el Stack.
+
+	 * @param	retorno	Valor a ingresar en la posicion corespondiente
+
 			 */
 	printf("Retornando valor de variable%d\n", retorno);
 }
