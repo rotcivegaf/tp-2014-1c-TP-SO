@@ -12,7 +12,6 @@
 	#include <stdlib.h>
 	#include <stdint.h>
 	#include <string.h>
-	#include <commons/string.h>
 
 	//tipos de mensajes
 	typedef enum {
