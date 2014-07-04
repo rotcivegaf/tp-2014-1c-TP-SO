@@ -72,5 +72,6 @@
 	void encabezado(long byte, char *modo);
 	void traducir_tipo_de_seg_y_logear(int32_t tipo);
 	void traducir_tipo_men_bytes_y_logear(int32_t tipo);
+	void logear_int(FILE* destino,int32_t un_int);
 
 #endif /* UMV_H_ */
