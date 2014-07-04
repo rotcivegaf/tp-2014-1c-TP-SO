@@ -18,10 +18,12 @@ t_list *dispositivos_IO;
 
 int main(void){
 	t_datos_config *diccionario_config = levantar_config();
+
 	//Inicializacion semaforos
 	crear_cont(&cont_exit , 0);
 	crear_cont(&buff_multiprog , 0);
 	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion);
+
 	//Creacion de colas
 	cola_cpu = queue_create();
 	colas = malloc(sizeof(t_colas));
@@ -277,8 +279,8 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
+	//pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
-	//aca no deberia haber un pthread_mutex_unlock(&mutex_exec); ??
 	return NULL;
 }
 
@@ -307,6 +309,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_ready);
+			//pthread_mutex_lock(&mutex_ready_vacia); Aca mepa que deberia haber un if para ver si esta vacia la cola ready y ahi hacer el lock
 			sem_incre(&cont_exit);
 			return 0;
 		}
@@ -346,7 +349,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 
 t_cpu *get_cpu(int32_t soc_cpu){
 	int32_t i;
-	t_cpu *cpu = malloc(sizeof(t_cpu));
+t_cpu *cpu = malloc(sizeof(t_cpu)); //si ya esta creado el cpu, por que hay que pedir memoria (idem pcb)? Y si esta bien, ojo que en algun lado hay que hacer un free.
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	int32_t tam = queue_size(cola_cpu);
 
@@ -358,17 +361,17 @@ t_cpu *get_cpu(int32_t soc_cpu){
 		}
 		queue_push(cola_cpu, cpu);
 	}
-	printf("ERROR EN GET_CPU\n"); //aca no deberia hacer un free(cpu)? Y un pthread_mutex_unlock(&mutex_uso_cola_cpu);??
+	//pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	printf("ERROR EN GET_CPU\n");
 	return NULL;
 }
 
 t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
+	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //idem, memoria de más. Y ojo que hay que hacer algun free.
 	int32_t i;
 
 	pthread_mutex_lock(&mutex_exec);
-	int32_t tam = queue_size(colas->cola_exec);
-	for(i=0 ;i < tam ;i++){
+	for(i=0 ;i < queue_size(colas->cola_exec) ;i++){
 		aux_pcb_otros = queue_pop(colas->cola_exec);
 		if (id_proc == aux_pcb_otros->pcb->id){
 			pthread_mutex_unlock(&mutex_exec);
@@ -376,13 +379,14 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
+	//pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
 
 void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	t_men_comun *men;
-	t_IO *aux_IO = malloc(sizeof(t_IO));
+	t_IO *aux_IO = malloc(sizeof(t_IO)); //por que hace este malloc si ya esta reservado cuando se lee el arch de config????
 	t_cpu *aux_cpu = malloc(sizeof(t_cpu)); //este malloc ya esta hecho dentro de get_cpu
 	aux_cpu = get_cpu(soc_cpu);
 
@@ -415,13 +419,13 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	aux_pcb_otros->pcb = (socket_recv_quantum_pcb(soc_cpu)->pcb);
 	aux_cpu->id_prog_exec = 0;
 
-//Agrego esto porque al usar get_cpu, faltaba volver a poner el cpu en la cola
+	//Agrego esto porque al usar get_cpu, faltaba volver a poner el cpu en la cola
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 
-	//bloquea el proceso
+	//Bloqueo el proceso
 	pthread_mutex_lock(&mutex_block);
 	queue_push(colas->cola_block,aux_pcb_otros);
 	pthread_mutex_unlock(&mutex_block);
@@ -430,7 +434,9 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 
 t_pcb_otros *get_peso_min(){
 	int32_t i, peso_min = -1;
-	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros));
+	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros));//idem lo de malloc de mas
+
+	//pthread_mutex_lock(&mutex_new);
 	int32_t tam_cola = queue_size(colas->cola_new);
 
 	for (i=0;i < tam_cola;i++){
@@ -442,9 +448,11 @@ t_pcb_otros *get_peso_min(){
 	for (i=0;i < tam_cola;i++){
 		aux = queue_pop(colas->cola_new);
 		if (peso_min == aux->peso)
+			//pthread_mutex_unlock(&mutex_new);
 			return aux;
 		queue_push(colas->cola_new,aux);
 	}
+	//pthread_mutex_unlock(&mutex_new);
 	return NULL;
 }
 
@@ -452,19 +460,19 @@ void *entrar_IO(t_param_IO *param){
 	int32_t	total = param->retardo* param->cant_unidades;
 	sleep(total);
 	int32_t i;
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
-	pthread_mutex_unlock(&mutex_block);
-	for(i=0 ;i < queue_size(colas->cola_block) ;i++){
+
+	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //idem, malloc de más
+	pthread_mutex_lock(&mutex_block);
+	for( i=0 ;i < queue_size(colas->cola_block) ;i++){
 		aux_pcb_otros = queue_pop(colas->cola_block);
 		if (aux_pcb_otros->pcb->id == param->id_proc){
-			pthread_mutex_unlock(&mutex_ready);
+			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready,aux_pcb_otros);
 			pthread_mutex_unlock(&mutex_ready);
 		}
 		queue_push(colas->cola_block, aux_pcb_otros);
 	}
 	pthread_mutex_unlock(&mutex_block);
-
 	return NULL;
 }
 
@@ -501,11 +509,11 @@ void *manejador_new_ready(t_param_new_ready *param){
 			pthread_mutex_lock(&mutex_miltiprog);
 		}else{
 			pthread_mutex_unlock(&mutex_new);
-			sem_decre(&libre_multiprog);
-			pthread_mutex_lock(&mutex_new);
+			sem_decre(&libre_multiprog); //no entiendo por qué se decrementa aca
+			pthread_mutex_lock(&mutex_new); //me parece más copado hacer esto dentro de get_peso_min para que este menos tiempo bloqueada la cola
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, get_peso_min());
-			pthread_mutex_unlock(&mutex_new);
+			pthread_mutex_unlock(&mutex_new); //habria que sacarlo
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_ready_vacia);
 			sem_incre(&buff_multiprog);
@@ -516,7 +524,7 @@ void *manejador_new_ready(t_param_new_ready *param){
 
 void *manejador_ready_exec(t_param_ready_exec *param){
 	t_pcb_otros *aux_pcb_otros;
-	t_cpu *cpu = malloc(sizeof(t_cpu));
+	t_cpu *cpu = malloc(sizeof(t_cpu)); //idem, malloc de más
 	int32_t res;
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_ready);
