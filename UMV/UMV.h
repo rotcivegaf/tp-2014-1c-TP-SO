@@ -11,14 +11,14 @@
 	#include <sys/types.h>
 	#include <unistd.h>
 	//commons
-	#include <commons/string.h>
-	#include <commons/config.h>
-	#include <commons/txt.h>
-	#include <commons/collections/dictionary.h>
-	#include <commons/collections/list.h>
+	#include "commons/string.h"
+	#include "commons/config.h"
+	#include "commons/txt.h"
+	#include "commons/collections/dictionary.h"
+	#include "commons/collections/list.h"
 	//parser-ansisop
-	#include <parser/metadata_program.h>
-	#include <parser/parser.h>
+	#include "parser/metadata_program.h"
+	#include "parser/parser.h"
 	//hilos
 	#include <pthread.h>
 
@@ -36,7 +36,7 @@
 		int32_t tipo_seg;
 	} t_seg;
 
-	void crear_hilo(pthread_t *hilo,  void *_funcion (void *),  void *param);
+	void crear_hilo_detached(pthread_t *hilo, void *_funcion (void *),  void *param);
 	void *admin_conecciones();
 	void *admin_conec_kernel();
 	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp);

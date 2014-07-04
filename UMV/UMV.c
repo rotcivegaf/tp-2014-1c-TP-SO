@@ -30,8 +30,8 @@ int32_t main(){
 
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-	crear_hilo(&hilo_consola,  crearConsola,  NULL);
-	crear_hilo(&hilo_conecciones,  admin_conecciones,  NULL);
+	pthread_create( &hilo_consola,  NULL,crearConsola,  NULL);
+	crear_hilo_detached(&hilo_conecciones, admin_conecciones,  NULL);
 
 	pthread_join( hilo_consola, NULL);
 
@@ -50,10 +50,15 @@ int32_t main(){
 	return 0;
 }
 
-void crear_hilo(pthread_t *hilo,  void *_funcion (void *),  void *param){
-	int resp = pthread_create( hilo, NULL, _funcion, param);
+void crear_hilo_detached(pthread_t *hilo, void *_funcion (void *),  void *param){
+	pthread_attr_t attr;
+
+	pthread_attr_init (&attr);
+	pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+	int resp = pthread_create( hilo, &attr, _funcion, param);
 	if (resp != 0)
 		perror("crear hilo");
+	pthread_attr_destroy (&attr);
 }
 
 void *admin_conecciones(){
@@ -76,7 +81,7 @@ void *admin_conecciones(){
 			txt_write_in_file(umv_file_log,"\n");
 			pthread_t hilo_conec_kernel;
 			soc_kernel = new_soc;
-			crear_hilo(&hilo_conec_kernel, admin_conec_kernel, NULL);
+			crear_hilo_detached(&hilo_conec_kernel, admin_conec_kernel, NULL);
 			break;
 		case HS_CPU:
 			txt_write_in_file(umv_file_log,"SOCKETS: Nueva CPU conectada, socket nº");
@@ -85,7 +90,7 @@ void *admin_conecciones(){
 			pthread_t hilo_conec_cpu;
 			t_param_conec_cpu *param_cpu = malloc(sizeof(t_param_conec_cpu));
 			param_cpu->soc = new_soc;
-			crear_hilo(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
+			crear_hilo_detached(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
 			break;
 		default:
 			printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
@@ -247,11 +252,12 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 		}
 		destruir_men_cpu_umv(men_bytes);
 	}
-	socket_cerrar(param->soc);
 	txt_write_in_file(umv_file_log,"El CPU n°");
 	logear_int(umv_file_log,param->soc);
 	txt_write_in_file(umv_file_log," se ha desconectado\n");
+	socket_cerrar(param->soc);
 	free(param);
+
 	return NULL;
 }
 
