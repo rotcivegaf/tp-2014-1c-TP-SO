@@ -130,8 +130,10 @@ t_men_comun *socket_recv_comun(int soc){
 		perror("recv");
 		exit(1);
 	}
-	if (resultado_recv == 0)
+	if (resultado_recv == 0){
+		free(aux_len);
 		return crear_men_comun(CONEC_CERRADA,NULL,0);
+	}
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
@@ -234,8 +236,10 @@ t_men_quantum_pcb *socket_recv_quantum_pcb(int soc){
 		perror("recv");
 		exit(1);
 	}
-	if (resultado_recv == 0)
+	if (resultado_recv == 0){
+		free(aux_len);
 		return crear_men_quantum_pcb(CONEC_CERRADA, 0, NULL);
+	}
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
@@ -381,8 +385,10 @@ t_men_cpu_umv *socket_recv_cpu_umv(int soc){
 		perror("recv");
 		exit(1);
 	}
-	if (resultado_recv == 0)
+	if (resultado_recv == 0){
+		free(aux_len);
 		return crear_men_cpu_umv(CONEC_CERRADA,0,0,0,NULL);
+	}
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
@@ -493,8 +499,10 @@ t_men_seg *socket_recv_seg(int soc){
 		perror("recv");
 		exit(1);
 	}
-	if (resultado_recv == 0)
+	if (resultado_recv == 0){
+		free(aux_len);
 		return crear_men_seg(CONEC_CERRADA,0,0);
+	}
 	memcpy(&length, aux_len, sizeof(int32_t));
 	free(aux_len);
 	char stream[length];
