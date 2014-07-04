@@ -46,7 +46,7 @@ int main(void){
 	pthread_join(hilo_plp, NULL);
 	pthread_join(hilo_pcp, NULL); //Por qué no hay un pthread_join(hilo_imp_colas, NULL)?
 	
-	free(param_plp); //Por qué no hace un free(param_pcp)? Y no falta hacer free de param_plp, param_pcp, colas, cola_cpu(y de todas las cpus) y dispositivos_IO?
+	free(param_plp); //Por qué no hace un free(param_pcp)? Y no falta hacer free de colas, cola_cpu(y de todas los cpus) y dispositivos_IO?
 	return EXIT_SUCCESS;
 }
 
@@ -165,9 +165,11 @@ void *pcp(t_param_pcp *param_pcp){
 					cpu_new_fd = socket_accept(listener_cpu);
 					handshake_cpu(cpu_new_fd);
 					t_cpu *cpu = malloc(sizeof(t_cpu));
+
 					// Arma estructura con el n° de socket del cpu y el id del prog que esta ejecutando
 					cpu->soc_cpu = cpu_new_fd;
 					cpu->id_prog_exec = 0;
+
 					// Pone la estructura en la cola de cpus (cola con cpus libres)
 					pthread_mutex_lock(&mutex_uso_cola_cpu);
 					queue_push(cola_cpu, cpu);
@@ -182,12 +184,16 @@ void *pcp(t_param_pcp *param_pcp){
 					t_men_comun *men_cpu = socket_recv_comun(i);
 					if (men_cpu->tipo == CONEC_CERRADA) {
 						printf("PCP-select: CPU desconectada n°socket %i\n", i);
+
 						// Agarra el cpu a partir de su n° de socket
 						t_cpu *aux_cpu = get_cpu(i);
+
 						if (aux_cpu->id_prog_exec != 0){
+
 							// Saca el pcb que corresponde de la cola de ejec a partir del id
 							t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 							t_men_comun *men = crear_men_comun(CPU_DESCONEC, "", 1);
+
 							// Le manda msj al prog y pone el pcb en exit
 							socket_send_comun(aux_pcb_otros->n_socket, men);
 							pthread_mutex_lock(&mutex_exit);
@@ -203,8 +209,10 @@ void *pcp(t_param_pcp *param_pcp){
 					if (men_cpu->tipo == FIN_QUANTUM){
 						t_cpu *aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
+
 							// Saca el pcb de la cola de ejec a partir del id
 							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
 							// Actualiza el pcb
 							(aux_pcb_otros->pcb) = (socket_recv_quantum_pcb(i)->pcb);
 
@@ -268,9 +276,9 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 			return aux_pcb_otros;
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
-		//aca no deberia haber un pthread_mutex_unlock(&mutex_exec); ??
 	}
 	printf("ERROR EN get_pcb_otros_exec\n");
+	//aca no deberia haber un pthread_mutex_unlock(&mutex_exec); ??
 	return NULL;
 }
 
@@ -350,7 +358,7 @@ t_cpu *get_cpu(int32_t soc_cpu){
 		}
 		queue_push(cola_cpu, cpu);
 	}
-	printf("ERROR EN GET_CPU\n"); //aca no deberia hacer un free(cpu)?
+	printf("ERROR EN GET_CPU\n"); //aca no deberia hacer un free(cpu)? Y un pthread_mutex_unlock(&mutex_uso_cola_cpu);??
 	return NULL;
 }
 
@@ -406,12 +414,14 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 	aux_pcb_otros->pcb = (socket_recv_quantum_pcb(soc_cpu)->pcb);
 	aux_cpu->id_prog_exec = 0;
+
 //Agrego esto porque al usar get_cpu, faltaba volver a poner el cpu en la cola
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 
+	//bloquea el proceso
 	pthread_mutex_lock(&mutex_block);
 	queue_push(colas->cola_block,aux_pcb_otros);
 	pthread_mutex_unlock(&mutex_block);
@@ -515,7 +525,7 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 			pthread_mutex_lock(&mutex_ready_vacia);
 		}else{
 			pthread_mutex_lock(&mutex_uso_cola_cpu);
-			cpu = get_cpu_libre(&res);
+			cpu = get_cpu_libre(&res); //fijarse si dsp se mete el cpu a la lista de cpus
 			if(res == 0){
 				pthread_mutex_unlock(&mutex_ready);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -542,15 +552,18 @@ t_cpu *get_cpu_libre(int32_t *res){
 	int32_t i;
 	t_cpu *cpu = malloc(sizeof(t_cpu));
 	int32_t tam = queue_size(cola_cpu);
+	//pthread_mutex_lock(&mutex_uso_cola_cpu);
 	for(i=0 ;i < tam ;i++){
 		cpu = queue_pop(cola_cpu);
 		if (cpu->id_prog_exec == 0){
 			*res = 1;
+			//pthread_mutex_unlock(&mutex_uso_cola_cpu);
 			return cpu;
 		}
 		queue_push(cola_cpu, cpu);
 	}
 	*res = 0;
+	//pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	return cpu;
 }
 
