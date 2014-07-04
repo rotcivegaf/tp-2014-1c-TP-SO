@@ -1,8 +1,8 @@
 #include "kernel.h"
 
 int32_t soc_umv;
-t_colas *colas;
-t_queue *cola_cpu;
+t_colas *colas;  //colas de los cinco estados de los procesos
+t_queue *cola_cpu; //cola donde tengo los cpu conectados
 pthread_mutex_t mutex_new = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_block = PTHREAD_MUTEX_INITIALIZER;
@@ -13,7 +13,7 @@ pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
-int32_t quit_sistema = 1;
+int32_t quit_sistema = 1; //Y estoooo? ademas, no seria int?
 t_list *dispositivos_IO;
 
 int main(void){
@@ -40,13 +40,13 @@ int main(void){
 
 	//Creacion de hilos
 	pthread_t hilo_imp_colas, hilo_plp, hilo_pcp;
-	pthread_create(&hilo_imp_colas, NULL, imp_colas , NULL);
+	pthread_create(&hilo_imp_colas, NULL, imp_colas , NULL); //para qué es este hilo?
 	pthread_create(&hilo_plp, NULL, plp, (void *)param_plp);
 	pthread_create(&hilo_pcp, NULL, pcp, (void *)param_pcp);
 	pthread_join(hilo_plp, NULL);
-	pthread_join(hilo_pcp, NULL);
+	pthread_join(hilo_pcp, NULL); //Por qué no hay un pthread_join(hilo_imp_colas, NULL)?
 	
-	free(param_plp);
+	free(param_plp); //Por qué no hace un free(param_pcp)? Y no falta hacer free de param_plp, param_pcp, colas, cola_cpu(y de todas las cpus) y dispositivos_IO?
 	return EXIT_SUCCESS;
 }
 
@@ -58,10 +58,10 @@ void *plp(t_param_plp *param_plp){
 	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
 
-	int32_t contador_prog = 1;
+	int32_t contador_prog = 1; //aca no saría int?
 	fd_set master;   // conjunto maestro de sockets
 	fd_set read_fds; // conjunto temporal de sockets para select()
-	int32_t fdmax;        // socket con el mayor valor
+	int32_t fdmax;        // socket con el mayor valor ACA NO SERIA INT?
 
 	//Conecta con la umv
 	handshake_umv(param_plp->ip_umv, param_plp->puerto_umv);
@@ -69,22 +69,22 @@ void *plp(t_param_plp *param_plp){
 	//Abre un server para escuchar las conexiones de los programas
 	int32_t listener_prog = socket_crear_server(param_plp->puerto_prog);
 
-    int32_t prog_new_fd;
+    int32_t prog_new_fd; //aca no es int tmb?
 
 	FD_ZERO(&master);    // borra los conjuntos maestro y temporal de sockets
 	FD_ZERO(&read_fds);
 	FD_SET(listener_prog, &master);
 
-	fdmax = listener_prog; // por ahora es éste
+	fdmax = listener_prog; // por ahora es éste //SI FDMAX ES INT, LISTENER_PROG TMB
 
-	int32_t i = 0;
+	int32_t i; //aca no es int tmb?
 	while(quit_sistema){
 		read_fds = master; // Copia el conjunto maestro al temporal
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PLP-select");
 			exit(1);
 		}
-		for(i = 3; i <= fdmax; i++) {
+		for(i = 3; i <= fdmax; i++) { //Por qué i empieza en 3?
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
 				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
 					prog_new_fd = socket_accept(listener_prog);
@@ -135,7 +135,7 @@ void *plp(t_param_plp *param_plp){
 }
 
 void *pcp(t_param_pcp *param_pcp){
-	int32_t i, fdmax, cpu_new_fd;
+	int32_t i, fdmax, cpu_new_fd; //lo mismo con int
 	fd_set master, read_fds;
 
 	// Crea el hilo que pasa los pcb de ready a exec
@@ -195,6 +195,7 @@ void *pcp(t_param_pcp *param_pcp){
 							sem_incre(&cont_exit);
 							pthread_mutex_unlock(&mutex_exit);
 						}
+						//aca no deberia hacer un free con el cpu que se desconecta y fijarse si la cola de cpus queda vacia?
 						socket_cerrar(i);
 						FD_CLR(i, &master);
 						continue;
@@ -232,10 +233,10 @@ void *pcp(t_param_pcp *param_pcp){
 						t_men_comun *aux_men_cpu = socket_recv_comun(i);
 						if (aux_men_cpu->tipo != ID_PROG)
 							printf("Se esperaba el tipo de dato %i y se obtuvo %i\n",ID_PROG,men_cpu->tipo);
-						t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
+						t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); // mepa que este malloc ya esta hecho dentro de get_pcb_otros_exec_sin quitarlo
 						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
 						socket_send_comun(aux_pcb_otros->n_socket, aux_men_cpu);
-						continue;
+						continue; //aca habria que hacer free(aux_pcb_otros)
 					}
 
 					if (men_cpu->tipo == IO_ID){
@@ -253,7 +254,7 @@ void *pcp(t_param_pcp *param_pcp){
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros));
+	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //por que hace un malloc si los pcb existen, cuando se los creo se pidio memoria. Y si esta bien, en el print del error no deberia haber un free?
 	int32_t i;
 
 	pthread_mutex_lock(&mutex_exec);
@@ -267,6 +268,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 			return aux_pcb_otros;
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
+		//aca no deberia haber un pthread_mutex_unlock(&mutex_exec); ??
 	}
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
@@ -274,7 +276,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 
 int32_t mover_pcb_exit(int32_t soc_prog){
 	int32_t i;
-	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros));
+	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros)); //por que hace un malloc si los pcb existen, cuando se los creo se pidio memoria.
 	pthread_mutex_lock(&mutex_new);
 	for(i=0; i < queue_size(colas->cola_new) ;i++){
 		aux = queue_pop(colas->cola_new);
@@ -348,7 +350,7 @@ t_cpu *get_cpu(int32_t soc_cpu){
 		}
 		queue_push(cola_cpu, cpu);
 	}
-	printf("ERROR EN GET_CPU\n");
+	printf("ERROR EN GET_CPU\n"); //aca no deberia hacer un free(cpu)?
 	return NULL;
 }
 
@@ -373,7 +375,7 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	t_men_comun *men;
 	t_IO *aux_IO = malloc(sizeof(t_IO));
-	t_cpu *aux_cpu = malloc(sizeof(t_cpu));
+	t_cpu *aux_cpu = malloc(sizeof(t_cpu)); //este malloc ya esta hecho dentro de get_cpu
 	aux_cpu = get_cpu(soc_cpu);
 
 	int32_t i;
@@ -391,7 +393,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 
 	men = socket_recv_comun(soc_cpu);
 	if (men->tipo != IO_CANT_UNIDADES)
-		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_CANT_UNIDADES);
+		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_CANT_UNIDADES); //si hay un error, no deberia terminar?
 	int32_t cant_unidades = atoi(men->dato);
 
 	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
@@ -499,7 +501,7 @@ void *manejador_new_ready(t_param_new_ready *param){
 			sem_incre(&buff_multiprog);
 		}
 	}
-	return NULL;
+	return NULL; //no tiene que hacer free(param)?
 }
 
 void *manejador_ready_exec(t_param_ready_exec *param){
