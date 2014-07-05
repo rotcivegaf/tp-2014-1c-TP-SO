@@ -42,11 +42,14 @@
 	void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp);
 	void gestionar_alm_seg(int32_t id_proc);
 	void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc);
-	t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc);
+	t_seg *buscar_segmento_tipo_seg(int32_t id_proc ,int32_t tipo_seg);
 	void destruir_lista_segmento(t_list *list_seg);
 	void *admin_conec_cpu();
 	void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t proc_activo);
+	char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam);
 	void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo);
+	int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam, char *buffer);
+	t_seg *buscar_segmento_dir_logica(int32_t id_proc, int32_t dir_logica);
 	void compactar();
 	int32_t crearSegmento(t_men_seg *men_ped_seg);
 	int32_t asignarMemoriaAleatoria(int32_t tamanio);
@@ -73,5 +76,6 @@
 	void traducir_tipo_de_seg_y_logear(int32_t tipo);
 	void traducir_tipo_men_bytes_y_logear(int32_t tipo);
 	void logear_int(FILE* destino,int32_t un_int);
+	void logear_char(FILE* destino,char un_char);
 
 #endif /* UMV_H_ */

@@ -15,7 +15,7 @@ FILE *umv_file_log;
 int32_t main(){
 	srand(time(0));
 	//creo los logs
-	umv_file_log = txt_open_for_append("./UMV/logs/umv.logs");
+	umv_file_log = txt_open_for_append("./UMV/logs/umv.log");
 	txt_write_in_file(umv_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("./UMV/umv_config.txt");
@@ -164,7 +164,7 @@ void gestionar_alm_seg(int32_t id_proc){
 void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
 	t_seg *aux_seg;
 
-	aux_seg = buscar_segmento(aux_men->tipo, id_proc);
+	aux_seg = buscar_segmento_tipo_seg(id_proc, aux_men->tipo);
 	if (aux_men->tam_dato != aux_seg->tam_seg)
 		printf("ERROR EL TAM DEL SEG ES ERRONEO\n");
 	pthread_mutex_lock(&mutex_mem_prin);
@@ -172,7 +172,7 @@ void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
 	pthread_mutex_unlock(&mutex_mem_prin);
 }
 
-t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
+t_seg *buscar_segmento_tipo_seg(int32_t id_proc ,int32_t tipo_seg){
 	bool _es_el_proc_y_el_tipo_seg(t_seg *seg){
 		return (seg->tipo_seg == tipo_seg)&&(seg->id_proc == id_proc);
 	}
@@ -186,11 +186,36 @@ t_seg *buscar_segmento(int32_t tipo_seg,int32_t id_proc){
 	txt_write_in_file(umv_file_log,"\n");
 
 	if(ret == NULL){
-		printf("ERROR no se a encontrado el tipo de segmento n°%i del proceso %i\n",tipo_seg,id_proc);
+		printf("ERROR no se a encontrado el tipo de segmento nº%i del proceso %i\n",tipo_seg,id_proc);
 		txt_write_in_file(umv_file_log,"	No se a encontrado el segmento del proceso nº");
 		logear_int(umv_file_log,id_proc);
 		txt_write_in_file(umv_file_log," del tipo:");
 		logear_int(umv_file_log,tipo_seg);
+		txt_write_in_file(umv_file_log,"\n");
+	}
+
+	return ret;
+}
+
+t_seg *buscar_segmento_dir_logica(int32_t id_proc, int32_t dir_logica){
+	bool _es_el_proc_y_el_tipo_seg(t_seg *seg){
+		return (seg->dir_logica == dir_logica)&&(seg->id_proc == id_proc);
+	}
+	t_seg *ret;
+	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
+
+	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
+	logear_int(umv_file_log,id_proc);
+	txt_write_in_file(umv_file_log,", con direccion logica: ");
+	logear_int(umv_file_log,dir_logica);
+	txt_write_in_file(umv_file_log,"\n");
+
+	if(ret == NULL){
+		printf("ERROR no se a encontrado el tipo de segmento nº%i del proceso %i\n", dir_logica, id_proc);
+		txt_write_in_file(umv_file_log,"	No se a encontrado el segmento del proceso nº");
+		logear_int(umv_file_log,id_proc);
+		txt_write_in_file(umv_file_log,", con direccion logica: ");
+		logear_int(umv_file_log, dir_logica);
 		txt_write_in_file(umv_file_log,"\n");
 	}
 
@@ -252,7 +277,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 		}
 		destruir_men_cpu_umv(men_bytes);
 	}
-	txt_write_in_file(umv_file_log,"El CPU n°");
+	txt_write_in_file(umv_file_log,"El CPU nº");
 	logear_int(umv_file_log,param->soc);
 	txt_write_in_file(umv_file_log," se ha desconectado\n");
 	socket_cerrar(param->soc);
@@ -263,10 +288,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 
 void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t proc_activo){
 	t_men_comun *aux_men;
-	pthread_mutex_lock(&mutex_list_seg);
-	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
-	char *bytes = malloc(men_bytes->tam);
-	int i;
+	char *bytes;
 
 	txt_write_in_file(umv_file_log,"Bytes solicitados por el CPU nº");
 	logear_int(umv_file_log,soc_cpu);
@@ -282,22 +304,14 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,"\n");
 
-	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
+	bytes = solicitar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+
 	txt_write_in_file(umv_file_log,"Respuesta solicitud bytes: ");
-	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
-		pthread_mutex_unlock(&mutex_list_seg);
+	if (bytes == NULL){
 		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
-		txt_write_in_file(umv_file_log,"Segmentation Fault\n");
 	}else{
-		pthread_mutex_lock(&mutex_mem_prin);
-		memcpy(&bytes,&mem_prin[pos],men_bytes->tam);
-		pthread_mutex_unlock(&mutex_mem_prin);
 		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);
-		pthread_mutex_unlock(&mutex_list_seg);
-		for(i=0;i < men_bytes->tam;i++)
-			logear_int(umv_file_log,bytes[i]);
-		txt_write_in_file(umv_file_log,"\n");
 		socket_send_comun(soc_cpu, aux_men);
 	}
 
@@ -305,12 +319,45 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	destruir_men_comun(aux_men);
 }
 
+char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam){
+	char *ret = malloc(tam);
+	int32_t i;
+
+	pthread_mutex_lock(&mutex_list_seg);
+	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
+	int32_t pos = aux_seg->dir_fisica + offset;
+
+	txt_write_in_file(umv_file_log,"Solicitar bytes del proceso nº");
+	logear_int(umv_file_log, id_proc);
+	txt_write_in_file(umv_file_log," de base: ");
+	logear_int(umv_file_log, base);
+	txt_write_in_file(umv_file_log,", offset: ");
+	traducir_tipo_de_seg_y_logear(offset);
+	txt_write_in_file(umv_file_log,", tamanio: ");
+	traducir_tipo_de_seg_y_logear(tam);
+	txt_write_in_file(umv_file_log,"\n");
+
+	if (aux_seg->tam_seg<(offset+tam)){
+		pthread_mutex_unlock(&mutex_list_seg);
+		ret = NULL;
+		txt_write_in_file(umv_file_log,"	Segmentation Fault\n");
+		return ret;
+	}else{
+		pthread_mutex_lock(&mutex_mem_prin);
+		memcpy(ret,&mem_prin[pos],tam);
+		pthread_mutex_unlock(&mutex_mem_prin);
+		pthread_mutex_unlock(&mutex_list_seg);
+		txt_write_in_file(umv_file_log,"	");
+		for(i=0;i < tam;i++)
+			logear_char(umv_file_log, ret[i]);
+		txt_write_in_file(umv_file_log,"\n");
+		return ret;
+	}
+}
+
 void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo){
 	t_men_comun *aux_men;
-	pthread_mutex_lock(&mutex_list_seg);
-	t_seg *aux_seg = buscar_segmento(IND_STACK,proc_activo);
-	int32_t pos = aux_seg->dir_fisica + men_bytes->offset;
-	int i;
+	int32_t resp, i;
 
 	txt_write_in_file(umv_file_log,"Bytes a almacenar por el CPU nº");
 	logear_int(umv_file_log,soc_cpu);
@@ -326,24 +373,40 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,", buffer:");
 	for(i=0;i < men_bytes->tam;i++)
-		logear_int(umv_file_log,men_bytes->buffer[i]);
+		logear_char(umv_file_log,men_bytes->buffer[i]);
 	txt_write_in_file(umv_file_log,"\n");
 
-	if (aux_seg->tam_seg<(men_bytes->offset+men_bytes->tam)){
-		pthread_mutex_unlock(&mutex_list_seg);
-		aux_men = crear_men_comun(MEM_OVERLOAD,NULL,0);
+	resp = almacenar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam, men_bytes->buffer);
+
+	if (resp==MEM_OVERLOAD){
+		aux_men = crear_men_comun(resp,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
-		txt_write_in_file(umv_file_log,"Memory Overload");
+	}else{
+		aux_men = crear_men_comun(resp, NULL , 0);
+		socket_send_comun(soc_cpu, aux_men);
+	}
+
+	destruir_men_comun(aux_men);
+}
+
+int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam, char *buffer){
+	pthread_mutex_lock(&mutex_list_seg);
+	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
+
+	int32_t pos = aux_seg->dir_fisica + offset;
+
+	if (aux_seg->tam_seg<(offset+tam)){
+		pthread_mutex_unlock(&mutex_list_seg);
+		txt_write_in_file(umv_file_log,"Memory Overload\n");
+		return MEM_OVERLOAD;
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
-		memcpy(&mem_prin[pos],men_bytes->buffer,men_bytes->tam);
+		memcpy(&mem_prin[pos],buffer,tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
-		aux_men = crear_men_comun(R_ALM_BYTES, NULL , 0);
 		pthread_mutex_unlock(&mutex_list_seg);
-		socket_send_comun(soc_cpu, aux_men);
-		txt_write_in_file(umv_file_log,"Bytes almacenados");
+		txt_write_in_file(umv_file_log,"Bytes almacenados\n");
+		return R_ALM_BYTES;
 	}
-	destruir_men_comun(aux_men);
 }
 
 void ordenar_lista_seg_por_dir_fisica(){
@@ -501,8 +564,8 @@ void destruirSegmentos(int id_prog){
 //consola
 void* crearConsola(){
 	char opcion;
-	consola_file_log = txt_open_for_append("./UMV/logs/consola.logs");
-	txt_write_in_file(consola_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	consola_file_log = txt_open_for_append("./UMV/logs/consola.log");
+	txt_write_in_file(consola_file_log,"--------------------Nueva ejecucion-------------------------------------------------------------------------------------------\n");
 	do {
 		menuPrincipal();
 		do {
@@ -616,76 +679,84 @@ void operacion_segmentos(char opcion){
 	}
 }
 
-void operacion_memoria(char opcion){//todo hay algo q no me cierra
-	int32_t base, offset, tam, id_proc,i, pos;
+void operacion_memoria(char opcion){
+	int32_t tipo_seg = 0, offset = 0, tam = 0, id_proc = 0,i = 0, resp = 0, base = 0;
 	char *buffer;
+	t_seg *aux_seg;
 
 	printf("ID del proceso:");
 	scanf("%i",&id_proc);
-	printf("Base:");
-	scanf("%i",&base);
+	printf("Tipo de segmento:");
+	scanf("%i",&tipo_seg);
 	printf("Offset:");
 	scanf("%i",&offset);
+	printf("Tamanio:");
+	scanf("%i",&tam);
 
 	if (opcion == '3'){
-		printf("Tamaño:");
-		scanf("%i",&tam);
-		txt_write_in_file(consola_file_log,"Imprimo la memoria del proceso nª: ");
+		txt_write_in_file(consola_file_log,"Imprimo la memoria del proceso nº: ");
 		logear_int(consola_file_log,id_proc);
-		txt_write_in_file(consola_file_log,", Base: ");
-		logear_int(consola_file_log,base);
+		txt_write_in_file(consola_file_log,", Tipo de segmento: ");
+		logear_int(consola_file_log,tipo_seg);
 		txt_write_in_file(consola_file_log,", Offset: ");
 		logear_int(consola_file_log,offset);
 		txt_write_in_file(consola_file_log,", Tamanio: ");
 		logear_int(consola_file_log,tam);
 		txt_write_in_file(consola_file_log,"\n");
 
-		pos = base + offset;
-		if ((offset+tam+base)>config_get_int_value(ptrConfig,"tamanio")){
-			txt_write_in_file(consola_file_log,"	MEMORY OVERLOAD\n");
-		}else{
-			buffer = malloc(tam);
-			pthread_mutex_lock(&mutex_mem_prin);
-			memcpy(&mem_prin[pos],buffer,tam);
-			pthread_mutex_unlock(&mutex_mem_prin);
-			txt_write_in_file(consola_file_log,"	");
-			for (i=0;i<tam;i++){
-				logear_int(consola_file_log,buffer[i]);
-				txt_write_in_file(consola_file_log,"-");
-			}
+		aux_seg = buscar_segmento_tipo_seg(id_proc ,tipo_seg);
+		if (aux_seg == NULL){
+			txt_write_in_file(consola_file_log,"	ERROR no se a encontrado el tipo de segmento nº");
+			logear_int(consola_file_log,tipo_seg);
+			txt_write_in_file(consola_file_log," del proceso ");
+			logear_int(consola_file_log,id_proc);
 			txt_write_in_file(consola_file_log,"\n");
-			free(buffer);
+			return;
 		}
+		base = aux_seg->dir_logica;
+		buffer = solicitar_bytes(id_proc, base, offset,  tam);
+		if (buffer == NULL){
+			txt_write_in_file(consola_file_log,"	SEGMENTATION FAULT\n");
+		}else{
+			txt_write_in_file(consola_file_log,"	");
+			for (i=0;i<tam;i++)
+				logear_char(consola_file_log,buffer[i]);
+			txt_write_in_file(consola_file_log,"\n");
+		}
+		free(buffer);
 	}else{
-		printf("Tamaño a escribir:");
-		scanf("%i",&tam);
-		buffer = malloc(tam);
-		printf("Buffer:");
-		scanf("%s",buffer);
-
-		txt_write_in_file(consola_file_log,"Escribo la memoria del proceso nª: ");
+		txt_write_in_file(consola_file_log,"Escribo la memoria del proceso nº: ");
 		logear_int(consola_file_log,id_proc);
-		txt_write_in_file(consola_file_log,", Base: ");
-		logear_int(consola_file_log,base);
+		txt_write_in_file(consola_file_log,", Tipo de segmento: ");
+		logear_int(consola_file_log,tipo_seg);
 		txt_write_in_file(consola_file_log,", Offset: ");
 		logear_int(consola_file_log,offset);
 		txt_write_in_file(consola_file_log,", Tamanio: ");
 		logear_int(consola_file_log,tam);
 		txt_write_in_file(consola_file_log,", Buffer: ");
-		txt_write_in_file(consola_file_log,buffer);
+		printf("Buffer:");
+		while ((i = getchar()) != '\n' && i != EOF);//esta linea es para limpiar el buffer, por que puede llegar a quedar un \n
+		buffer = malloc(tam);
+		txt_write_in_file(consola_file_log,fgets(buffer, tam+1, stdin));
 		txt_write_in_file(consola_file_log,"\n");
 
-		pos = base + offset;
-		if ((offset+tam+base)>config_get_int_value(ptrConfig,"tamanio")){
-			txt_write_in_file(consola_file_log,"	MEMORY OVERLOAD\n");
+		aux_seg = buscar_segmento_tipo_seg(id_proc ,tipo_seg);
+		if (aux_seg == NULL){
+			txt_write_in_file(consola_file_log,"	ERROR no se a encontrado el tipo de segmento nº");
+			logear_int(consola_file_log,tipo_seg);
+			txt_write_in_file(consola_file_log," del proceso ");
+			logear_int(consola_file_log,id_proc);
+			txt_write_in_file(consola_file_log,"\n");
 			free(buffer);
-		}else{
-			pthread_mutex_lock(&mutex_mem_prin);
-			memcpy(&mem_prin[pos],buffer,tam);
-			pthread_mutex_unlock(&mutex_mem_prin);
-			txt_write_in_file(consola_file_log,"	Se escribio corectamente\n");
-			free(buffer);
+			return;
 		}
+		base = aux_seg->dir_logica;
+		resp = almacenar_bytes(id_proc, base, offset, tam, buffer);
+		if (resp == MEM_OVERLOAD){
+			txt_write_in_file(consola_file_log,"	MEMORY OVERLOAD\n");
+		}else
+			txt_write_in_file(consola_file_log,"	Se escribio corectamente\n");
+		free(buffer);
 	}
 }
 
@@ -773,16 +844,16 @@ void imp_tablas_segmentos(int32_t id_prog){
 	pthread_mutex_lock(&mutex_list_seg);
 
 	if (id_prog == 0){//imprimo todos los segementos de los programas
-		if(list_is_empty(list_seg)){
+		if(list_is_empty(list_seg))
 			txt_write_in_file(consola_file_log,"Lista de segmentos vacia\n");
-		}else{
+		else{
 			txt_write_in_file(consola_file_log,"	TIPO	|ID	|DIR_F	|TAM	|DIR_L\n");
 			list_iterate(list_seg, (void *)imp_seg);
 		}
 	}else{//imprimo los segementos de un programa especifico
-		if (list_find(list_seg, (void*)_es_del_proc) ==NULL){//si el programa no existe
+		if (list_find(list_seg, (void*)_es_del_proc) == NULL)//si el programa no existe
 			txt_write_in_file(consola_file_log,"	El proceso no existe\n");
-		}else{//si existe el programa imprimo sus segmentos
+		else{//si existe el programa imprimo sus segmentos
 			txt_write_in_file(consola_file_log,"	TIPO	|ID	|DIR_F	|TAM	|DIR_L\n");
 			txt_write_in_file(consola_file_log,"	");
 			list_iterate(list_filter(list_seg, (void*)_es_del_proc), (void *)imp_seg);
@@ -844,7 +915,7 @@ void imp_cont_mem_prin(){
 		pthread_mutex_lock(&mutex_mem_prin);
 		txt_write_in_file(consola_file_log,"	");
 		for(i=offset;i<(offset+tam);i++){
-			logear_int(consola_file_log,mem_prin[i]);
+			logear_char(consola_file_log,mem_prin[i]);
 			txt_write_in_file(consola_file_log,"-");
 		}
 		txt_write_in_file(consola_file_log,"\n");
@@ -900,8 +971,19 @@ void traducir_tipo_men_bytes_y_logear(int32_t tipo){
 }
 
 void logear_int(FILE* destino,int32_t un_int){
-	char * aux_string;
-	aux_string = string_itoa(un_int);
+	char *aux_string = string_itoa(un_int);
 	txt_write_in_file(destino,aux_string);
 	free(aux_string);
+}
+
+void logear_char(FILE* destino,char un_char){
+	if (un_char == '\0'){
+		char *aux_string = "\\0";
+		txt_write_in_file(destino, aux_string);
+	}else{
+		char *aux_string = string_itoa((int)un_char);
+		txt_write_in_file(destino, aux_string);
+		free(aux_string);
+	}
+	txt_write_in_file(destino,"-");
 }
