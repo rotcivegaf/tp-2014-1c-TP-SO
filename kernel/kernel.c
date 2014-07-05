@@ -13,7 +13,7 @@ pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
-int32_t quit_sistema = 1; //Y estoooo? ademas, no seria int?
+int32_t quit_sistema = 1; //no seria int?
 t_list *dispositivos_IO;
 
 int main(void){
@@ -82,16 +82,20 @@ void *plp(t_param_plp *param_plp){
 	int32_t i; //aca no es int tmb?
 	while(quit_sistema){
 		read_fds = master; // Copia el conjunto maestro al temporal
-		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) { //esto no es espera activa??
 			perror("PLP-select");
 			exit(1);
 		}
 		for(i = 3; i <= fdmax; i++) { //Por qué i empieza en 3?
+
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
+
 				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
+
 					prog_new_fd = socket_accept(listener_prog);
 					handshake_prog(prog_new_fd);
 					FD_SET(prog_new_fd, &master);
+
 					if (prog_new_fd > fdmax) // Actualiza el socket maximo
 						fdmax = prog_new_fd;
 
@@ -493,7 +497,7 @@ void *manejador_exit(){
 	t_men_comun *men; //por que creas esto aca, si podes llegar a no usarlo? No se deberia crear dentro del if de fin de ejecucion?
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_exit);
-		if (queue_is_empty(colas->cola_exit)){
+		if (queue_is_empty(colas->cola_exit)){ //aca no hay espera activa??
 			pthread_mutex_unlock(&mutex_exit);
 			sem_decre(&cont_exit); //por que se decrementa aca y no en el else? No se deberia incrementar aca?
 		}else{
