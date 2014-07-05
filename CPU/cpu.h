@@ -73,6 +73,8 @@ void parsearUnaInstruccion(char* unaIns);
 void parsearUltimaInstruccion(char* ultIns, int socketKernel);
 void errorDeProxInstruccion(int socketKernel);
 char* solicitarProxSentenciaAUmv();
+void preservarContexto();
+void finalizarContexto();
 
 
 //primitivas anSISOP

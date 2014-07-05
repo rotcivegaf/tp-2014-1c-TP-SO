@@ -274,6 +274,11 @@ void preservarContexto(){
 
 }
 
+void finalizarContexto(){
+	t_men_quantum_pcb *fin_ej= crear_men_quantum_pcb(FIN_EJECUCION,0, pcb);
+	socket_send_quantum_pcb(socketKernel, fin_ej);
+	destruir_men_quantum_pcb(fin_ej);
+}
 //Primitivas ANSISOP
 
 
@@ -285,13 +290,15 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	char* buffer = malloc(1);
 	buffer = string_itoa(identificador_variable);
 	t_men_cpu_umv *alm_bytes = crear_men_cpu_umv(ALM_BYTES, base, offset,tam , buffer);
+	send_men_cpu_umv(socketUmv, alm_bytes);
+	destruir_men_cpu_umv(alm_bytes);
 	free(buffer);
 
 
 	dictionary_put(*dic_Variables, identificador_variable, itoa(offset));
 	(pcb->cant_var_contexto_actual) ++;
 
-	printf("definir la variable %c\n",identificador_variable);
+	printf("Definir la variable %c en la posicion %c\n",identificador_variable, offset);
 	return offset;
 }
 
@@ -424,11 +431,10 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	preservarContexto();
 
 
-	pcb->dir_primer_byte_umv_contexto_actual = ;
 	pcb->cant_var_contexto_actual = 0;
+	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+1;
 
-
-	pcb->program_counter = irAlLabel(etiqueta);
+	irAlLabel(etiqueta);
 
 	/* Modifica las estructuras correspondientes para mostrar un nuevo contexto vacío.
 	* Los parámetros serán definidos luego de esta instrucción de la misma manera que una variable local, con identificadores numéricos empezando por el 0.
@@ -464,9 +470,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	free(buffer);
 
 	pcb->cant_var_contexto_actual = 0;
-	pcb->dir_primer_byte_umv_contexto_actual;
-	pcb->program_counter = 0;
-
+	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+1;
 	irAlLabel(etiqueta);
 
 
@@ -474,37 +478,90 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 }
 
 void finalizar(void){
-	/* Cambia el Contexto de Ejecución Actual para
-	 * volver al Contexto anterior al que se está ejecutando,
-	 * recuperando el Cursor de Contexto Actual y el Program Counter previamente apilados en el Stack.
-	 * En caso de estar finalizando el Contexto principal (el ubicado al inicio del Stack),
-	 *  deberá finalizar la ejecución del programa.
+	base=pcb->dir_primer_byte_umv_contexto_actual;
+	offset= base -4;
+	tam=sizeof(int32_t);
 
-			 */
-	printf("Finalizando");
+	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	send_men_cpu_umv(socketUmv, sol_progcount);
+	destruir_men_cpu_umv(sol_progcount);
+
+	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
+	int32_t prog_counter = atoi(rec_progcount->dato);
+	pcb->program_counter= prog_counter;
+
+	offset= offset-4;
+
+	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	send_men_cpu_umv(socketUmv, sol_context);
+	destruir_men_cpu_umv(sol_context);
+
+	t_men_comun *rec_context= socket_recv_comun(socketUmv);
+	int32_t context = atoi(rec_context->dato);
+	pcb->dir_primer_byte_umv_contexto_actual = context;
+
+	if(pcb->dir_primer_byte_umv_contexto_actual == pcb->dir_primer_byte_umv_segmento_stack){
+
+	finalizarContexto();
+
+	}
+
+	printf("Finalizando el programa actual");
 }
 
 void retornar(t_valor_variable retorno){
-	/*Cambia el Contexto de Ejecución Actual para
-	 * volver al Contexto anterior al que se está
-	 * ejecutando, recuperando el Cursor de Contexto Actual,
-	 * el Program Counter y la direccion donde retornar,
-	 * asignando el valor de retorno en esta,
-	 * previamente apilados en el Stack.
 
-	 * @param	retorno	Valor a ingresar en la posicion corespondiente
+	base=pcb->dir_primer_byte_umv_contexto_actual;
+	offset= base -4;
+	tam=sizeof(int32_t);
 
-			 */
-	printf("Retornando valor de variable%d\n", retorno);
+	t_men_cpu_umv *sol_ret = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
+	send_men_cpu_umv(socketUmv, sol_ret);
+	destruir_men_cpu_umv(sol_ret);
+
+	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
+	int32_t dir_retorno = atoi(rec_ret->dato);
+
+
+	offset= offset-4;
+
+	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	send_men_cpu_umv(socketUmv, sol_progcount);
+	destruir_men_cpu_umv(sol_progcount);
+
+	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
+	int32_t prog_counter = atoi(rec_progcount->dato);
+	pcb->program_counter= prog_counter;
+
+	offset= offset-4;
+
+	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	send_men_cpu_umv(socketUmv, sol_context);
+	destruir_men_cpu_umv(sol_context);
+
+	t_men_comun *rec_context= socket_recv_comun(socketUmv);
+	int32_t context = atoi(rec_context->dato);
+	pcb->dir_primer_byte_umv_contexto_actual = context;
+
+	base = context;
+	offset= dir_retorno +1;
+	char* buffer = string_itoa(retorno);
+	t_men_cpu_umv *alm_val = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
+	send_men_cpu_umv(socketUmv, alm_val);
+	destruir_men_cpu_umv(alm_val);
+
+	printf("Retornando valor de variable%d en la direccion %d\n", retorno, dir_retorno);
 }
 
 void imprimir(t_valor_variable valor_mostrar){
 	char *aux = string_itoa(valor_mostrar);
 	t_men_comun *men = crear_men_comun(IMPRIMIR_VALOR,aux ,string_length(aux));
 	socket_send_comun(socketKernel,men);
+
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_comun(socketKernel,men);
-	//destruir_t_mensaje(men);
+	destruir_men_comun(men);
+
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
@@ -512,9 +569,11 @@ void imprimir(t_valor_variable valor_mostrar){
 void imprimirTexto(char* texto){
 	t_men_comun *men = crear_men_comun(IMPRIMIR_TEXTO, texto,string_length(texto));
 	socket_send_comun(socketKernel,men);
+
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_comun(socketKernel,men);
-	//destruir_t_mensaje(men);
+	destruir_men_comun(men);
+
 	printf("Imprimiendo texto: %s", texto);
 	}
 
@@ -523,22 +582,28 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	char *cant_unidades = string_itoa(tiempo);
 	men = crear_men_comun(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
 	socket_send_comun(socketKernel,men);
-	//destruir_t_mensaje(men);
-	printf("Saliendo a entrada/salida en dispositivo por esta cantidad de tiempo\n");
+	destruir_men_comun(men);
+
+
 	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, mpcb);
+	destruir_men_quantum_pcb(mpcb);
+
+	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
 	t_men_comun *men = crear_men_comun(WAIT, identificador_semaforo,string_length(identificador_semaforo));
 	socket_send_comun(socketKernel,men);
-	//destruir_t_mensaje(men);
+	destruir_men_comun(men);
+
 	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
 }
 void mi_signal(t_nombre_semaforo identificador_semaforo){
 	t_men_comun *men = crear_men_comun(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
 	socket_send_comun(socketKernel,men);
-	//destruir_t_mensaje(men);
+	destruir_men_comun(men);
+
 	printf("Haciendo signal a semaforo%s\n", identificador_semaforo);
 
 }
