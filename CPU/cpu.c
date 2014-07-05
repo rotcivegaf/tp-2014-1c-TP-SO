@@ -121,31 +121,48 @@ return 0;
 
 void crearDiccionario(){
 	dic_Variables = dictionary_create();
-	//si el tamaño de contexto es distinto de cero
-	int32_t tam_contexto = pcb->cant_var_contexto_actual;
-	int32_t i = 0;
-	if (tam_contexto != 0){
-		// for (de tamaño de contexto a 0){
-		for(0;i<= tam_contexto; i++){
-			//pedir a umv, base= stack offset=(i-1)x5 tamanio=1
-			int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
-			int32_t offset = (i-1)*5 ;
-			int32_t tam = 1;
-			t_men_cpu_umv *m = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-			socket_send_cpu_umv(socketUmv, m);
-			destruir_men_cpu_umv(m);
 
-			//recibir de la umv key
-			t_men_cpu_umv *m = socket_recv_cpu_umv(socketUmv);
-			//dictionary_put(dicVariables,key, stack + (i-1))
-			dictionary_put(dic_Variables, (base + (i-1)),
-					//datoquemedevuelvelaumv
-					);
+	//si se trata de un programa con un  stack que ya tiene variables
+	int32_t tam_contexto = pcb->cant_var_contexto_actual;
+	int32_t i = 1;
+	if (tam_contexto > 0){//regenerar diccionario
+		while(i<=tam_contexto){
+			base = pcb->dir_primer_byte_umv_contexto_actual;
+			offset= (i-1)*5;
+			tam=1;
+
+			t_men_cpu_umv *sol_var = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+			socket_send_cpu_umv(socketUmv, sol_var);
+			destruir_men_cpu_umv(sol_var);
+
+			t_men_comun *rec_var = socket_recv_comun(socketUmv);
+			if(rec_var->tipo == CONEC_CERRADA){//manejar
+
+			}
+			char *key = malloc(rec_var->tam_dato);
+			key = rec_var->dato;
+			char *data = malloc(sizeof(string_itoa(base + offset)));
+			data = string_itoa(base + offset);
+
+			dictionary_put(dic_Variables, key, data);
+
+			destruir_men_comun(rec_var);
+			free(data);
+			free(key);
+
+
+			i++;
+
+
+
 		}
+
+		}
+
 
 	}
 
-}
+
 
 
 
