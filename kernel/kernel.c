@@ -1,5 +1,5 @@
 #include "kernel.h"
-
+//assdf
 int32_t soc_umv;
 t_colas *colas;  //colas de los cinco estados de los procesos
 t_queue *cola_cpu; //cola donde tengo los cpu conectados
