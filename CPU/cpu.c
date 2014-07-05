@@ -208,7 +208,7 @@ char* solicitarProxSentenciaAUmv(){
 	destruir_men_cpu_umv(sol_inst);
 
 	//recibir la instruccion a ejecutar
-	t_men_comun *rec_inst = socket_recv_cpu_umv(socketUmv);
+	t_men_comun *rec_inst = socket_recv_comun(socketUmv);
 
 	if(rec_inst->tipo == PROX_INSTRUCCION){
 		char* proxInst = rec_inst->dato;
@@ -225,7 +225,7 @@ void signal_handler(int sig){
 	got_usr1 =1;
 	t_men_quantum_pcb *m = crear_men_quantum_pcb(CPU_DESCONEC, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, m);
-	destruir_men_quantum_pcb(m);
+	destruir_quantum_pcb(m);
 
 	//t_men_cpu_umv *c = crear_men_cpu_umv(CAMBIO_PA, )
 	/*if(sig == SIGUSR1){
@@ -292,7 +292,7 @@ void preservarContexto(){
 		buffer = string_itoa(base);
 
 		t_men_cpu_umv *save_context = crear_men_cpu_umv(ALM_BYTES,base, offset, tam, buffer);
-		send_men_cpu_umv(socketUmv, save_context);
+		socket_send_cpu_umv(socketUmv, save_context);
 		destruir_men_cpu_umv(save_context);
 		//controlar stack overflow
 
