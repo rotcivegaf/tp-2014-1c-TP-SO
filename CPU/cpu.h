@@ -47,8 +47,8 @@
 	typedef  t_nombre_variable* t_nombre_compartida;
 	typedef  t_nombre_variable* t_nombre_dispositivo;
 
-
-
+struct sigaction sa;
+volatile sig_atomic_t got_usr1;
 t_dictionary *dic_Variables;
 t_pcb *pcb;
 t_dictionary dicVariables;

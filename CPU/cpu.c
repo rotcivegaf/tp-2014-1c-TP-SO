@@ -41,7 +41,11 @@ AnSISOP_kernel kernel_functions = {
 int main(){
 	prox_inst = malloc(0);
 	t_pcb *pcb = malloc(sizeof(t_pcb));
+	got_usr1 = 1;
 
+	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
+	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
+	sigemptyset(&sa.sa_mask); // conjunto de señales a bloquear durante la ejecucion del signal-catching function
 
 
 	t_config *unaConfig = config_create("config.conf");
@@ -68,7 +72,10 @@ int main(){
 		crearDiccionario();
 
 		/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
-		signal(SIGUSR1, signal_handler);
+		if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
+			perror(sigaction);
+			exit(1);
+		}
 
 		int32_t cantIns = 0;
 
@@ -198,25 +205,34 @@ char* solicitarProxSentenciaAUmv(){
 }
 
 void signal_handler(int sig){
-	if(sig == SIGUSR1){
-	printf("Le llego la señal sigusr");
+	got_usr1 =1;
+	t_men_quantum_pcb *m = crear_men_quantum_pcb(CPU_DESCONEC, 0, pcb);
+	socket_send_quantum_pcb(socketKernel, m);
+	destruir_men_quantum_pcb(m);
+
+	//t_men_cpu_umv *c = crear_men_cpu_umv(CAMBIO_PA, )
+	/*if(sig == SIGUSR1){
+	pid_t pid= getpid();
+	kill(pid, SIGUSR1);
+	printf("Le llego la señal sigusr"); // no es async safe
+	exit(1);
 	//desconectarse luego de la ejecucion actual dejando de dar servicio al sistema
 	//mandarle el pcb al pcp
 	//cerrar conexiones
 	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
-	//liberar memoria
+	//liberar memoria*/
 	}
 }
 
 void recibirUnPcb(){
 	t_men_quantum_pcb *m = socket_recv_quantum_pcb(socketKernel);
-	recv_pcb_del_kernel(m);
-}
+	if(m->tipo==CONEC_CERRADA){
+		//avisar al pcp
+	}else {
+		pcb = m->pcb;
+		quantum = m->quantum;
+	}
 
-
-void recv_pcb_del_kernel(t_men_quantum_pcb *men){
- pcb = men->pcb;
- quantum = men->quantum;
 }
 
 
