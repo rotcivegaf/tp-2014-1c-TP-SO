@@ -53,9 +53,9 @@ t_dictionary *dic_Variables;
 t_pcb *pcb;
 t_dictionary dicVariables;
 int socketKernel, socketUmv;
-t_men_comun *men;
-t_men_quantum_pcb *msj;
-t_men_cpu_umv *m;
+t_men_comun *men_comun;
+t_men_quantum_pcb *men_quantum_pcb;
+t_men_cpu_umv *men_cpu_umv;
 int32_t base, offset, tam;
 
 
