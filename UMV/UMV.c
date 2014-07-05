@@ -736,7 +736,7 @@ void operacion_memoria(char opcion){
 		txt_write_in_file(consola_file_log,", Buffer: ");
 		printf("Buffer:");
 		while ((i = getchar()) != '\n' && i != EOF);//esta linea es para limpiar el buffer, por que puede llegar a quedar un \n
-		buffer = malloc(tam);
+		buffer = malloc(tam+1);
 		txt_write_in_file(consola_file_log,fgets(buffer, tam+1, stdin));
 		txt_write_in_file(consola_file_log,"\n");
 
