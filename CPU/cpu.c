@@ -15,6 +15,7 @@ int socketKernel;
 int socketUmv;
 char *prox_inst;
 t_pcb *pcb;
+char* etiquetas;
 
 AnSISOP_funciones functions = {
 		.AnSISOP_definirVariable		= definirVariable,
@@ -55,6 +56,8 @@ int main(){
 	char *ipUmv=config_get_string_value(unaConfig, "IPKERNEL");
 
 
+
+
 	/*conexion con el kernel*/
 
 	handshake_kernel(puertoKernel, ipKernel);
@@ -62,6 +65,18 @@ int main(){
 	/*conexion con la umv*/
 	handshake_umv(puertoUmv, ipUmv);
 
+	etiquetas = NULL;
+
+	base =pcb->dir_primer_byte_umv_indice_etiquetas;
+	offset=0;
+	tam=pcb->tam_indice_etiquetas;
+	t_men_cpu_umv *sol_etiquetas = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
+	socket_send_cpu_umv(socketUmv, sol_etiquetas);
+	destruir_men_cpu_umv(sol_etiquetas);
+
+	t_men_comun *rec_etiq = socket_recv_comun(socketUmv);
+	etiquetas = malloc(rec_etiq->tam_dato);
+	etiquetas = rec_etiq->dato;
 
 	while(1){
 
@@ -195,6 +210,10 @@ void parsearUnaInstruccion(char* unaIns){
 
 char* solicitarProxSentenciaAUmv(){
 	char* proxInst = NULL;
+
+
+
+
 
 	//mandarle a la umv el cambio de proceso activo  pcb->id
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
@@ -345,7 +364,7 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	t_puntero posicion;
 	char *key = string_itoa(identificador_variable);
 	t_hash_element *e = dictionary_get(dic_Variables,key);
-	//char* data = *dictionary_get(*dic_Variables, t_nombre_variable);
+
 
 	if (e->data == NULL){
 		posicion = -1;
@@ -439,24 +458,20 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	}
 
 
-void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){
+void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){//revisar
 
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
-	base = pcb->dir_primer_byte_umv_indice_etiquetas
 
-	t_puntero_instruccion *etiqueta= metadata_buscar_etiqueta(t_nombre_etiqueta, pcb->dir_primer_byte_umv_indice_etiquetas, pcb->tam_indice_etiquetas);
-	offset= etiqueta;
-	t_men_comun *m = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, m);
-	destruir_men_cpu_umv(m);
 
-	// faltaria que hacer con la posicion de la etiqueta, no estoy segura que esta bien
+	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(t_nombre_etiqueta, etiquetas, pcb->tam_indice_etiquetas);
 
-	/* Cambia la linea de ejecucion a la correspondiente de la etiqueta buscada.
-			 * @sintax	TEXT_GOTO (goto )
-			 * @param	t_nombre_etiqueta	Nombre de la etiqueta
-			 * @return	void
-			 */
+	if(pos_etiqueta != -1){
+		pcb->program_counter = pos_etiqueta;
+	}else{
+		printf("Hubo un error en la busqueda de la etiqueta /n");
+	}
+
+
 	printf("Yendo al label %s\n", t_nombre_etiqueta);
 
 }
