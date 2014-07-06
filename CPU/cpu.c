@@ -73,7 +73,7 @@ int main(){
 
 		/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
 		if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
-			perror(sigaction);
+			//perror(sigaction);
 			exit(1);
 		}
 
@@ -239,7 +239,7 @@ void signal_handler(int sig){
 	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
 	//liberar memoria*/
 	}
-}
+
 
 void recibirUnPcb(){
 	t_men_quantum_pcb *m = socket_recv_quantum_pcb(socketKernel);
@@ -300,7 +300,7 @@ void preservarContexto(){
 		offset = offset + 4;
 		buffer = string_itoa(pcb->program_counter);
 		t_men_cpu_umv *save_proxins = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-		send_men_cpu_umv(socketUmv, save_proxins);
+		socket_send_cpu_umv(socketUmv, save_proxins);
 		destruir_men_cpu_umv(save_proxins);
 
 		free(buffer);
@@ -310,7 +310,7 @@ void preservarContexto(){
 void finalizarContexto(){
 	t_men_quantum_pcb *fin_ej= crear_men_quantum_pcb(FIN_EJECUCION,0, pcb);
 	socket_send_quantum_pcb(socketKernel, fin_ej);
-	destruir_men_quantum_pcb(fin_ej);
+	destruir_quantum_pcb(fin_ej);
 }
 //Primitivas ANSISOP
 
@@ -323,12 +323,13 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	char* buffer = malloc(1);
 	buffer = string_itoa(identificador_variable);
 	t_men_cpu_umv *alm_bytes = crear_men_cpu_umv(ALM_BYTES, base, offset,tam , buffer);
-	send_men_cpu_umv(socketUmv, alm_bytes);
+	socket_send_cpu_umv(socketUmv, alm_bytes);
 	destruir_men_cpu_umv(alm_bytes);
 	free(buffer);
 
-
-	dictionary_put(*dic_Variables, identificador_variable, itoa(offset));
+	char* key= string_itoa(identificador_variable);
+	char* data = string_itoa(base + offset);
+	dictionary_put(dic_Variables, key, data);
 	(pcb->cant_var_contexto_actual) ++;
 
 	printf("Definir la variable %c en la posicion %c\n",identificador_variable, offset);
@@ -343,7 +344,7 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	 *
 	 * no me funciona
 	 * */
-	t_puntero posicion ;
+	t_puntero posicion;
 	char* data = *dictionary_get(*dic_Variables, t_nombre_variable);
 	if (data == NULL){
 		posicion = -1;
@@ -370,13 +371,14 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	int32_t offset = 1 + direccion_variable; // son los cuatro bytes siguientes a la variable
 	int32_t tam= sizeof(int32_t);
 
-	t_men_cpu_umv *sol_val = *crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
+	t_men_cpu_umv *sol_val = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
 
-	send_men_cpu_umv(socketUmv, *sol_val);
+	socket_send_cpu_umv(socketUmv,sol_val);
+	destruir_men_cpu_umv(sol_val);
 
 	//recibir de umv 4 bytes de valor_variable
 
-	*men_comun = socket_recv_comun(socketUmv);
+	t_men_comun *men_comun = socket_recv_comun(socketUmv);
 
 	if (men_comun->tipo == R_SOL_BYTES){
 
@@ -397,7 +399,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	char* buffer = malloc(tam);
 	buffer = string_itoa(valor);
 	t_men_cpu_umv  *men_asig= crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	send_men_cpu_umv(socketUmv, men_asig);
+	socket_send_cpu_umv(socketUmv, men_asig);
 	destruir_men_cpu_umv(men_asig);
 
 	//cambiar va
@@ -620,7 +622,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 
 	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, mpcb);
-	destruir_men_quantum_pcb(mpcb);
+	destruir_quantum_pcb(mpcb);
 
 	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
 }
