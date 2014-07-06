@@ -48,7 +48,22 @@ int main(void){
 	pthread_join(hilo_plp, NULL);
 	pthread_join(hilo_pcp, NULL); //Por qué no hay un pthread_join(hilo_imp_colas, NULL)?
 	
-	free(param_plp); //Por qué no hace un free(param_pcp)? Y no falta hacer free de colas, cola_cpu(y de todas los cpus) y dispositivos_IO?
+	free(param_plp->puerto_prog);
+	free(param_plp->puerto_umv);
+	free(param_plp->ip_umv);
+	free(param_plp);
+	free(param_pcp->puerto_cpu);
+	free(param_pcp->semaforos);
+	free(param_pcp->valor_semaforos);
+	free(param_pcp->variables_globales);
+	queue_destroy(param_pcp->cola_IO);
+	queue_destroy(colas->cola_block);
+	queue_destroy(colas->cola_exec);
+	queue_destroy(colas->cola_exit);
+	queue_destroy(colas->cola_new);
+	queue_destroy(colas->cola_ready);
+	queue_destroy(cola_cpu);
+	list_destroy(dispositivos_IO);
 	return EXIT_SUCCESS;
 }
 
@@ -82,11 +97,11 @@ void *plp(t_param_plp *param_plp){
 	int32_t i; //aca no es int tmb?
 	while(quit_sistema){
 		read_fds = master; // Copia el conjunto maestro al temporal
-		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) { //esto no es espera activa??
+		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PLP-select");
 			exit(1);
 		}
-		for(i = 3; i <= fdmax; i++) { //Por qué i empieza en 3?
+		for(i = 3; i <= fdmax; i++) {
 
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
 
@@ -109,6 +124,7 @@ void *plp(t_param_plp *param_plp){
 						mover_pcb_exit(i);
 						socket_cerrar(i);
 						FD_CLR(i, &master); // Elimina al socket del conjunto maestro
+						destruir_men_comun(men_cod_prog);
 						break;
 					}
 
@@ -120,14 +136,13 @@ void *plp(t_param_plp *param_plp){
 
 					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
 
-						//Avisa a la umv para que destruya los seg creados y al prog
+						//Avisa al programa que no hay memoria
 						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
 						men_no_hay_mem->tipo = MEM_OVERLOAD;
 						men_no_hay_mem->dato = string_itoa(contador_prog);
-						socket_send_comun(soc_umv, men_no_hay_mem); //ojo que hay que sincronizar los mensj con la umv
 						socket_send_comun(i, men_no_hay_mem);
-						free(men_no_hay_mem);
-						//free(resp_sol) porque dentro de solicitar_mem se hace un malloc
+						destruir_men_comun(men_no_hay_mem);
+						free(resp_sol);
 
 					}else{
 
@@ -142,6 +157,7 @@ void *plp(t_param_plp *param_plp){
 						pthread_mutex_unlock(&mutex_new);
 						pthread_mutex_unlock(&mutex_miltiprog);
 					}
+					destruir_men_comun(men_cod_prog);
 				}
 			}
 		}
@@ -216,10 +232,12 @@ void *pcp(t_param_pcp *param_pcp){
 							queue_push(colas->cola_exit, aux_pcb_otros);
 							sem_incre(&cont_exit);
 							pthread_mutex_unlock(&mutex_exit);
+							destruir_men_comun(men);
 						}
-						//aca no deberia hacer un free con el cpu que se desconecta y fijarse si la cola de cpus queda vacia?
+						free(aux_cpu); // todo ver si no hay que hacer el lock de cpu_cola_vacia
 						socket_cerrar(i);
 						FD_CLR(i, &master);
+						destruir_men_comun(men_cpu);
 						continue;
 					}
 					if (men_cpu->tipo == FIN_QUANTUM){
@@ -229,7 +247,7 @@ void *pcp(t_param_pcp *param_pcp){
 							// Saca el pcb de la cola de ejec a partir del id
 							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
-							// Actualiza el pcb
+							// Actualiza el pcb(todo correguir!)
 							(aux_pcb_otros->pcb) = (socket_recv_quantum_pcb(i)->pcb);
 
 							// Setea en la estructura del cpu como que no esta ejecutando nada
@@ -247,6 +265,8 @@ void *pcp(t_param_pcp *param_pcp){
 							pthread_mutex_unlock(&mutex_uso_cola_cpu);
 							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						}
+						destruir_men_comun(men_cpu);
+						continue;
 					}
 					/*
 					 * Primero recibe un msj con el id de la llamada al sistema y el valor,
@@ -257,10 +277,12 @@ void *pcp(t_param_pcp *param_pcp){
 						t_men_comun *aux_men_cpu = socket_recv_comun(i);
 						if (aux_men_cpu->tipo != ID_PROG)
 							printf("Se esperaba el tipo de dato %i y se obtuvo %i\n",ID_PROG,men_cpu->tipo);
-						t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); // mepa que este malloc ya esta hecho dentro de get_pcb_otros_exec_sin quitarlo
+						t_pcb_otros *aux_pcb_otros;
 						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
 						socket_send_comun(aux_pcb_otros->n_socket, aux_men_cpu);
-						continue; //aca habria que hacer free(aux_pcb_otros)
+						//todo habria que mandarle un msj a la cpu de que termino la llamada asi sigue procesando, seria mejor
+						destruir_men_comun(aux_men_cpu); //cuidado, quizas destruye los datos antes que el programa los reciba etc
+						continue;
 					}
 
 					if (men_cpu->tipo == IO_ID){
@@ -278,7 +300,7 @@ void *pcp(t_param_pcp *param_pcp){
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //por que hace un malloc si los pcb existen, cuando se los creo se pidio memoria. Y si esta bien, en el print del error no deberia haber un free?
+	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 
 	pthread_mutex_lock(&mutex_exec);
@@ -293,14 +315,15 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	//pthread_mutex_unlock(&mutex_exec);
+	pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
 
 int32_t mover_pcb_exit(int32_t soc_prog){
 	int32_t i;
-	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros)); //por que hace un malloc si los pcb existen, cuando se los creo se pidio memoria.
+	t_pcb_otros *aux;
+
 	pthread_mutex_lock(&mutex_new);
 	for(i=0; i < queue_size(colas->cola_new) ;i++){
 		aux = queue_pop(colas->cola_new);
@@ -315,6 +338,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		queue_push(colas->cola_new, aux);
 	}
 	pthread_mutex_unlock(&mutex_new);
+
 	pthread_mutex_lock(&mutex_ready);
 	for(i=0; i < queue_size(colas->cola_ready) ;i++){
 		aux = queue_pop(colas->cola_ready);
@@ -323,13 +347,15 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_ready);
-			//pthread_mutex_lock(&mutex_ready_vacia); Aca mepa que deberia haber un if para ver si esta vacia la cola ready y ahi hacer el lock
+			if(queue_size(colas->cola_ready)==0)
+				pthread_mutex_lock(&mutex_ready_vacia);
 			sem_incre(&cont_exit);
 			return 0;
 		}
 		queue_push(colas->cola_ready, aux);
 	}
 	pthread_mutex_unlock(&mutex_ready);
+
 	pthread_mutex_lock(&mutex_block);
 	for(i=0; i < queue_size(colas->cola_block) ;i++){
 		aux = queue_pop(colas->cola_block);
@@ -344,6 +370,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		queue_push(colas->cola_block, aux);
 	}
 	pthread_mutex_unlock(&mutex_block);
+
 	pthread_mutex_lock(&mutex_exec);
 	for(i=0; i < queue_size(colas->cola_exec) ;i++){
 		aux = queue_pop(colas->cola_exec);
@@ -363,7 +390,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 
 t_cpu *get_cpu(int32_t soc_cpu){
 	int32_t i;
-t_cpu *cpu = malloc(sizeof(t_cpu)); //si ya esta creado el cpu, por que hay que pedir memoria (idem pcb)? Y si esta bien, ojo que en algun lado hay que hacer un free.
+	t_cpu *cpu;
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	int32_t tam = queue_size(cola_cpu);
 
@@ -371,21 +398,23 @@ t_cpu *cpu = malloc(sizeof(t_cpu)); //si ya esta creado el cpu, por que hay que 
 		cpu = queue_pop(cola_cpu);
 		if (cpu->soc_cpu == soc_cpu){
 			pthread_mutex_unlock(&mutex_uso_cola_cpu);
+			//si hay que bloquear cuando la cola cpu esta vacia, aca habria que hacer un if y bloquear, como lo anterior de ready
 			return cpu;
 		}
 		queue_push(cola_cpu, cpu);
 	}
-	//pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	printf("ERROR EN GET_CPU\n");
 	return NULL;
 }
 
 t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //idem, memoria de más. Y ojo que hay que hacer algun free.
+	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
+	int32_t tam = queue_size(colas->cola_exec);
 
 	pthread_mutex_lock(&mutex_exec);
-	for(i=0 ;i < queue_size(colas->cola_exec) ;i++){
+	for(i=0 ;i < tam ;i++){
 		aux_pcb_otros = queue_pop(colas->cola_exec);
 		if (id_proc == aux_pcb_otros->pcb->id){
 			pthread_mutex_unlock(&mutex_exec);
@@ -393,15 +422,15 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	//pthread_mutex_unlock(&mutex_exec);
+	pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
 
 void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	t_men_comun *men;
-	t_IO *aux_IO = malloc(sizeof(t_IO)); //por que hace este malloc si ya esta reservado cuando se lee el arch de config????
-	t_cpu *aux_cpu = malloc(sizeof(t_cpu)); //este malloc ya esta hecho dentro de get_cpu
+	t_IO *aux_IO;
+	t_cpu *aux_cpu;
 	aux_cpu = get_cpu(soc_cpu);
 
 	int32_t i;
@@ -413,7 +442,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 			i=list_size(dispositivos_IO);
 		}
 		else{
-			list_add_in_index(dispositivos_IO, i,aux_IO);
+			list_add(dispositivos_IO,aux_IO);
 		}
 	}
 
@@ -428,29 +457,27 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
 
-	//Recibo el pcb del cpu para actualizarlo, sacandolo de ejecucion y poniendolo en bloqueados.
+	//Recibo el pcb del cpu para actualizarlo y lo saco de la cola de ejecucion todo correguir tmb actualizacion
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 	aux_pcb_otros->pcb = (socket_recv_quantum_pcb(soc_cpu)->pcb);
 	aux_cpu->id_prog_exec = 0;
 
-	//Agrego esto porque al usar get_cpu, faltaba volver a poner el cpu en la cola
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 
-	//Bloqueo el proceso
+	//Pongo el pcb en bloqueados
 	pthread_mutex_lock(&mutex_block);
 	queue_push(colas->cola_block,aux_pcb_otros);
 	pthread_mutex_unlock(&mutex_block);
-
+	destruir_men_comun(men);
 }
 
 t_pcb_otros *get_peso_min(){
 	int32_t i, peso_min = -1;
-	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros));//idem lo de malloc de mas
+	t_pcb_otros *aux;
 
-	//pthread_mutex_lock(&mutex_new);
 	int32_t tam_cola = queue_size(colas->cola_new);
 
 	for (i=0;i < tam_cola;i++){
@@ -462,39 +489,16 @@ t_pcb_otros *get_peso_min(){
 	for (i=0;i < tam_cola;i++){
 		aux = queue_pop(colas->cola_new);
 		if (peso_min == aux->peso)
-			//pthread_mutex_unlock(&mutex_new);
 			return aux;
 		queue_push(colas->cola_new,aux);
 	}
-	//pthread_mutex_unlock(&mutex_new);
 	return NULL;
 }
 
-void *entrar_IO(t_param_IO *param){ //esto no se usa nunca
-	int32_t	total = param->retardo* param->cant_unidades;
-	sleep(total);
-	int32_t i;
-
-	t_pcb_otros *aux_pcb_otros = malloc(sizeof(t_pcb_otros)); //idem, malloc de más
-	pthread_mutex_lock(&mutex_block);
-	for( i=0 ;i < queue_size(colas->cola_block) ;i++){
-		aux_pcb_otros = queue_pop(colas->cola_block);
-		if (aux_pcb_otros->pcb->id == param->id_proc){
-			pthread_mutex_lock(&mutex_ready);
-			queue_push(colas->cola_ready,aux_pcb_otros);
-			pthread_mutex_unlock(&mutex_ready);
-			//pthread_mutex_unlock(&mutex_ready_vacia);  Y además no tendria que terminar para no acer ciclos al pedo?? Si termina, ojo con desbloquear cola block
-		}
-		queue_push(colas->cola_block, aux_pcb_otros);
-	}
-	pthread_mutex_unlock(&mutex_block);
-	return NULL;
-}
-
-void *manejador_exit(){
-	t_pcb_otros *aux_pcb_otros; //ves que aca y en men no haces el malloc y funca todo bien
+void *manejador_exit(){ //todo dudas en general
+	t_pcb_otros *aux_pcb_otros;
 	int32_t soc_prog;
-	t_men_comun *men; //por que creas esto aca, si podes llegar a no usarlo? No se deberia crear dentro del if de fin de ejecucion?
+
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_exit);
 		if (queue_is_empty(colas->cola_exit)){ //aca no hay espera activa??
@@ -503,14 +507,15 @@ void *manejador_exit(){
 		}else{
 			aux_pcb_otros = queue_pop(colas->cola_exit);
 			pthread_mutex_unlock(&mutex_exit);
-			if (aux_pcb_otros->tipo_fin_ejecucion == CPU_DESCONEC){ //por que no se contemplan otros tipos de fin de ejecucion?
+			if (aux_pcb_otros->tipo_fin_ejecucion == CPU_DESCONEC ||aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION ){
+				t_men_comun *men;
 				men = crear_men_comun(aux_pcb_otros->tipo_fin_ejecucion,"",1);
 				soc_prog = aux_pcb_otros->n_socket;
 				socket_send_comun(soc_prog , men);
 			}
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
-			free(aux_pcb_otros->pcb); //por que hace este free aca? no lo deberia hacer la umv? Porque si todavia no lo destruyo, vos borras el puntero
-			free (aux_pcb_otros);
+			free(aux_pcb_otros->pcb); //sincronizar, que la umv mande msj cuando termino de destruir los segmentos y recien ahi destruir el pcb
+			free(aux_pcb_otros);
 		}
 	}
 	return NULL;
@@ -525,22 +530,23 @@ void *manejador_new_ready(t_param_new_ready *param){
 		}else{
 			pthread_mutex_unlock(&mutex_new);
 			sem_decre(&libre_multiprog); //no entiendo por qué se decrementa aca
-			pthread_mutex_lock(&mutex_new); //me parece más copado hacer esto dentro de get_peso_min para que este menos tiempo bloqueada la cola
+			pthread_mutex_lock(&mutex_new);
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, get_peso_min());
-			pthread_mutex_unlock(&mutex_new); //habria que sacarlo
+			pthread_mutex_unlock(&mutex_new);
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_ready_vacia);
 			sem_incre(&buff_multiprog);
 		}
 	}
-	return NULL; //no tiene que hacer free(param)?
+	free(param);
+	return NULL;
 }
 
 void *manejador_ready_exec(t_param_ready_exec *param){
 	t_pcb_otros *aux_pcb_otros;
-	t_cpu *cpu = malloc(sizeof(t_cpu)); //idem, malloc de más
-	int32_t res; //aca no tiene que haber un malloc? Si tiene que estar, acordarse de hacer un free antes de terminar.
+	t_cpu *cpu;
+	int32_t res;
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_ready);
 		if (queue_is_empty(colas->cola_ready)){
@@ -552,7 +558,6 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 			cpu = get_cpu_libre(&res);
 			if(res == 0){
 				pthread_mutex_unlock(&mutex_ready);
-				//queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
 				pthread_mutex_lock(&mutex_cola_cpu_vacia);
 
@@ -574,30 +579,29 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 	return NULL;
 }
 
-t_cpu *get_cpu_libre(int32_t *res){
+t_cpu *get_cpu_libre(int32_t *res){ //todo aca los mutex de la cpu no se ponen porque estan puestos afuera
 	int32_t i;
-	t_cpu *cpu = malloc(sizeof(t_cpu)); //idem, malloc de mas
-	//pthread_mutex_lock(&mutex_uso_cola_cpu);
+	t_cpu *cpu;
+
 	int32_t tam = queue_size(cola_cpu);
 	for(i=0 ;i < tam ;i++){
 		cpu = queue_pop(cola_cpu);
 		if (cpu->id_prog_exec == 0){
 			*res = 1;
-			//pthread_mutex_unlock(&mutex_uso_cola_cpu);
 			return cpu;
 		}
 		queue_push(cola_cpu, cpu);
 	}
 	*res = 0;
-	//pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	return cpu;
 }
 
 void umv_destrui_pcb(int32_t id_pcb){ //ojo que hay que sincronizar los mensajes con la umv
 
-	t_men_seg *men_seg; //ves que aca no hace el malloc y funca :D
+	t_men_seg *men_seg;
 	men_seg = crear_men_seg(DESTR_SEGS, id_pcb, 0);
 	socket_send_seg(soc_umv, men_seg);
+	destruir_men_seg(men_seg);
 }
 
 t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t *contador_id_programa){
@@ -610,8 +614,8 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 
 	// Escribe el segmento de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
-	men = crear_men_comun(ALM_SEG_COD,men_cod_prog->dato,men_cod_prog->tam_dato); //declarar ALM_SEG_COD
-	socket_send_comun(soc_umv, men_cod_prog);
+	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
+	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de etiquetas
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
@@ -621,7 +625,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	// Escribe el segmento de indice de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
-	men = crear_men_comun(IND_COD,metadata_program->instrucciones_serializado,tam_ind_cod);
+	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
 	socket_send_comun(soc_umv, men_cod_prog);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
@@ -635,6 +639,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	pcb->cant_var_contexto_actual = 0;
 	pcb->tam_indice_etiquetas = metadata_program->etiquetas_size;
 
+	destruir_men_comun(men);
 	return pcb;
 }
 
@@ -653,7 +658,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 	if (resp_men_cod->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		//free(resp_mem_cod);
+		destruir_men_comun(resp_men_cod);
+		destruir_men_seg(ped_mem);
 		return resp_sol;
 	}
 
@@ -671,6 +677,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	resp_mem = socket_recv_comun(soc_umv);
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
+		destruir_men_comun(resp_mem);
+		destruir_men_seg(ped_mem);
 		return resp_sol;
 	}
 
@@ -687,7 +695,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		//free(resp_mem);
+		destruir_men_comun(resp_mem);
+		destruir_men_seg(ped_mem);
 		return resp_sol;
 	}
 
@@ -703,7 +712,8 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		//free(resp_mem);
+		destruir_men_comun(resp_mem);
+		destruir_men_seg(ped_mem);
 		return resp_sol;
 	}
 
@@ -712,21 +722,14 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 	t_dir_mem dir_mem_stack = atoi(resp_mem->dato);
 	resp_sol->dir_primer_byte_umv_segmento_stack = dir_mem_stack;
-	//free(resp_mem);
+	destruir_men_comun(resp_mem);
+	destruir_men_seg(ped_mem);
 	return resp_sol;
 }
 
 int32_t calcular_peso(t_men_comun *men_cod_prog){
-	//int32_t i;
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
-	/*char**cod_separado_por_lineas =  string_split(men_cod_prog->dato, "\n");
-	for(i=0;cod_separado_por_lineas[i] != '\0';i++);
-	int32_t cant_total_lineas_codigo = i;
-	int32_t cant_etiquetas = metadata_program->cantidad_de_etiquetas;
-	int32_t cant_funciones = metadata_program->cantidad_de_funciones;
-	return (5 * cant_etiquetas + 3 * cant_funciones + cant_total_lineas_codigo);*/
-
-	//free(men_cod_prog);
+	//todo aca no se hace free(men_cod_prog) porque esta hecho en el plp;
 	return (5 * (metadata_program->cantidad_de_etiquetas) + 3 * (metadata_program->cantidad_de_funciones) + (metadata_program->instrucciones_size));
 }
 
@@ -742,17 +745,13 @@ void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la um
 
 	if(mensaje_inicial->tipo == HS_UMV){
 		printf("UMV conectada\n");
-
 	}else{
-
 		printf("ERROR HANDSHAKE");
-
 	}
-	//free(mensaje_inicial);
+	destruir_men_comun(mensaje_inicial);
 }
 
 void manejador_IO(t_IO *io){
-
 	//Sincronizar acceso a la cola
 	t_IO_espera *proceso = queue_pop(io->procesos);
 	int32_t tamanio_cola_block = queue_size(colas->cola_block);
@@ -764,12 +763,10 @@ void manejador_IO(t_IO *io){
 	pthread_mutex_lock(&mutex_block);
 
 	for (i=0; i<tamanio_cola_block; i++){
-
-		t_pcb_otros *pcb_aux = malloc(sizeof(t_pcb_otros)); //malloc de mas
+		t_pcb_otros *pcb_aux;
 		pcb_aux =queue_pop(colas->cola_block);
 
 		if (pcb_aux->pcb->id==proceso->id_prog){
-
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, pcb_aux);
 			pthread_mutex_unlock(&mutex_ready);
@@ -778,18 +775,14 @@ void manejador_IO(t_IO *io){
 		}
 
 		else {
-
 			queue_push(colas->cola_block,pcb_aux);
 		}
 	}
 	pthread_mutex_unlock(&mutex_block);
-
 }
 
 void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){ //por que se usa esta funcion y no una de la biblio??
-
 	socket_send_quantum_pcb(soc,crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb));
-
 }
 
 t_datos_config *levantar_config(){
@@ -838,30 +831,24 @@ t_datos_config *levantar_config(){
 	printf("	ID    = ");
 
 	for (i=0; i < queue_size(ret->cola_IO); i++){
-
 		aux_IO = queue_pop(ret->cola_IO);
 		printf("%s ", aux_IO->id_hio);
 		queue_push(ret->cola_IO, aux_IO);
-
 	}
 
 	printf("\n	Sleep = ");
 
 	for (i=0; i < queue_size(ret->cola_IO); i++){
-
 		aux_IO = queue_pop(ret->cola_IO);
 		printf("%i ", aux_IO->hio_sleep);
 		queue_push(ret->cola_IO, aux_IO);
-
 	}
 
 	printf("\nSemaforos\n");
 
 	for (i=0; ret->semaforos[i] != '\0'; i++){
-
 		printf("	ID    = %s\n", ret->semaforos[i]);
 		printf("	Valor = %s\n", ret->valor_semaforos[i]);
-
 	}
 
 	printf("Varias\n");
@@ -872,16 +859,14 @@ t_datos_config *levantar_config(){
 	printf("Variables Globales\n");
 
 	for (i=0; ret->variables_globales[i] != '\0'; i++){
-
 		printf("	ID    = %s\n", ret->variables_globales[i]);
-
 	}
 
 	printf("------------------------------------------------------------------------------------\n\n");
 	return ret;
 }
 
-void handshake_cpu(int32_t soc){ //hay que sincronizar los mensajes con los cpus? Y con los programas??
+void handshake_cpu(int32_t soc){ //todo hay que sincronizar los mensajes con los cpus? Y con los programas??
 
 	t_men_comun *handshake;
 	handshake = socket_recv_comun(soc);
@@ -892,7 +877,7 @@ void handshake_cpu(int32_t soc){ //hay que sincronizar los mensajes con los cpus
 	handshake->tipo=HS_KERNEL;
 	socket_send_comun(soc,handshake);
 
-	//free(handshake);
+	destruir_men_comun(handshake);
 }
 
 void handshake_prog(int32_t soc){
@@ -906,13 +891,13 @@ void handshake_prog(int32_t soc){
 	men_hs->tipo = HS_KERNEL;
 	socket_send_comun(soc, men_hs);
 
-	//free(men_hs);
+	destruir_men_comun(men_hs);
 }
 
 void *imp_colas (){
 
 	int32_t i;
-	t_pcb_otros *aux = malloc(sizeof(t_pcb_otros)); //malloc de más!
+	t_pcb_otros *aux;
 
 	while(quit_sistema){
 
@@ -924,13 +909,10 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_new);
 
 		if (queue_is_empty(colas->cola_new)){
-
 			printf("*************COLA VACIA********************");
-
 		}else {
 
 			for(i=0; i < queue_size(colas->cola_new) ;i++){
-
 				aux = queue_pop(colas->cola_new);
 				printf("%i/%i - ",aux->pcb->id,aux->peso);
 				queue_push(colas->cola_new, aux);
@@ -946,18 +928,14 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_ready);
 
 		if (queue_is_empty(colas->cola_ready)){
-
-			//pthread_mutex_lock(&mutex_ready_vacia);
+			//pthread_mutex_lock(&mutex_ready_vacia) todo de esto ya se ocupan los otros hilos;
 			printf("*************COLA VACIA********************");
-
 		}else {
 
 			for(i=0; i < queue_size(colas->cola_ready) ;i++){
-
 				aux = queue_pop(colas->cola_ready);
 				printf(" %i  - ",aux->pcb->id);
 				queue_push(colas->cola_ready, aux);
-
 			}
 		}
 
@@ -970,17 +948,13 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_block);
 
 		if (queue_is_empty(colas->cola_block)){
-
 			printf("*************COLA VACIA********************");
-
 		}else {
 
 			for(i=0; i < queue_size(colas->cola_block) ;i++){
-
 				aux = queue_pop(colas->cola_block);
 				printf(" %i  - ",aux->pcb->id);
 				queue_push(colas->cola_block, aux);
-
 			}
 		}
 
@@ -993,17 +967,13 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_exec);
 
 		if (queue_is_empty(colas->cola_exec)){
-
 			printf("*************COLA VACIA********************");
-
 		}else {
 
 			for(i=0; i < queue_size(colas->cola_exec) ;i++){
-
 				aux = queue_pop(colas->cola_exec);
 				printf(" %i  - ",aux->pcb->id);
 				queue_push(colas->cola_exec, aux);
-
 			}
 		}
 
@@ -1016,17 +986,13 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_exit);
 
 		if (queue_is_empty(colas->cola_exit)){
-
 			printf("*************COLA VACIA********************");
-
 		}else {
 
 			for(i=0; i < queue_size(colas->cola_exit) ;i++){
-
 				aux = queue_pop(colas->cola_exit);
 				printf(" %i  - ",aux->pcb->id);
 				queue_push(colas->cola_exit, aux);
-
 			}
 		}
 
@@ -1041,32 +1007,25 @@ void *imp_colas (){
 }
 
 void crear_cont(sem_t *sem ,int32_t val_ini){
-
 	if(sem_init(sem, 0, val_ini)== -1){
-
 		perror("No se puede crear el semáforo");
 		exit(1);
-
 	}
 }
 
 void sem_decre(sem_t *sem){
 
 	if (sem_wait(sem) == -1){
-
 		perror("ERROR sem decrementar");
 		exit(1);
-
 	}
 }
 
 void sem_incre(sem_t *sem){
 
 	if (sem_post(sem) == -1){
-
 		perror("ERROR sem decrementar");
 		exit(1);
-
 	}
 }
 
@@ -1098,5 +1057,4 @@ t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
 	aux->variables_globales = diccionario_config->variables_globales;
 
 	return aux;
-
 }
