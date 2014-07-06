@@ -23,16 +23,9 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include "sockets_lib.h"
-//importar la shared library
 
 
 
-/*typedef struct{
-	char *puertoKernel;
-	char *ipKernel;
-	char *puertoUmv;
-	char *ipUmv;
-}t_datos_config;*/
 
 //Tipos de datos
 	typedef u_int32_t t_puntero;
@@ -47,18 +40,19 @@
 	typedef  t_nombre_variable* t_nombre_compartida;
 	typedef  t_nombre_variable* t_nombre_dispositivo;
 
-
-
+struct sigaction sa;
+volatile sig_atomic_t got_usr1;
 t_dictionary *dic_Variables;
 t_pcb *pcb;
-t_dictionary dicVariables;
 int socketKernel, socketUmv;
-t_men_comun *men_comun;
-t_men_quantum_pcb *men_quantum_pcb;
-t_men_cpu_umv *men_cpu_umv;
 int32_t base, offset, tam;
+int quantum;
+int quit_sistema = 1;
+char *prox_inst;
+char* etiquetas;
+int32_t fueFinEjecucion;
 
-
+void traerIndiceEtiquetas();
 void recibirUnPcb();
 void handshake_umv(char *ip_umv, char *puerto_umv);
 void handshake_kernel(char *ip_k, char *puerto_k);
@@ -70,7 +64,7 @@ void signal_handler(int sig);
 void crearDiccionario();
 void salirPorQuantum();
 void parsearUnaInstruccion(char* unaIns);
-void parsearUltimaInstruccion(char* ultIns, int socketKernel);
+
 void errorDeProxInstruccion(int socketKernel);
 char* solicitarProxSentenciaAUmv();
 void preservarContexto();
