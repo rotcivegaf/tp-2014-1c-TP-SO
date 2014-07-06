@@ -341,18 +341,19 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	/*
 	 * Se fija en el diccionario de variables la posicion
 	 * la posicion va a ser el data del elemento
-	 *
-	 * no me funciona
-	 * */
+	 */
 	t_puntero posicion;
-	char* data = *dictionary_get(*dic_Variables, t_nombre_variable);
-	if (data == NULL){
+	char *key = string_itoa(identificador_variable);
+	t_hash_element *e = dictionary_get(dic_Variables,key);
+	//char* data = *dictionary_get(*dic_Variables, t_nombre_variable);
+
+	if (e->data == NULL){
 		posicion = -1;
 		}else {
-			posicion= string_atoi(data);
+			posicion= atoi(e->data);
 		}
 
-	printf("La posicion de la variable %s es %d", identificador_variable, posicion);
+	printf("La posicion de la variable %c es %d", identificador_variable, posicion);
 
 	return posicion ;
 
