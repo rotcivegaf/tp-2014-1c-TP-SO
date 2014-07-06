@@ -51,6 +51,7 @@ int quit_sistema = 1;
 char *prox_inst;
 char* etiquetas;
 int32_t fueFinEjecucion;
+char *proc_id;
 
 void traerIndiceEtiquetas();
 void recibirUnPcb();

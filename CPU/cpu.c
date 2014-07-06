@@ -34,12 +34,11 @@ AnSISOP_kernel kernel_functions = {
 int main(){
 	prox_inst = malloc(0);
 	//t_pcb *pcb = malloc(sizeof(t_pcb));
-	got_usr1 = 1;
+	got_usr1 = 0;
 	etiquetas = NULL;
 	base=0;
 	offset=0;
 	tam = 0;
-
 
 
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
@@ -60,10 +59,18 @@ int main(){
 	/*conexion con la umv*/
 	handshake_umv(puertoUmv, ipUmv);
 
-	traerIndiceEtiquetas();
+	/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
+	if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
+			perror("sigaction");
+			exit(1);
+			}
 
 
-	while(quit_sistema){
+	while(!got_usr1){
+		traerIndiceEtiquetas();
+
+
+		while(quit_sistema){
 
 		/*recibe un pcb del kernel*/
 		recibirUnPcb();
@@ -71,11 +78,7 @@ int main(){
 		/*se crea un diccionario para guardar las variables del contexto*/
 		crearDiccionario();
 
-		/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
-		if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
-			//perror(sigaction);
-			exit(1);
-		}
+
 
 		char* proxInstrucc = solicitarProxSentenciaAUmv();
 
@@ -96,7 +99,7 @@ int main(){
 
 	socket_cerrar(socketKernel);
 	socket_cerrar(socketUmv);
-
+	}
 
 
 
@@ -136,6 +139,10 @@ void handshake_kernel(char *ip_k, char *puerto_k){
 
 
 void traerIndiceEtiquetas(){
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
+
 	base =pcb->dir_primer_byte_umv_indice_etiquetas;
 	offset=0;
 	tam=pcb->tam_indice_etiquetas;
@@ -162,6 +169,7 @@ void recibirUnPcb(){
 	}else {
 		pcb = m->pcb;
 		quantum = m->quantum;
+		proc_id= string_itoa(pcb->id);
 	}
 
 }
@@ -174,6 +182,11 @@ void crearDiccionario(){
 	int32_t i = 1;
 	if (tam_contexto > 0){//regenerar diccionario
 		while(i<=tam_contexto){
+			t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+			socket_send_cpu_umv(socketUmv, cambio_pa);
+			destruir_men_cpu_umv(cambio_pa);
+
+
 			base = pcb->dir_primer_byte_umv_contexto_actual;
 			offset= (i-1)*5;
 			tam=1;
@@ -221,6 +234,9 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	tam = sizeof(uint32_t)*4;
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 	t_men_cpu_umv *sol_inst = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
 	socket_send_cpu_umv(socketUmv, sol_inst);
 	destruir_men_cpu_umv(sol_inst);
@@ -261,21 +277,15 @@ void salirPorQuantum(){
 
 void signal_handler(int sig){
 	got_usr1 =1;
+
 	t_men_quantum_pcb *m = crear_men_quantum_pcb(CPU_DESCONEC, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, m);
 	destruir_quantum_pcb(m);
 
-	//t_men_cpu_umv *c = crear_men_cpu_umv(CAMBIO_PA, )
-	/*if(sig == SIGUSR1){
-	pid_t pid= getpid();
-	kill(pid, SIGUSR1);
-	printf("Le llego la señal sigusr"); // no es async safe
-	exit(1);
-	//desconectarse luego de la ejecucion actual dejando de dar servicio al sistema
-	//mandarle el pcb al pcp
-	//cerrar conexiones
-	//CONEC_CERRADA_SIGUSR1 para que me borren del diccionario
-	//liberar memoria*/
+	fueFinEjecucion = 1;
+
+	printf("Se recibio la SIGUSR1");
+
 	}
 
 
@@ -283,37 +293,45 @@ void signal_handler(int sig){
 
 void preservarContexto(){
 	// guardar en stack ptro contexto actual
-		base = pcb->dir_primer_byte_umv_contexto_actual;
-		offset = base + (pcb->cant_var_contexto_actual)+1;	// la posicion siguiente al ultimo valor de la ultima varaible
-		tam = sizeof(int32_t);
-		char * buffer = malloc(tam);
-		buffer = string_itoa(base);
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 
-		t_men_cpu_umv *save_context = crear_men_cpu_umv(ALM_BYTES,base, offset, tam, buffer);
-		socket_send_cpu_umv(socketUmv, save_context);
-		destruir_men_cpu_umv(save_context);
+	base = pcb->dir_primer_byte_umv_contexto_actual;
+	offset = base + (pcb->cant_var_contexto_actual)+1;	// la posicion siguiente al ultimo valor de la ultima varaible
+	tam = sizeof(int32_t);
+	char * buffer = malloc(tam);
+	buffer = string_itoa(base);
 
-		t_men_comun *r_con = socket_recv_comun(socketUmv);
-		if (r_con->tipo == R_ALM_BYTES){
+	t_men_cpu_umv *save_context = crear_men_cpu_umv(ALM_BYTES,base, offset, tam, buffer);
+	socket_send_cpu_umv(socketUmv, save_context);
+	destruir_men_cpu_umv(save_context);
+
+	t_men_comun *r_con = socket_recv_comun(socketUmv);
+	if (r_con->tipo == R_ALM_BYTES){
 			//program counter + 1 (siguiente instruccion a ejecutar)
-			offset = offset + 4;
-			buffer = string_itoa(pcb->program_counter);
-			t_men_cpu_umv *save_proxins = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-			socket_send_cpu_umv(socketUmv, save_proxins);
-			destruir_men_cpu_umv(save_proxins);
+		t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+		socket_send_cpu_umv(socketUmv, cambio_pa);
+		destruir_men_cpu_umv(cambio_pa);
 
-			t_men_comun *r_proxins = socket_recv_comun(socketUmv);
-			if(r_proxins->tipo == R_ALM_BYTES){
+		offset = offset + 4;
+		buffer = string_itoa(pcb->program_counter);
+		t_men_cpu_umv *save_proxins = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
+		socket_send_cpu_umv(socketUmv, save_proxins);
+		destruir_men_cpu_umv(save_proxins);
+
+		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
+		if(r_proxins->tipo == R_ALM_BYTES){
 				printf("Se almaceno correctamente el conexto");
 			}
-			if(r_proxins->tipo == MEM_OVERLOAD){
+		if(r_proxins->tipo == MEM_OVERLOAD){
 				printf("MEMORY OVERLOAD");
 				finalizarContexto();
 			}
 
-			free(buffer);
-		}
-		if(r_con->tipo == MEM_OVERLOAD){
+		free(buffer);
+	}
+	if(r_con->tipo == MEM_OVERLOAD){
 			printf("MEMORY OVERLOAD");
 			finalizarContexto();
 		}
@@ -333,6 +351,9 @@ void finalizarContexto(){
 
 
 t_puntero definirVariable(t_nombre_variable identificador_variable){
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 
 	base = pcb->dir_primer_byte_umv_contexto_actual;
 	offset= 1+ (pcb->cant_var_contexto_actual)*5 ;
@@ -396,8 +417,11 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 
 t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
-
 	t_valor_variable valor;
+
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable; // son los cuatro bytes siguientes a la variable
@@ -429,6 +453,10 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
+
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable;
 	int32_t tam = sizeof(t_valor_variable);
@@ -530,6 +558,9 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	preservarContexto();
 
 	// dir de retorno
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 
 	offset = offset + 4;
 	char* buffer = malloc(sizeof(int32_t));
@@ -561,6 +592,10 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 }
 
 void finalizar(void){
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
+
 	base=pcb->dir_primer_byte_umv_contexto_actual;
 	offset= base -4;
 	tam=sizeof(int32_t);
@@ -608,6 +643,10 @@ void finalizar(void){
 void retornar(t_valor_variable retorno){
 	int32_t dir_retorno = 0;
 	int32_t context = 0;
+
+	t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, 0, 0, 0, proc_id);
+	socket_send_cpu_umv(socketUmv, cambio_pa);
+	destruir_men_cpu_umv(cambio_pa);
 
 	base=pcb->dir_primer_byte_umv_contexto_actual;
 	offset= base -4;
@@ -662,6 +701,7 @@ void retornar(t_valor_variable retorno){
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
+
 
 	base = context;
 	offset= dir_retorno +1;
