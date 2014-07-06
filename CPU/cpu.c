@@ -115,22 +115,15 @@ int main(){
 
 				}
 
+
+	socket_cerrar(socketKernel);
+	socket_cerrar(socketUmv);
+
+	dictionary_destroy(dic_Variables);
+
+
+	return 0;
 	}
-	//}
-
-	//recv(socketKernel,pcb, sizeof(estructura_pcb),0);	recv(socketKernel, &quantum, sizeof(int), 0);
-
-	//crear diccionario de variables
-
-
-socket_cerrar(socketKernel);
-socket_cerrar(socketUmv);
-
-dictionary_destroy(dic_Variables);
-
-return 0;
-
-}
 
 
 
@@ -448,11 +441,13 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	t_men_comun *val_asignado = crear_men_comun(VALOR_ASIGNADO, c, sizeof(c));
 	socket_send_comun(socketKernel,var);
 	socket_send_comun(socketKernel, val_asignado);
+	destruir_men_comun(var);
+	destruir_men_comun(val_asignado);
 
 	//recibir el valor que le asigne
 	t_men_comun *ms = socket_recv_comun(socketKernel);
-	//char *dato = ms->dato;
 	t_valor_variable val = atoi(ms->dato);
+	destruir_men_comun(ms);
 	printf("Asignando a variable compartida %s el valor %d \n", variable, val);
 	return val;
 	}
@@ -515,7 +510,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	char* buffer = malloc(sizeof(int32_t));
 	buffer = string_itoa(donde_retornar);
 	t_men_cpu_umv *save_retorno = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	send_men_cpu_umv(socketUmv, save_retorno);
+	socket_send_cpu_umv(socketUmv, save_retorno);
 	destruir_men_cpu_umv(save_retorno);
 
 	free(buffer);
@@ -534,7 +529,7 @@ void finalizar(void){
 	tam=sizeof(int32_t);
 
 	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, sol_progcount);
+	socket_send_cpu_umv(socketUmv, sol_progcount);
 	destruir_men_cpu_umv(sol_progcount);
 
 	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
@@ -544,7 +539,7 @@ void finalizar(void){
 	offset= offset-4;
 
 	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, sol_context);
+	socket_send_cpu_umv(socketUmv, sol_context);
 	destruir_men_cpu_umv(sol_context);
 
 	t_men_comun *rec_context= socket_recv_comun(socketUmv);
@@ -567,7 +562,7 @@ void retornar(t_valor_variable retorno){
 	tam=sizeof(int32_t);
 
 	t_men_cpu_umv *sol_ret = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, sol_ret);
+	socket_send_cpu_umv(socketUmv, sol_ret);
 	destruir_men_cpu_umv(sol_ret);
 
 	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
@@ -577,7 +572,7 @@ void retornar(t_valor_variable retorno){
 	offset= offset-4;
 
 	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, sol_progcount);
+	socket_send_cpu_umv(socketUmv, sol_progcount);
 	destruir_men_cpu_umv(sol_progcount);
 
 	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
@@ -587,7 +582,7 @@ void retornar(t_valor_variable retorno){
 	offset= offset-4;
 
 	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	send_men_cpu_umv(socketUmv, sol_context);
+	socket_send_cpu_umv(socketUmv, sol_context);
 	destruir_men_cpu_umv(sol_context);
 
 	t_men_comun *rec_context= socket_recv_comun(socketUmv);
@@ -598,7 +593,7 @@ void retornar(t_valor_variable retorno){
 	offset= dir_retorno +1;
 	char* buffer = string_itoa(retorno);
 	t_men_cpu_umv *alm_val = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	send_men_cpu_umv(socketUmv, alm_val);
+	socket_send_cpu_umv(socketUmv, alm_val);
 	destruir_men_cpu_umv(alm_val);
 
 	printf("Retornando valor de variable%d en la direccion %d\n", retorno, dir_retorno);
