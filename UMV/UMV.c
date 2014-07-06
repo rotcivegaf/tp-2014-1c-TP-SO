@@ -14,7 +14,7 @@ FILE *umv_file_log;
 
 int32_t main(){
 	srand(time(0));
-	//creo los logs
+	//se crean los logs
 	umv_file_log = txt_open_for_append("./UMV/logs/umv.log");
 	txt_write_in_file(umv_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 	//crear configuracion y solicitar memoria
@@ -30,15 +30,18 @@ int32_t main(){
 
 	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
+	//se crea el hilo para la consola
 	pthread_create( &hilo_consola,  NULL,crearConsola,  NULL);
+	//se crea el hilo que atendera las coneccines
 	crear_hilo_detached(&hilo_conecciones, admin_conecciones,  NULL);
 
+	//se espera a que finalize el hilo consola
 	pthread_join( hilo_consola, NULL);
 
 	txt_write_in_file(umv_file_log,"Destruyo la lista de segmentos\n");
 	destruir_lista_segmento(list_seg);
 	config_destroy(ptrConfig);
-	txt_write_in_file(umv_file_log,"Destruyo la memoria principal\n");
+	txt_write_in_file(umv_file_log,"Libero la memoria principal\n");
 	free(mem_prin);
 
 	txt_write_in_file(umv_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
@@ -67,9 +70,11 @@ void *admin_conecciones(){
 	t_men_comun *men_hs;
 
 	while(quit_sistema){
+		//se recibe un mensaje y se espera
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
 		sleep(retardo);
+		//se clasifica el handshake y se crea el hilo correspondiente
 		switch(men_hs->tipo){
 		case CONEC_CERRADA:
 			printf("Socket nº%i desconectado",new_soc);
@@ -105,14 +110,16 @@ void *admin_conecciones(){
 
 void *admin_conec_kernel(){
 	t_men_seg *men_seg;
-
+	//se envia el handshake al kernel
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(soc_kernel,men_hs);
 	destruir_men_comun(men_hs);
 
 	while(quit_sistema){
+		//se recibe un mesaje y se aguarda
 		men_seg = socket_recv_seg(soc_kernel);
 		sleep(retardo);
+		//se clasifica el tipo de operacion
 		switch(men_seg->tipo){
 		case CONEC_CERRADA:
 			txt_write_in_file(umv_file_log,"El Kernel cerro la coneccion\n");
@@ -146,12 +153,13 @@ void *admin_conec_kernel(){
 }
 
 void gestionar_alm_seg(int32_t id_proc){
+	//se recibe el mensaje que se va a almacenar
 	t_men_comun *aux_men = socket_recv_comun(soc_kernel);
-
+	//se almacena, utilizando un semaforo para restringir el acceso a la lista de segmentos
 	pthread_mutex_lock(&mutex_list_seg);
 	almacenar_segmento(aux_men, id_proc);
 	pthread_mutex_unlock(&mutex_list_seg);
-
+	//se escribe el log
 	txt_write_in_file(umv_file_log,"Almaceno el segmento del proceso nº");
 	logear_int(umv_file_log,id_proc);
 	txt_write_in_file(umv_file_log," del tipo: ");
@@ -176,6 +184,7 @@ t_seg *buscar_segmento_tipo_seg(int32_t id_proc ,int32_t tipo_seg){
 	bool _es_el_proc_y_el_tipo_seg(t_seg *seg){
 		return (seg->tipo_seg == tipo_seg)&&(seg->id_proc == id_proc);
 	}
+	//se busca el segmento que conincida en id y tipo
 	t_seg *ret;
 	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
 
@@ -201,6 +210,7 @@ t_seg *buscar_segmento_dir_logica(int32_t id_proc, int32_t dir_logica){
 	bool _es_el_proc_y_el_tipo_seg(t_seg *seg){
 		return (seg->dir_logica == dir_logica)&&(seg->id_proc == id_proc);
 	}
+	//se busca el segmento que coincida con id y direccion logica
 	t_seg *ret;
 	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
 
@@ -231,9 +241,12 @@ void destruir_lista_segmento(t_list *lista_seg){
 
 void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 	t_men_comun *aux_men;
+	//se crea un segmento
 	int resp_dir_mem = crearSegmento(men_seg);
 	char *aux_string;
-
+	/*si no hay lugar para alguno de los segmentos, se eliminan
+	todos los segmentos de ese programa - si hay lugar le envia al
+	kernel la direccion logica asignada a ese segmento*/
 	if (resp_dir_mem == -1){
 		destruirSegmentos(men_seg->id_prog);
 		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
@@ -250,14 +263,16 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 void *admin_conec_cpu(t_param_conec_cpu *param){
 	t_men_cpu_umv *men_bytes;
 	int32_t proc_activo = 0, este_conectada = 1;
-
+	//se envia al CPU el handshake inicial
 	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
 	socket_send_comun(param->soc,men_hs);
 	destruir_men_comun(men_hs);
 
 	while(este_conectada){
+		//se recibe el mensaje y se espera
 		men_bytes = socket_recv_cpu_umv(param->soc);
 		sleep(retardo);
+		//se clasifica el mensaje que se recibe
 		switch(men_bytes->tipo){
 		case CONEC_CERRADA:
 			este_conectada = 0;
@@ -303,10 +318,11 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	txt_write_in_file(umv_file_log,", Tipo:");
 	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,"\n");
-
+	//se leen de memoria los bytes
 	bytes = solicitar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
 
 	txt_write_in_file(umv_file_log,"Respuesta solicitud bytes: ");
+	//se envia a la CPU un mensaje con los bytes o con segmentatio fault si se inteto acceder a una posicion fuera del rango
 	if (bytes == NULL){
 		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
@@ -336,7 +352,8 @@ char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam
 	txt_write_in_file(umv_file_log,", tamanio: ");
 	traducir_tipo_de_seg_y_logear(tam);
 	txt_write_in_file(umv_file_log,"\n");
-
+	/*se controla que donde se quiere acceder no supere el limite del segmento
+	si no hay problema se lee de memoria y se devuelven los bytes*/
 	if (aux_seg->tam_seg<(offset+tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
 		ret = NULL;
@@ -378,7 +395,8 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 
 	resp = almacenar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam, men_bytes->buffer);
 
-	if (resp==MEM_OVERLOAD){
+	//if (resp==MEM_OVERLOAD){
+	if (resp==SEGMEN_FAULT){
 		aux_men = crear_men_comun(resp,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
 	}else{
@@ -391,14 +409,17 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 
 int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam, char *buffer){
 	pthread_mutex_lock(&mutex_list_seg);
+	//se busca el segmento donde coincida la direccion logica con la base
 	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
 
 	int32_t pos = aux_seg->dir_fisica + offset;
-
+	/*se controla que donde se intenta acceder no supere el limite del segmento
+	si no hay problema se almacenan los bytes*/
 	if (aux_seg->tam_seg<(offset+tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
 		txt_write_in_file(umv_file_log,"Memory Overload\n");
-		return MEM_OVERLOAD;
+		return SEGMEN_FAULT;
+		//return MEM_OVERLOAD;
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],buffer,tam);
@@ -419,6 +440,8 @@ void ordenar_lista_seg_por_dir_fisica(){
 int32_t crearSegmento(t_men_seg *men_ped){
 	int resp;
 	pthread_mutex_lock(&mutex_list_seg);
+	//se busca espacio en memoria si no hay, se compacta, y si sigue sin haber se devuelve que no hay lugar
+
 	resp = buscar_espacio_mem_prin(men_ped->tam_seg);
 	if (resp==-1){
 		compactar();
@@ -429,6 +452,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 			return -1;
 		}
 	}
+	//se crea un nuevo segmento y se agrega un nodo a la lista de segmentos
 	t_seg *aux_seg = malloc(sizeof(t_seg));
 	switch(men_ped->tipo){
 	case PED_MEM_SEG_COD:
@@ -973,6 +997,7 @@ void logear_int(FILE* destino,int32_t un_int){
 	txt_write_in_file(destino,aux_string);
 	free(aux_string);
 }
+
 
 void logear_char(FILE* destino,char un_char){
 	if (un_char == '\0'){
