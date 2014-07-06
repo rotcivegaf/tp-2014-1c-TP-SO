@@ -12,11 +12,14 @@ pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
 int32_t quit_sistema = 1; //no seria int?
 t_list *dispositivos_IO;
+t_dictionary *diccionario_variables;
 
 int main(void){
+	diccionario_variables = dictionary_create();
 	t_datos_config *diccionario_config = levantar_config();
 
 	//Inicializacion semaforos
@@ -149,7 +152,7 @@ void *plp(t_param_plp *param_plp){
 						//Crea el pcb y lo pone en new
 						t_pcb_otros *pcb_otros = malloc(sizeof(t_pcb_otros));
 						pcb_otros->n_socket = i;
-						pcb_otros->pcb = crear_pcb_escribir_seg_UMV(men_cod_prog,resp_sol, &contador_prog);
+						pcb_otros->pcb = crear_pcb_escribir_seg_UMV(men_cod_prog,resp_sol, contador_prog);
 						pcb_otros->peso = calcular_peso(men_cod_prog);
 						pcb_otros->tipo_fin_ejecucion = -1;
 						pthread_mutex_lock(&mutex_new);
@@ -234,7 +237,7 @@ void *pcp(t_param_pcp *param_pcp){
 							pthread_mutex_unlock(&mutex_exit);
 							destruir_men_comun(men);
 						}
-						free(aux_cpu); // todo ver si no hay que hacer el lock de cpu_cola_vacia
+						free(aux_cpu);
 						socket_cerrar(i);
 						FD_CLR(i, &master);
 						destruir_men_comun(men_cpu);
@@ -244,11 +247,10 @@ void *pcp(t_param_pcp *param_pcp){
 						t_cpu *aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
 
-							// Saca el pcb de la cola de ejec a partir del id
+							// Actualizacion pcb
 							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-
-							// Actualiza el pcb(todo correguir!)
-							(aux_pcb_otros->pcb) = (socket_recv_quantum_pcb(i)->pcb);
+							t_pcb *pcb_recibido = socket_recv_quantum_pcb(i)->pcb;
+							actualizar_pcb(aux_pcb_otros,pcb_recibido);
 
 							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
@@ -268,6 +270,26 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
+					if(men_cpu->tipo == FIN_EJECUCION){
+						t_cpu *aux_cpu = get_cpu(i);
+						//Actualizar pcb?
+						t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+						aux_pcb_otros->tipo_fin_ejecucion = FIN_EJECUCION;
+						pthread_mutex_lock(&mutex_exit);
+						queue_push(colas->cola_exit,aux_pcb_otros);
+						pthread_mutex_unlock(&mutex_exit);
+
+						sem_incre(&cont_exit);
+
+						aux_cpu->id_prog_exec = 0;
+
+						pthread_mutex_lock(&mutex_uso_cola_cpu);
+						queue_push(cola_cpu,aux_cpu);
+						pthread_mutex_unlock(&mutex_uso_cola_cpu);
+						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+						destruir_men_comun(men_cpu);
+						continue;
+					}
 					/*
 					 * Primero recibe un msj con el id de la llamada al sistema y el valor,
 					 * dsp otro msj con el id del prog al que le quiere mandar eso
@@ -284,7 +306,23 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(aux_men_cpu); //cuidado, quizas destruye los datos antes que el programa los reciba etc
 						continue;
 					}
-
+					if(men_cpu->tipo == OBTENER_VALOR){
+						char *valor	= dictionary_get(diccionario_variables,men_cpu->dato);
+						men_cpu->tipo = VALOR_ASIGNADO; //todo poner otro id para cuando devuelvo el valor, ver con flor
+						men_cpu->dato = valor;
+						socket_send_comun(i,men_cpu);
+						destruir_men_comun(men_cpu);
+						continue;
+					}
+					if(men_cpu->tipo == GRABAR_VALOR){
+						t_men_comun *aux_men_cpu = socket_recv_comun(i);
+						if((aux_men_cpu->tipo) == VALOR_ASIGNADO)
+							dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato); //todo pregunar si se reemplaza el dato o que
+						destruir_men_comun(men_cpu);
+						destruir_men_comun(aux_men_cpu);
+						//todo porque flor espera un msj aca
+						continue;
+					}
 					if (men_cpu->tipo == IO_ID){
 						enviar_IO(i, atoi(men_cpu->dato));
 						continue;
@@ -347,8 +385,6 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_ready);
-			if(queue_size(colas->cola_ready)==0)
-				pthread_mutex_lock(&mutex_ready_vacia);
 			sem_incre(&cont_exit);
 			return 0;
 		}
@@ -398,7 +434,6 @@ t_cpu *get_cpu(int32_t soc_cpu){
 		cpu = queue_pop(cola_cpu);
 		if (cpu->soc_cpu == soc_cpu){
 			pthread_mutex_unlock(&mutex_uso_cola_cpu);
-			//si hay que bloquear cuando la cola cpu esta vacia, aca habria que hacer un if y bloquear, como lo anterior de ready
 			return cpu;
 		}
 		queue_push(cola_cpu, cpu);
@@ -436,6 +471,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	int32_t i;
 
 	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
+	pthread_mutex_lock(&mutex_dispositivos_io);
 	for (i=0; i < list_size(dispositivos_IO); i++){
 		aux_IO = list_remove(dispositivos_IO,i);
 		if(atoi(aux_IO->id_hio)==id_IO){
@@ -445,6 +481,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 			list_add(dispositivos_IO,aux_IO);
 		}
 	}
+	pthread_mutex_unlock(&mutex_dispositivos_io);
 
 	men = socket_recv_comun(soc_cpu);
 	if (men->tipo != IO_CANT_UNIDADES)
@@ -579,7 +616,7 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 	return NULL;
 }
 
-t_cpu *get_cpu_libre(int32_t *res){ //todo aca los mutex de la cpu no se ponen porque estan puestos afuera
+t_cpu *get_cpu_libre(int32_t *res){
 	int32_t i;
 	t_cpu *cpu;
 
@@ -604,32 +641,32 @@ void umv_destrui_pcb(int32_t id_pcb){ //ojo que hay que sincronizar los mensajes
 	destruir_men_seg(men_seg);
 }
 
-t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t *contador_id_programa){
+t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t contador_id_programa){
 
 	//ojo que hay que sincronizar los mensajes con la umv
 
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	t_men_comun* men;
 	char *etis = metadata_program->etiquetas;
-
+	//TODO puse 205 porque ESCRIBIR_SEG no lo toma
 	// Escribe el segmento de codigo
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
 	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
 	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de etiquetas
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
 	men = crear_men_comun(IND_ETI_FUNC,etis,metadata_program->etiquetas_size);
 	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de codigo
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, *contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
 	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
 	socket_send_comun(soc_umv, men_cod_prog);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
-	pcb->id = *contador_id_programa;
+	pcb->id = contador_id_programa;
 	pcb->dir_primer_byte_umv_segmento_codigo = resp_sol->dir_primer_byte_umv_segmento_codigo;
 	pcb->dir_primer_byte_umv_segmento_stack = resp_sol->dir_primer_byte_umv_segmento_stack;
 	pcb->dir_primer_byte_umv_contexto_actual = resp_sol->dir_primer_byte_umv_segmento_stack;
@@ -729,7 +766,6 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 
 int32_t calcular_peso(t_men_comun *men_cod_prog){
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
-	//todo aca no se hace free(men_cod_prog) porque esta hecho en el plp;
 	return (5 * (metadata_program->cantidad_de_etiquetas) + 3 * (metadata_program->cantidad_de_funciones) + (metadata_program->instrucciones_size));
 }
 
@@ -753,36 +789,47 @@ void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la um
 
 void manejador_IO(t_IO *io){
 	//Sincronizar acceso a la cola
-	t_IO_espera *proceso = queue_pop(io->procesos);
-	int32_t tamanio_cola_block = queue_size(colas->cola_block);
-	int32_t i;
+	while(quit_sistema){
+		if(queue_size(io->procesos)==0)
+			pthread_mutex_lock(&(io->mutex_dispositivo));
+		else{
+		t_IO_espera *proceso = queue_pop(io->procesos);
+		int32_t tamanio_cola_block = queue_size(colas->cola_block);
+		int32_t i;
 
-	for(i=0; i<proceso->unidades;i++)
-		sleep(io->hio_sleep);
+		for(i=0; i<proceso->unidades;i++)
+			sleep(io->hio_sleep);
 
-	pthread_mutex_lock(&mutex_block);
+		pthread_mutex_lock(&mutex_block);
 
-	for (i=0; i<tamanio_cola_block; i++){
-		t_pcb_otros *pcb_aux;
-		pcb_aux =queue_pop(colas->cola_block);
+		for (i=0; i<tamanio_cola_block; i++){
+			t_pcb_otros *pcb_aux;
+			pcb_aux =queue_pop(colas->cola_block);
 
-		if (pcb_aux->pcb->id==proceso->id_prog){
-			pthread_mutex_lock(&mutex_ready);
-			queue_push(colas->cola_ready, pcb_aux);
-			pthread_mutex_unlock(&mutex_ready);
-			pthread_mutex_unlock(&mutex_ready_vacia);
-			i=tamanio_cola_block;
+			if (pcb_aux->pcb->id==proceso->id_prog){
+				pthread_mutex_lock(&mutex_ready);
+				queue_push(colas->cola_ready, pcb_aux);
+				pthread_mutex_unlock(&mutex_ready);
+				pthread_mutex_unlock(&mutex_ready_vacia);
+				i=tamanio_cola_block;
+			}
+
+			else {
+				queue_push(colas->cola_block,pcb_aux);
+			}
 		}
-
-		else {
-			queue_push(colas->cola_block,pcb_aux);
+		pthread_mutex_unlock(&mutex_block);
+		pthread_mutex_unlock(&(io->mutex_dispositivo));
 		}
 	}
-	pthread_mutex_unlock(&mutex_block);
 }
 
-void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){ //por que se usa esta funcion y no una de la biblio??
+void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
 	socket_send_quantum_pcb(soc,crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb));
+}
+
+void actualizar_pcb(t_pcb_otros *pcb, t_pcb *pcb_actualizado){
+
 }
 
 t_datos_config *levantar_config(){
@@ -791,7 +838,7 @@ t_datos_config *levantar_config(){
 	t_IO *aux_IO;
 	char **id_hios = malloc(sizeof(char));
 	char **hio_sleeps = malloc(sizeof(char));
-	t_config *diccionario_config = config_create("./kernel/kernel_config");
+	t_config *diccionario_config = config_create("kernel_config");
 	t_datos_config *ret = malloc(sizeof(t_datos_config));
 	ret->puerto_prog = config_get_string_value( diccionario_config, "Puerto_prog");
 	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
@@ -802,16 +849,15 @@ t_datos_config *levantar_config(){
 	hio_sleeps = config_get_array_value( diccionario_config, "HIO");
 
 
-	//todo aca rompeee
 	for (i=0; id_hios[i] != '\0'; i++){
 
 		t_IO *new_IO = malloc(sizeof(t_IO));
 		new_IO->id_hio = id_hios[i];
 		new_IO->hio_sleep = atoi(hio_sleeps[i]);
 
-		//new_IO->procesos = queue_create();
+		new_IO->procesos = queue_create();
 		queue_push(ret->cola_IO, new_IO);
-		//pthread_create(&(new_IO->hilo), NULL, (void*)manejador_IO, (void*)new_IO);
+		pthread_create(&(new_IO->hilo), NULL, (void*)manejador_IO, (void*)new_IO);
 	}
 
 	ret->semaforos = config_get_array_value( diccionario_config, "SEMAFOROS");
@@ -821,6 +867,11 @@ t_datos_config *levantar_config(){
 	ret->retardo = config_get_int_value( diccionario_config, "RETARDO");
 	ret->tam_stack = config_get_int_value( diccionario_config, "TAMANIO_STACK");
 	ret->variables_globales = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
+
+	for (i=0; ret->variables_globales[i] != '\0'; i++){
+		dictionary_put(diccionario_variables,ret->variables_globales[i],NULL);
+	}
+
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
 	printf("Puerto Proc-Prog = %s\n", ret->puerto_prog);
 	printf("Puerto CPU = %s\n", ret->puerto_cpu);
@@ -928,7 +979,6 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_ready);
 
 		if (queue_is_empty(colas->cola_ready)){
-			//pthread_mutex_lock(&mutex_ready_vacia) todo de esto ya se ocupan los otros hilos;
 			printf("*************COLA VACIA********************");
 		}else {
 

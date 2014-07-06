@@ -89,6 +89,7 @@
 		int32_t  hio_sleep;
 		t_queue *procesos;
 		pthread_t hilo;
+		pthread_mutex_t mutex_dispositivo;
 	} t_IO;
 	typedef struct{
 		int32_t id_prog;
@@ -107,7 +108,7 @@
 	void handshake_prog(int32_t  soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
 	t_resp_sol_mem * solicitar_mem(char *script, int32_t  tam_stack, int32_t  id_prog);
-	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t  *contador_id_programa);
+	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t  contador_id_programa);
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
 	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
 	t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config);
@@ -129,5 +130,6 @@
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
 	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
+	void actualizar_pcb(t_pcb_otros *pcb, t_pcb *pcb_actualizado);
 
 #endif /* KERNEL_H_ */
