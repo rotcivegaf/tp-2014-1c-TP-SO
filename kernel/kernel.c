@@ -26,8 +26,8 @@ int main(void){
 
 	//Inicializacion semaforos
 	crear_cont(&cont_exit , 0);
-	crear_cont(&buff_multiprog , 0);
-	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion);
+	crear_cont(&buff_multiprog , 0); //cantidad de procesos entre ready y exec
+	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
 
 	//Creacion de colas
 	cola_cpu = queue_create();
@@ -51,7 +51,7 @@ int main(void){
 	pthread_create(&hilo_plp, NULL, plp, (void *)param_plp);
 	pthread_create(&hilo_pcp, NULL, pcp, (void *)param_pcp);
 	pthread_join(hilo_plp, NULL);
-	pthread_join(hilo_pcp, NULL); //Por qué no hay un pthread_join(hilo_imp_colas, NULL)?
+	pthread_join(hilo_pcp, NULL);
 	
 	free(param_plp->puerto_prog);
 	free(param_plp->puerto_umv);
@@ -340,7 +340,7 @@ void *pcp(t_param_pcp *param_pcp){
 						}
 						if(semaforo->valor > 0){
 							(semaforo->valor)--;
-							men_cpu->tipo=SEM_OK;//todo agregar id
+							men_cpu->tipo=SEM_OK;
 							socket_send_comun(i,men_cpu);
 							destruir_men_comun(men_cpu);
 							continue;
@@ -571,9 +571,10 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
 
-	//Recibo el pcb del cpu para actualizarlo y lo saco de la cola de ejecucion todo correguir tmb actualizacion
+	// Actualizacion pcb
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-	aux_pcb_otros->pcb = (socket_recv_quantum_pcb(soc_cpu)->pcb);
+	t_pcb *pcb_recibido = socket_recv_quantum_pcb(i)->pcb;
+	actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
 	aux_cpu->id_prog_exec = 0;
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
@@ -642,9 +643,9 @@ void *manejador_new_ready(t_param_new_ready *param){
 			pthread_mutex_unlock(&mutex_new);
 			pthread_mutex_lock(&mutex_miltiprog);
 		}else{
-			pthread_mutex_unlock(&mutex_new);
-			sem_decre(&libre_multiprog); //no entiendo por qué se decrementa aca
-			pthread_mutex_lock(&mutex_new);
+			//pthread_mutex_unlock(&mutex_new);
+			sem_decre(&libre_multiprog);
+			//pthread_mutex_lock(&mutex_new);
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, get_peso_min());
 			pthread_mutex_unlock(&mutex_new);
@@ -725,19 +726,18 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	t_men_comun* men;
 	char *etis = metadata_program->etiquetas;
-	//TODO puse 205 porque ESCRIBIR_SEG no lo toma
 	// Escribe el segmento de codigo
-	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
 	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
 	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de etiquetas
-	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
 	men = crear_men_comun(IND_ETI_FUNC,etis,metadata_program->etiquetas_size);
 	socket_send_comun(soc_umv, men);
 
 	// Escribe el segmento de indice de codigo
-	socket_send_seg(soc_umv,crear_men_seg(205, contador_id_programa, 0));
+	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
 	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
 	socket_send_comun(soc_umv, men_cod_prog);
@@ -1006,7 +1006,7 @@ t_datos_config *levantar_config(){
 	return ret;
 }
 
-void handshake_cpu(int32_t soc){ //todo hay que sincronizar los mensajes con los cpus? Y con los programas??
+void handshake_cpu(int32_t soc){
 
 	t_men_comun *handshake;
 	handshake = socket_recv_comun(soc);
