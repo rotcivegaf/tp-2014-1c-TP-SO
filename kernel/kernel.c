@@ -298,14 +298,18 @@ void *pcp(t_param_pcp *param_pcp){
 					 * Manda entonces un msj al prog para que imprima el dato.
 					 */
 					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
-						t_men_comun *aux_men_cpu = socket_recv_comun(i);
-						if (aux_men_cpu->tipo != ID_PROG)
-							printf("Se esperaba el tipo de dato %i y se obtuvo %i\n",ID_PROG,men_cpu->tipo);
+
+						t_cpu *aux_cpu = get_cpu(i);
 						t_pcb_otros *aux_pcb_otros;
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
-						socket_send_comun(aux_pcb_otros->n_socket, aux_men_cpu);
+						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_cpu->id_prog_exec));
+						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
 						//todo habria que mandarle un msj a la cpu de que termino la llamada asi sigue procesando, seria mejor
-						destruir_men_comun(aux_men_cpu); //cuidado, quizas destruye los datos antes que el programa los reciba etc
+						destruir_men_comun(men_cpu);
+						pthread_mutex_lock(&mutex_uso_cola_cpu);
+						queue_push(cola_cpu,aux_cpu);
+						pthread_mutex_unlock(&mutex_uso_cola_cpu);
+						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
 						continue;
 					}
 					if(men_cpu->tipo == OBTENER_VALOR){
