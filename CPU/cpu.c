@@ -271,9 +271,9 @@ void parsearUnaInstruccion(char* unaIns){
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
-	socket_send_quantum_pcb(socketKernel, crear_men_quantum_pcb(FIN_QUANTUM,0, pcb));
-
-
+	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
+	socket_send_quantum_pcb(socketKernel, p);
+	destruir_quantum_pcb(p);
 }
 
 void signal_handler(int sig){
@@ -291,11 +291,6 @@ void signal_handler(int sig){
 	}
 
 void preservarContexto(){
-	// guardar en stack ptro contexto actual
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	base = pcb->dir_primer_byte_umv_contexto_actual;
 	offset = base + (pcb->cant_var_contexto_actual)+1;	// la posicion siguiente al ultimo valor de la ultima varaible
 	tam = sizeof(int32_t);
@@ -308,7 +303,6 @@ void preservarContexto(){
 
 	t_men_comun *r_con = socket_recv_comun(socketUmv);
 	if (r_con->tipo == R_ALM_BYTES){
-
 		offset = offset + 4;
 		buffer = string_itoa(pcb->program_counter);
 		t_men_cpu_umv *save_proxins = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
@@ -323,12 +317,13 @@ void preservarContexto(){
 		if(r_proxins->tipo == SEGMEN_FAULT){
 			manejarSegmentationFault();
 		}
-
+		destruir_men_comun(r_proxins);
 		free(buffer);
 	}
 	if(r_con->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
 	}
+	destruir_men_comun(r_con);
 
 }
 
@@ -353,10 +348,6 @@ void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *i
 
 //Primitivas ANSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable){
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	base = pcb->dir_primer_byte_umv_contexto_actual;
 	offset= 1+ (pcb->cant_var_contexto_actual)*5 ;
 	int32_t tam = sizeof(int32_t)+1;
@@ -383,20 +374,13 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 		manejarSegmentationFault();
 		base=0;
 		offset=0;
-
 	}
-
-
+	destruir_men_comun(r_alm);
 	return base + offset;
-
-
 }
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
-	/*
-	 * Se fija en el diccionario de variables la posicion
-	 * la posicion va a ser el data del elemento
-	 */
+	/*Se fija en el diccionario de variables la posicion la posicion va a ser el data del elemento*/
 	t_puntero posicion;
 	char *key = string_itoa(identificador_variable);
 	t_hash_element *e = dictionary_get(dic_Variables,key);
@@ -453,7 +437,6 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable;
 	int32_t tam = sizeof(t_valor_variable);
@@ -495,7 +478,6 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_variable valor){
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
-
 	t_men_comun *var =crear_men_comun(GRABAR_VALOR, variable, sizeof(variable));
 
 	char *c =  string_itoa(valor);
@@ -514,7 +496,6 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){//revisar
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
-
 	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(t_nombre_etiqueta, etiquetas, pcb->tam_indice_etiquetas);
 
 	if(pos_etiqueta != -1){
@@ -532,7 +513,6 @@ void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){//revisar
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	/*Preserva el contexto de ejecución actual para poder retornar luego al mismo.*/
-
 	preservarContexto();
 
 
@@ -548,7 +528,6 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 
 void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	//preservar el contexto
-
 	preservarContexto();
 
 	offset = offset + 4;
@@ -582,10 +561,6 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 }
 
 void finalizar(void){
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	base=pcb->dir_primer_byte_umv_contexto_actual;
 	offset= base -4;
 	tam=sizeof(int32_t);
@@ -711,7 +686,7 @@ void imprimir(t_valor_variable valor_mostrar){
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
-	//romper no violentamente con ### inexistente
+
 	txt_write_in_file(cpu_file_log, "Imprimiendo valor de variable\n");
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
@@ -723,7 +698,7 @@ void imprimirTexto(char* texto){
 	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
-	//romper no violentamente con ### inexistente
+
 	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
 	printf("Imprimiendo texto: %s", texto);
 	}
