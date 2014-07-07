@@ -301,7 +301,7 @@ void *pcp(t_param_pcp *param_pcp){
 
 						t_cpu *aux_cpu = get_cpu(i);
 						t_pcb_otros *aux_pcb_otros;
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_cpu->id_prog_exec));
+						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_cpu->id_prog_exec);
 						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
 						//todo habria que mandarle un msj a la cpu de que termino la llamada asi sigue procesando, seria mejor
 						destruir_men_comun(men_cpu);
