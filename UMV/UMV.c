@@ -278,7 +278,14 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 			este_conectada = 0;
 			break;
 		case CAMBIO_PA:
+			txt_write_in_file(umv_file_log,"Cambio el proceso activo del proceso nº");
+			logear_int(umv_file_log, proc_activo);
 			proc_activo = men_bytes->base;
+			txt_write_in_file(umv_file_log,", al proceso nº");
+			logear_int(umv_file_log, proc_activo);
+			txt_write_in_file(umv_file_log,", de la CPU nº");
+			logear_int(umv_file_log, param->soc);
+			txt_write_in_file(umv_file_log,"\n");
 			break;
 		case SOL_BYTES:
 			gestionar_solicitud_bytes(param->soc, men_bytes, proc_activo);
@@ -774,8 +781,8 @@ void operacion_memoria(char opcion){
 		}
 		base = aux_seg->dir_logica;
 		resp = almacenar_bytes(id_proc, base, offset, tam, buffer);
-		if (resp == MEM_OVERLOAD){
-			txt_write_in_file(consola_file_log,"	MEMORY OVERLOAD\n");
+		if (resp == SEGMEN_FAULT){
+			txt_write_in_file(consola_file_log,"	Segmentation Fault\n");
 		}else
 			txt_write_in_file(consola_file_log,"	Se escribio corectamente\n");
 		free(buffer);
