@@ -323,6 +323,7 @@ void *pcp(t_param_pcp *param_pcp){
 					if(men_cpu->tipo == GRABAR_VALOR){
 						t_men_comun *aux_men_cpu = socket_recv_comun(i);
 						if((aux_men_cpu->tipo) == VALOR_ASIGNADO)
+							dictionary_remove(diccionario_variables,men_cpu->dato);
 							dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato); //todo pregunar si se reemplaza el dato o que
 						destruir_men_comun(men_cpu);
 						destruir_men_comun(aux_men_cpu);
@@ -574,6 +575,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	espera->id_prog = (aux_cpu->id_prog_exec);
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
+	pthread_mutex_unlock(&(aux_IO->mutex_dispositivo));
 
 	// Actualizacion pcb
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
