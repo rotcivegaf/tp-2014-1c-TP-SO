@@ -33,6 +33,7 @@ int main(){
 	base=0;
 	offset=0;
 	tam = 0;
+	i=0;
 
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
 	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
@@ -79,11 +80,12 @@ int main(){
 			/*se crea un diccionario para guardar las variables del contexto*/
 			crearDiccionario();
 
-
-			for(;quantum>0;quantum--){//ejecuta tantas instrucciones como quantums tenga
+			while(i<=quantum){
+			//for(;quantum>0;quantum--){//ejecuta tantas instrucciones como quantums tenga
 				char* proxInstrucc = solicitarProxSentenciaAUmv();
 				parsearUnaInstruccion(proxInstrucc);
 				fueFinEjecucion = 0;
+				i++;
 			}
 			if(!fueFinEjecucion){
 				salirPorQuantum();
@@ -152,7 +154,7 @@ void traerIndiceEtiquetas(){
 	etiquetas = rec_etiq->dato;
 	}
 	if(rec_etiq->tipo == SEGMEN_FAULT){
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 }
@@ -186,11 +188,8 @@ void crearDiccionario(){
 			destruir_men_cpu_umv(sol_var);
 
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
-			if(rec_var->tipo == SEGMEN_FAULT){//manejar
-				//segun el enunciado
-				//debera notificar la excepcion por pantalla y concluir la ejecucion del programa actual
-				//creo q le tiene q mandar un mensaje comun al kernel diciendole segmentation fault y dar como concluida la ejecucion de este programa,
-				//como lo haria cuando el analizador de linea
+			if(rec_var->tipo == SEGMEN_FAULT){
+				manejarSegmentationFault();
 			}
 			if(rec_var->tipo== R_SOL_BYTES){
 				char *key = malloc(rec_var->tam_dato);
@@ -214,6 +213,21 @@ void crearDiccionario(){
 
 
 	}
+
+void manejarSegmentationFault(){
+	//informar por pantalla el error
+	printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
+	txt_write_in_file(cpu_file_log, "Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual\n");
+	//y concluir la ejecucion del programa actual
+
+	i=quantum+1;
+	fueFinEjecucion =0;
+
+	t_men_quantum_pcb *error_umv = crear_men_quantum_pcb(SEGMEN_FAULT, 0, pcb);
+	socket_send_quantum_pcb(socketKernel, error_umv);
+	destruir_quantum_pcb(error_umv);
+	//como lo haria cuando el analizador de linea
+}
 
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
 	char* proxInst = NULL;
@@ -243,8 +257,8 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 		printf("Se cerro la conexion de la umv\n");
 	}
 	if(rec_inst->tipo ==SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT \n");
-		printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
+		manejarSegmentationFault();
+
 	}
 
 	pcb->program_counter ++;
@@ -304,20 +318,16 @@ void preservarContexto(){
 		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
 		if(r_proxins->tipo == R_ALM_BYTES){
 			txt_write_in_file(cpu_file_log, "Se almaceno correctamente el contexto\n");
-			printf("Se almaceno correctamente el conexto");
+			printf("Se almaceno correctamente el contexto");
 		}
 		if(r_proxins->tipo == SEGMEN_FAULT){
-			txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-			printf("SEGMENTATION FAULT\n");
-			finalizarContexto();
+			manejarSegmentationFault();
 		}
 
 		free(buffer);
 	}
 	if(r_con->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT \n");
-		finalizarContexto();
+		manejarSegmentationFault();
 	}
 
 }
@@ -370,11 +380,10 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
+		manejarSegmentationFault();
 		base=0;
 		offset=0;
-		finalizarContexto();
+
 	}
 
 
@@ -413,10 +422,6 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
 	t_valor_variable valor;
 
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable; // son los cuatro bytes siguientes a la variable
 	int32_t tam= sizeof(int32_t);
@@ -436,8 +441,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	}
 
 	if(men_comun->tipo ==SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");// que hacer si hay seg fault? aviso al kernel y desconecto?
+		manejarSegmentationFault();
 		}
 
 	txt_write_in_file(cpu_file_log, "Dereferenciar \n");
@@ -449,9 +453,6 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
 
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable;
@@ -471,10 +472,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 		printf("Asignando en la direccion %d el valor %d \n", direccion_variable, valor);
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMEN_FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		finalizarContexto();
-		exit(1);
+		manejarSegmentationFault();
 	}
 }
 
@@ -576,9 +574,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT no se pudo guardar contexto\n");
-		printf("SEGMENTATION FAULT no se pudo guardar contexto");
-		finalizarContexto();
+		manejarSegmentationFault();
 	}
 
 
@@ -604,9 +600,7 @@ void finalizar(void){
 		pcb->program_counter= prog_counter;
 	}
 	if(rec_progcount->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	offset= offset-4;
@@ -622,9 +616,7 @@ void finalizar(void){
 	}
 
 	if(rec_context->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	if(pcb->dir_primer_byte_umv_contexto_actual == pcb->dir_primer_byte_umv_segmento_stack){
@@ -656,9 +648,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if (rec_ret->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 
@@ -675,9 +665,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if(rec_progcount->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	offset= offset-4;
@@ -693,9 +681,7 @@ void retornar(t_valor_variable retorno){
 
 	}
 	if (rec_context->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 
@@ -708,9 +694,7 @@ void retornar(t_valor_variable retorno){
 
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
 	if(rec_alm->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT no se pudo guardar en umv\n");
-		printf("MEMORY OVERLOAD no se pudo guardar\n");
-		exit(1);
+		manejarSegmentationFault();
 	}
 	if(rec_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");
