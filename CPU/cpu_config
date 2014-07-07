@@ -1,0 +1,5 @@
+Puerto_Kernel=5001
+IP_Kernel=127.0.0.1
+
+Puerto_UMV=5002
+IP_UMV=127.0.0.1
