@@ -395,7 +395,6 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 
 	resp = almacenar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam, men_bytes->buffer);
 
-	//if (resp==MEM_OVERLOAD){
 	if (resp==SEGMEN_FAULT){
 		aux_men = crear_men_comun(resp,NULL,0);
 		socket_send_comun(soc_cpu, aux_men);
@@ -417,15 +416,14 @@ int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t t
 	si no hay problema se almacenan los bytes*/
 	if (aux_seg->tam_seg<(offset+tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
-		txt_write_in_file(umv_file_log,"Memory Overload\n");
+		txt_write_in_file(umv_file_log,"	Segmentation Fault\n");
 		return SEGMEN_FAULT;
-		//return MEM_OVERLOAD;
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[pos],buffer,tam);
 		pthread_mutex_unlock(&mutex_mem_prin);
 		pthread_mutex_unlock(&mutex_list_seg);
-		txt_write_in_file(umv_file_log,"Bytes almacenados\n");
+		txt_write_in_file(umv_file_log,"	Bytes almacenados\n");
 		return R_ALM_BYTES;
 	}
 }
@@ -448,7 +446,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 		resp = buscar_espacio_mem_prin(men_ped->tam_seg);
 		if (resp==-1){
 			pthread_mutex_unlock(&mutex_list_seg);
-			txt_write_in_file(umv_file_log,"Memory Overload\n");
+			txt_write_in_file(umv_file_log,"	Memory Overload\n");
 			return -1;
 		}
 	}
@@ -559,7 +557,7 @@ void compactar(){
 			list_replace(list_seg, i, aux_seg);
 		}
 	}
-	txt_write_in_file(umv_file_log,"Memoria compactada\n");
+	txt_write_in_file(umv_file_log,"	Memoria compactada\n");
 }
 
 void destruirSegmentos(int id_prog){
@@ -573,13 +571,13 @@ void destruirSegmentos(int id_prog){
 		pthread_mutex_lock(&mutex_list_seg);
 		list_clean_and_destroy_elements(list_seg, (void*)destruir_t_seg);
 		pthread_mutex_unlock(&mutex_list_seg);
-		txt_write_in_file(umv_file_log,"Todos los segmentos destruido\n");
+		txt_write_in_file(umv_file_log,"	Todos los segmentos destruido\n");
 	}else{
 		pthread_mutex_lock(&mutex_list_seg);
 		while(list_any_satisfy(list_seg, (void*)es_id_prog))
 			list_remove_and_destroy_by_condition(list_seg, (void*)es_id_prog, (void*)destruir_t_seg);
 		pthread_mutex_unlock(&mutex_list_seg);
-		txt_write_in_file(umv_file_log,"Segmentos del proceso nº");
+		txt_write_in_file(umv_file_log,"	Segmentos del proceso nº");
 		logear_int(umv_file_log,id_prog);
 		txt_write_in_file(umv_file_log," destruidos\n");
 	}
