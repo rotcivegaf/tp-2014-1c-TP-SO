@@ -102,6 +102,11 @@
 		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
 		int32_t  memoria_insuficiente;
 	} t_resp_sol_mem;
+	typedef struct{
+		char *id_sem;
+		int32_t valor;
+		t_queue *procesos;
+	}t_semaforo;
 
 	t_datos_config *levantar_config();
 	void handshake_cpu(int32_t  soc);
@@ -130,6 +135,6 @@
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
 	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
-	void actualizar_pcb(t_pcb_otros *pcb, t_pcb *pcb_actualizado);
+	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
 
 #endif /* KERNEL_H_ */

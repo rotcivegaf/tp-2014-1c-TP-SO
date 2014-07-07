@@ -17,9 +17,11 @@ sem_t buff_multiprog, libre_multiprog, cont_exit;
 int32_t quit_sistema = 1; //no seria int?
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
+t_queue *cola_semaforos;
 
 int main(void){
 	diccionario_variables = dictionary_create();
+	cola_semaforos = queue_create();
 	t_datos_config *diccionario_config = levantar_config();
 
 	//Inicializacion semaforos
@@ -250,7 +252,7 @@ void *pcp(t_param_pcp *param_pcp){
 							// Actualizacion pcb
 							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 							t_pcb *pcb_recibido = socket_recv_quantum_pcb(i)->pcb;
-							actualizar_pcb(aux_pcb_otros,pcb_recibido);
+							actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
 
 							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
@@ -322,6 +324,81 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(aux_men_cpu);
 						//todo porque flor espera un msj aca
 						continue;
+					}
+					if(men_cpu->tipo==WAIT){
+						int32_t i;
+						t_semaforo *semaforo;
+						int32_t tam = queue_size(cola_semaforos);
+						for(i=0;i<tam;i++){
+							semaforo = queue_pop(cola_semaforos);
+							if(semaforo->id_sem == men_cpu->dato){
+								i = tam;
+							}
+							else{
+								queue_push(cola_semaforos,semaforo);
+							}
+						}
+						if(semaforo->valor > 0){
+							(semaforo->valor)--;
+							men_cpu->tipo=SEM_OK;//todo agregar id
+							socket_send_comun(i,men_cpu);
+							destruir_men_comun(men_cpu);
+							continue;
+						}
+						else{
+							(semaforo->valor)--;
+							t_cpu *aux_cpu = get_cpu(i);
+							t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
+							t_men_comun *aux_men_cpu = malloc(sizeof(t_men_comun));
+							aux_men_cpu->tipo=SEM_BLOQUEADO;
+							socket_send_comun(i,aux_men_cpu);
+
+							// Actualizacion pcb
+							t_pcb *pcb_recibido = socket_recv_quantum_pcb(i)->pcb;
+							actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
+
+							pthread_mutex_lock(&mutex_block);
+							queue_push(colas->cola_block,aux_pcb_otros);
+							pthread_mutex_unlock(&mutex_block);
+
+							aux_cpu->id_prog_exec = 0;
+							pthread_mutex_lock(&mutex_uso_cola_cpu);
+							queue_push(cola_cpu,aux_cpu);
+							pthread_mutex_unlock(&mutex_uso_cola_cpu);
+							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
+							queue_push(semaforo->procesos,aux_pcb_otros);
+
+							queue_push(cola_semaforos,semaforo);
+							destruir_men_comun(aux_men_cpu);
+							destruir_men_comun(men_cpu);
+							continue;
+						}
+					}
+					if(men_cpu->tipo == SIGNAL){
+						int32_t i;
+						t_semaforo *semaforo;
+						int32_t tam = queue_size(cola_semaforos);
+						for(i=0;i<tam;i++){
+							semaforo = queue_pop(cola_semaforos);
+							if(semaforo->id_sem == men_cpu->dato){
+								i = tam;
+							}
+							else{
+								queue_push(cola_semaforos,semaforo);
+							}
+						}
+						(semaforo->valor)++;
+						if(queue_size(semaforo->procesos)>0){
+							t_pcb_otros *aux_pcb_otros = queue_pop(semaforo->procesos);
+							pthread_mutex_lock(&mutex_ready);
+							queue_push(colas->cola_ready,aux_pcb_otros);
+							pthread_mutex_unlock(&mutex_ready);
+							pthread_mutex_lock(&mutex_ready_vacia);
+						}
+						queue_push(cola_semaforos,semaforo);
+						destruir_men_comun(men_cpu);
 					}
 					if (men_cpu->tipo == IO_ID){
 						enviar_IO(i, atoi(men_cpu->dato));
@@ -828,8 +905,9 @@ void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
 	socket_send_quantum_pcb(soc,crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb));
 }
 
-void actualizar_pcb(t_pcb_otros *pcb, t_pcb *pcb_actualizado){
-
+void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
+	pcb->cant_var_contexto_actual = pcb_actualizado->cant_var_contexto_actual;
+	pcb->program_counter = pcb_actualizado->program_counter;
 }
 
 t_datos_config *levantar_config(){
@@ -862,6 +940,17 @@ t_datos_config *levantar_config(){
 
 	ret->semaforos = config_get_array_value( diccionario_config, "SEMAFOROS");
 	ret->valor_semaforos = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
+
+	for(i=0;ret->semaforos[i] != '\0'; i++){
+
+		t_semaforo *new_sem = malloc(sizeof(t_semaforo));
+		new_sem->id_sem = ret->semaforos[i];
+		new_sem->valor = atoi(ret->valor_semaforos[i]);
+
+		new_sem->procesos = queue_create();
+		queue_push(cola_semaforos,new_sem);
+	}
+
 	ret->multiprogramacion = config_get_int_value( diccionario_config, "MULTIPROGRAMACION");
 	ret->quantum = config_get_int_value( diccionario_config, "QUANTUM");
 	ret->retardo = config_get_int_value( diccionario_config, "RETARDO");
