@@ -28,12 +28,12 @@ AnSISOP_kernel kernel_functions = {
 
 int main(){
 	prox_inst = malloc(0);
-	//t_pcb *pcb = malloc(sizeof(t_pcb));
 	got_usr1 = 0;
 	etiquetas = NULL;
 	base=0;
 	offset=0;
 	tam = 0;
+	i=0;
 
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
 	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
@@ -52,7 +52,6 @@ int main(){
 	imprimo_config(puertoKernel, ipKernel, puertoUmv, ipUmv);
 
 	/*conexion con el kernel*/
-
 	handshake_kernel(puertoKernel, ipKernel);
 
 	/*conexion con la umv*/
@@ -66,22 +65,27 @@ int main(){
 
 
 	while(!got_usr1){
-		traerIndiceEtiquetas();
+
 
 		while(quit_sistema){
 
 			/*recibe un pcb del kernel*/
 			recibirUnPcb();
+
+			traerIndiceEtiquetas();
+
 			/* le digo a la UMV q cambie el proceso activo */
 			cambio_PA(pcb->id);
+
 			/*se crea un diccionario para guardar las variables del contexto*/
 			crearDiccionario();
 
-			char* proxInstrucc = solicitarProxSentenciaAUmv();
-
-			for(;quantum>0;quantum--){//ejecuta tantas instrucciones como quantums tenga
+			while(i<=quantum){
+			//for(;quantum>0;quantum--){//ejecuta tantas instrucciones como quantums tenga
+				char* proxInstrucc = solicitarProxSentenciaAUmv();
 				parsearUnaInstruccion(proxInstrucc);
 				fueFinEjecucion = 0;
+				i++;
 			}
 			if(!fueFinEjecucion){
 				salirPorQuantum();
@@ -136,9 +140,6 @@ void handshake_kernel(char *puerto, char *ip){
 }
 
 void traerIndiceEtiquetas(){
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
 
 	base =pcb->dir_primer_byte_umv_indice_etiquetas;
 	offset=0;
@@ -153,7 +154,7 @@ void traerIndiceEtiquetas(){
 	etiquetas = rec_etiq->dato;
 	}
 	if(rec_etiq->tipo == SEGMEN_FAULT){
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 }
@@ -177,10 +178,6 @@ void crearDiccionario(){
 	int32_t i = 1;
 	if (tam_contexto > 0){//regenerar diccionario
 		while(i<=tam_contexto){
-			//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-			//socket_send_cpu_umv(socketUmv, cambio_pa);
-			//destruir_men_cpu_umv(cambio_pa);
-
 
 			base = pcb->dir_primer_byte_umv_contexto_actual;
 			offset= (i-1)*5;
@@ -191,11 +188,8 @@ void crearDiccionario(){
 			destruir_men_cpu_umv(sol_var);
 
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
-			if(rec_var->tipo == SEGMEN_FAULT){//manejar
-				//segun el enunciado
-				//debera notificar la excepcion por pantalla y concluir la ejecucion del programa actual
-				//creo q le tiene q mandar un mensaje comun al kernel diciendole segmentation fault y dar como concluida la ejecucion de este programa,
-				//como lo haria cuando el analizador de linea
+			if(rec_var->tipo == SEGMEN_FAULT){
+				manejarSegmentationFault();
 			}
 			if(rec_var->tipo== R_SOL_BYTES){
 				char *key = malloc(rec_var->tam_dato);
@@ -220,6 +214,21 @@ void crearDiccionario(){
 
 	}
 
+void manejarSegmentationFault(){
+	//informar por pantalla el error
+	printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
+	txt_write_in_file(cpu_file_log, "Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual\n");
+	//y concluir la ejecucion del programa actual
+
+	i=quantum+1;
+	fueFinEjecucion =0;
+
+	t_men_quantum_pcb *error_umv = crear_men_quantum_pcb(SEGMEN_FAULT, 0, pcb);
+	socket_send_quantum_pcb(socketKernel, error_umv);
+	destruir_quantum_pcb(error_umv);
+	//como lo haria cuando el analizador de linea
+}
+
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
 	char* proxInst = NULL;
 
@@ -230,9 +239,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	tam = sizeof(uint32_t)*4;
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
+
 	t_men_cpu_umv *sol_inst = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
 	socket_send_cpu_umv(socketUmv, sol_inst);
 	destruir_men_cpu_umv(sol_inst);
@@ -250,8 +257,8 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 		printf("Se cerro la conexion de la umv\n");
 	}
 	if(rec_inst->tipo ==SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT \n");
-		printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
+		manejarSegmentationFault();
+
 	}
 
 	pcb->program_counter ++;
@@ -301,10 +308,6 @@ void preservarContexto(){
 
 	t_men_comun *r_con = socket_recv_comun(socketUmv);
 	if (r_con->tipo == R_ALM_BYTES){
-			//program counter + 1 (siguiente instruccion a ejecutar)
-		//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-		//socket_send_cpu_umv(socketUmv, cambio_pa);
-		//destruir_men_cpu_umv(cambio_pa);
 
 		offset = offset + 4;
 		buffer = string_itoa(pcb->program_counter);
@@ -315,20 +318,16 @@ void preservarContexto(){
 		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
 		if(r_proxins->tipo == R_ALM_BYTES){
 			txt_write_in_file(cpu_file_log, "Se almaceno correctamente el contexto\n");
-			printf("Se almaceno correctamente el conexto");
+			printf("Se almaceno correctamente el contexto");
 		}
-		if(r_proxins->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-			txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD\n");
-			printf("MEMORY OVERLOAD");
-			finalizarContexto();
+		if(r_proxins->tipo == SEGMEN_FAULT){
+			manejarSegmentationFault();
 		}
 
 		free(buffer);
 	}
-	if(r_con->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD\n");
-		printf("MEMORY OVERLOAD");
-		finalizarContexto();
+	if(r_con->tipo == SEGMEN_FAULT){
+		manejarSegmentationFault();
 	}
 
 }
@@ -380,12 +379,11 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 		printf("Definir la variable %c en la posicion %c\n",identificador_variable, base +offset);
 
 	}
-	if(r_alm->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD");
-		printf("MEMORY OVERLOAD");
+	if(r_alm->tipo == SEGMEN_FAULT){
+		manejarSegmentationFault();
 		base=0;
 		offset=0;
-		finalizarContexto();
+
 	}
 
 
@@ -424,10 +422,6 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
 	t_valor_variable valor;
 
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable; // son los cuatro bytes siguientes a la variable
 	int32_t tam= sizeof(int32_t);
@@ -447,8 +441,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	}
 
 	if(men_comun->tipo ==SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
-		printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
+		manejarSegmentationFault();
 		}
 
 	txt_write_in_file(cpu_file_log, "Dereferenciar \n");
@@ -460,9 +453,6 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
 
 	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
 	int32_t offset = 1 + direccion_variable;
@@ -481,11 +471,8 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 		txt_write_in_file(cpu_file_log, "el valor \n");
 		printf("Asignando en la direccion %d el valor %d \n", direccion_variable, valor);
 	}
-	if(r_alm->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD");
-		printf("MEMORY OVERLOAD");
-		finalizarContexto();
-		exit(1);
+	if(r_alm->tipo == SEGMEN_FAULT){
+		manejarSegmentationFault();
 	}
 }
 
@@ -526,9 +513,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	}
 
 void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){//revisar
-
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
-
 
 	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(t_nombre_etiqueta, etiquetas, pcb->tam_indice_etiquetas);
 
@@ -566,11 +551,6 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 
 	preservarContexto();
 
-	// dir de retorno
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
-
 	offset = offset + 4;
 	char* buffer = malloc(sizeof(int32_t));
 	buffer = string_itoa(donde_retornar);
@@ -593,10 +573,8 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 		printf("Llamando con retorno a etiqueta %s y retorna en %d", etiqueta, donde_retornar);
 
 	}
-	if(r_alm->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD no se pudo guardar contexto");
-		printf("MEMORY OVERLOAD no se pudo guardar contexto");
-		finalizarContexto();
+	if(r_alm->tipo == SEGMEN_FAULT){
+		manejarSegmentationFault();
 	}
 
 
@@ -622,9 +600,7 @@ void finalizar(void){
 		pcb->program_counter= prog_counter;
 	}
 	if(rec_progcount->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
-		printf("SEGMENTATION FAULT");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	offset= offset-4;
@@ -640,9 +616,7 @@ void finalizar(void){
 	}
 
 	if(rec_context->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
-		printf("SEGMENTATION FAULT");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	if(pcb->dir_primer_byte_umv_contexto_actual == pcb->dir_primer_byte_umv_segmento_stack){
@@ -651,17 +625,13 @@ void finalizar(void){
 
 	}
 
-	txt_write_in_file(cpu_file_log, "Finalizando el programa actual");
-	printf("Finalizando el programa actual");
+	txt_write_in_file(cpu_file_log, "Finalizando el programa actual\n");
+	printf("Finalizando el programa actual\n");
 }
 
 void retornar(t_valor_variable retorno){
 	int32_t dir_retorno = 0;
 	int32_t context = 0;
-
-	//t_men_cpu_umv *cambio_pa= crear_men_cpu_umv(CAMBIO_PA, proc_id, 0, 0, NULL);todo solo tiene q hacer el cambio de proceso activo al recibir un nuevo quantum-pcb del kernel
-	//socket_send_cpu_umv(socketUmv, cambio_pa);
-	//destruir_men_cpu_umv(cambio_pa);
 
 	base=pcb->dir_primer_byte_umv_contexto_actual;
 	offset= base -4;
@@ -678,9 +648,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if (rec_ret->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
-		printf("SEGMENTATION FAULT");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 
@@ -697,9 +665,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if(rec_progcount->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
-		printf("SEGMENTATION FAULT");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 	offset= offset-4;
@@ -715,9 +681,7 @@ void retornar(t_valor_variable retorno){
 
 	}
 	if (rec_context->tipo == SEGMEN_FAULT){
-		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT\n");
-		printf("SEGMENTATION FAULT");
-		exit(1);
+		manejarSegmentationFault();
 	}
 
 
@@ -729,10 +693,8 @@ void retornar(t_valor_variable retorno){
 	destruir_men_cpu_umv(alm_val);
 
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
-	if(rec_alm->tipo == MEM_OVERLOAD){//todo la cpu solo tiene q recibir SEGMENTATION FAULT
-		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD no se pudo guardar en umv\n");
-		printf("MEMORY OVERLOAD no se pudo guardar\n");
-		exit(1);
+	if(rec_alm->tipo == SEGMEN_FAULT){
+		manejarSegmentationFault();
 	}
 	if(rec_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");

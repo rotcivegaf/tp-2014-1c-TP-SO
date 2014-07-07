@@ -28,6 +28,7 @@
 
 
 
+
 //Tipos de datos
 	typedef u_int32_t t_puntero;
 	typedef u_int32_t t_size;
@@ -52,6 +53,7 @@ int quit_sistema = 1;
 char *prox_inst;
 char* etiquetas;
 int32_t fueFinEjecucion;
+int32_t i;
 FILE *cpu_file_log;
 
 void traerIndiceEtiquetas();
@@ -60,7 +62,7 @@ void handshake_umv(char *puerto, char *ip);
 void handshake_kernel(char *puerto, char *ip);
 void recv_pcb_del_kernel(t_men_quantum_pcb *msj);
 void cambio_PA(int32_t id_proc);
-
+void manejarSegmentationFault();
 void signal_handler(int sig);
 
 void crearDiccionario();
