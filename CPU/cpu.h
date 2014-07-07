@@ -52,18 +52,17 @@ int quit_sistema = 1;
 char *prox_inst;
 char* etiquetas;
 int32_t fueFinEjecucion;
-char *proc_id;
 FILE *cpu_file_log;
 
 void traerIndiceEtiquetas();
 void recibirUnPcb();
-void handshake_umv(char *ip_umv, char *puerto_umv);
-void handshake_kernel(char *ip_k, char *puerto_k);
+void handshake_umv(char *puerto, char *ip);
+void handshake_kernel(char *puerto, char *ip);
 void recv_pcb_del_kernel(t_men_quantum_pcb *msj);
+void cambio_PA(int32_t id_proc);
 
 void signal_handler(int sig);
 
-//t_config *levantarConfiguracion();
 void crearDiccionario();
 void salirPorQuantum();
 void parsearUnaInstruccion(char* unaIns);
@@ -74,6 +73,7 @@ void preservarContexto();
 void finalizarContexto();
 void logear_int(FILE* destino,int32_t un_int);
 void logear_char(FILE* destino,char un_char);
+void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *ipUmv);
 
 //primitivas anSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable);
