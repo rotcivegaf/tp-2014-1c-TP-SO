@@ -7,7 +7,8 @@ int main(int argc, char *argv[]){
 	logger = log_create("programa.log",argv[1],true,LOG_LEVEL_INFO);
 	log_info(logger,"Inicio de ejecicion");
 
-	t_config *config=config_create(getenv("ANSISOP_CONFIG"));
+	t_config *config=config_create(getenv("ANSISOP_CONFIG"));// comando para usar la variable de entorno   export ANSISOP_CONFIG=/home/victor/workspace/tp-2014-1c-hashtaggers/programa/programa_config
+
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
 	char *ip_kernel=config_get_string_value(config, "IP_Kernel");
 	char *puerto_kernel = config_get_string_value(config, "Puerto_Kernel");
