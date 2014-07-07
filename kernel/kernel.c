@@ -740,7 +740,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
 	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
-	socket_send_comun(soc_umv, men_cod_prog);
+	socket_send_comun(soc_umv, men);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = contador_id_programa;
@@ -916,7 +916,7 @@ t_datos_config *levantar_config(){
 	t_IO *aux_IO;
 	char **id_hios = malloc(sizeof(char));
 	char **hio_sleeps = malloc(sizeof(char));
-	t_config *diccionario_config = config_create("kernel_config");
+	t_config *diccionario_config = config_create("./kernel/kernel_config");
 	t_datos_config *ret = malloc(sizeof(t_datos_config));
 	ret->puerto_prog = config_get_string_value( diccionario_config, "Puerto_prog");
 	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
