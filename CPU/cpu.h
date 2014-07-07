@@ -13,6 +13,7 @@
 #include <commons/config.h>
 #include <commons/string.h>
 #include <commons/collections/dictionary.h>
+#include "commons/txt.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,6 +53,7 @@ char *prox_inst;
 char* etiquetas;
 int32_t fueFinEjecucion;
 char *proc_id;
+FILE *cpu_file_log;
 
 void traerIndiceEtiquetas();
 void recibirUnPcb();
@@ -70,7 +72,8 @@ void errorDeProxInstruccion(int socketKernel);
 char* solicitarProxSentenciaAUmv();
 void preservarContexto();
 void finalizarContexto();
-
+void logear_int(FILE* destino,int32_t un_int);
+void logear_char(FILE* destino,char un_char);
 
 //primitivas anSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable);

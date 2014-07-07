@@ -40,11 +40,14 @@ int main(){
 	offset=0;
 	tam = 0;
 
-
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
 	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
 	sigemptyset(&sa.sa_mask); // conjunto de señales a bloquear durante la ejecucion del signal-catching function
 
+	cpu_file_log = txt_open_for_append("./CPU/logs/cpu.log");
+	txt_write_in_file(cpu_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+
+	txt_write_in_file(cpu_file_log, "Cargo la configuracion desde el archivo\n");
 
 	t_config *unaConfig = config_create("config.conf");
 	char *ipKernel=config_get_string_value(unaConfig, "IPKERNEL");
@@ -61,7 +64,8 @@ int main(){
 
 	/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
 	if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
-			perror("sigaction");
+
+		perror("sigaction");
 			exit(1);
 			}
 
@@ -116,8 +120,10 @@ void handshake_umv(char *ip_umv, char *puerto_umv){
 	//espero coneccion de la UMV
 	mensaje_inicial = socket_recv_comun(socketUmv);
 	if(mensaje_inicial->tipo == HS_UMV){
+		txt_write_in_file(cpu_file_log, "UMV conectada \n");
 		printf("UMV conectada\n");
 	}else{
+		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE UMV");
 		printf("ERROR HANDSHAKE");
 	}
 }
@@ -131,8 +137,10 @@ void handshake_kernel(char *ip_k, char *puerto_k){
 	//espero conexion de kernel
 	mensaje_inicial = socket_recv_comun(socketKernel);
 	if(mensaje_inicial->tipo == HS_KERNEL){
+		txt_write_in_file(cpu_file_log, "Kernel conectado\n");
 		printf("Kernel conectado\n");
 	}else{
+		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE KERNEL \n");
 		printf("ERROR HANDSHAKE");
 	}
 }
@@ -246,12 +254,15 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	if(rec_inst->tipo == R_SOL_BYTES){
 		char* proxInst = rec_inst->dato;
+		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar %s\n",proxInst);
 	}
 	if(rec_inst->tipo == CONEC_CERRADA){
+		txt_write_in_file(cpu_file_log, "Se cerro la conexion de la umv \n");
 		printf("Se cerro la conexion de la umv\n");
 	}
 	if(rec_inst->tipo ==SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT \n");
 		printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
 	}
 
@@ -284,6 +295,7 @@ void signal_handler(int sig){
 
 	fueFinEjecucion = 1;
 
+	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
 	printf("Se recibio la SIGUSR1");
 
 	}
@@ -322,18 +334,21 @@ void preservarContexto(){
 
 		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
 		if(r_proxins->tipo == R_ALM_BYTES){
-				printf("Se almaceno correctamente el conexto");
+			txt_write_in_file(cpu_file_log, "Se almaceno correctamente el contexto\n");
+			printf("Se almaceno correctamente el conexto");
 			}
 		if(r_proxins->tipo == MEM_OVERLOAD){
-				printf("MEMORY OVERLOAD");
-				finalizarContexto();
+			txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD\n");
+			printf("MEMORY OVERLOAD");
+			finalizarContexto();
 			}
 
 		free(buffer);
 	}
 	if(r_con->tipo == MEM_OVERLOAD){
-			printf("MEMORY OVERLOAD");
-			finalizarContexto();
+		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD\n");
+		printf("MEMORY OVERLOAD");
+		finalizarContexto();
 		}
 
 }
@@ -345,6 +360,8 @@ void finalizarContexto(){
 	destruir_quantum_pcb(fin_ej);
 
 	fueFinEjecucion = 1;
+
+	txt_write_in_file(cpu_file_log, "Mandando a Kernel-PCP el pcb de un programa que se termino de ejecutar\n");
 }
 
 //Primitivas ANSISOP
@@ -372,10 +389,13 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 		char* data = string_itoa(base + offset);
 		dictionary_put(dic_Variables, key, data);
 		(pcb->cant_var_contexto_actual) ++;
+		txt_write_in_file(cpu_file_log, "Definiar la variable \n");
+		txt_write_in_file(cpu_file_log, "en la posicion \n");
 		printf("Definir la variable %c en la posicion %c\n",identificador_variable, base +offset);
 
 	}
 	if(r_alm->tipo == MEM_OVERLOAD){
+		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD");
 		printf("MEMORY OVERLOAD");
 		base=0;
 		offset=0;
@@ -405,6 +425,8 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 			posicion= atoi(e->data);
 		}
 
+	txt_write_in_file(cpu_file_log, "La posicion de la variable\n");
+	txt_write_in_file(cpu_file_log, "es\n");
 	printf("La posicion de la variable %c es %d", identificador_variable, posicion);
 
 	return posicion ;
@@ -442,9 +464,12 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	}
 
 	if(men_comun->tipo ==SEGMEN_FAULT){
-			printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
+		printf("SEGMENTATION FAULT");// que hacer si hay seg fault? aviso al kernel y desconecto?
 		}
 
+	txt_write_in_file(cpu_file_log, "Dereferenciar \n");
+	txt_write_in_file(cpu_file_log, "y su valor es \n");
 	printf("Dereferenciar %d y su valor es: %d\n",direccion_variable,valor);
 
 	return valor;
@@ -470,9 +495,12 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
-	printf("Asignando en la direccion %d el valor %d \n", direccion_variable, valor);
+		txt_write_in_file(cpu_file_log, "Asignando en la direccion \n");
+		txt_write_in_file(cpu_file_log, "el valor \n");
+		printf("Asignando en la direccion %d el valor %d \n", direccion_variable, valor);
 	}
 	if(r_alm->tipo == MEM_OVERLOAD){
+		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD");
 		printf("MEMORY OVERLOAD");
 		finalizarContexto();
 		exit(1);
@@ -491,6 +519,8 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	char *c = respuesta->dato;
 	t_valor_variable valor = atoi(c);
 
+	txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
+	txt_write_in_file(cpu_file_log, "el valor \n");
 	printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
 	return valor;
 }
@@ -510,7 +540,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	destruir_men_comun(var);
 	destruir_men_comun(val_asignado);
 
-
+	txt_write_in_file(cpu_file_log, "Asignando a variable compartida \n");
 	printf("Asignando a variable compartida %s el valor %d \n", variable, valor);
 	return valor;
 	}
@@ -526,11 +556,12 @@ void irAlLabel(t_nombre_etiqueta t_nombre_etiqueta){//revisar
 	if(pos_etiqueta != -1){
 		pcb->program_counter = pos_etiqueta;
 	}else{
+		txt_write_in_file(cpu_file_log, "Hubo un error en la busqueda de la etiqueta\n");
 		printf("Hubo un error en la busqueda de la etiqueta /n");
 		finalizarContexto();
 	}
 
-
+	txt_write_in_file(cpu_file_log, "Yendo al label \n");
 	printf("Yendo al label %s\n", t_nombre_etiqueta);
 
 }
@@ -546,6 +577,7 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 
 	irAlLabel(etiqueta);
 
+	txt_write_in_file(cpu_file_log, "Llamando sin retorno a etiqueta\n");
 	printf("Llamando sin retorno a etiqueta %s\n", etiqueta);
 
 	}
@@ -573,16 +605,19 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 	if(r_alm->tipo == R_ALM_BYTES){
+		txt_write_in_file(cpu_file_log, "Se almaceno la direccion de retorno \n");
 		printf("Se almaceno la direccion de retorno");
 
 		pcb->cant_var_contexto_actual = 0;
 		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+1;
 		irAlLabel(etiqueta);
 
+		txt_write_in_file(cpu_file_log, "Llamando con retorno a la etiqueta\n");
 		printf("Llamando con retorno a etiqueta %s y retorna en %d", etiqueta, donde_retornar);
 
 	}
 	if(r_alm->tipo == MEM_OVERLOAD){
+		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD no se pudo guardar contexto");
 		printf("MEMORY OVERLOAD no se pudo guardar contexto");
 		finalizarContexto();
 	}
@@ -610,6 +645,7 @@ void finalizar(void){
 		pcb->program_counter= prog_counter;
 	}
 	if(rec_progcount->tipo == SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
@@ -627,6 +663,7 @@ void finalizar(void){
 	}
 
 	if(rec_context->tipo == SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
@@ -637,6 +674,7 @@ void finalizar(void){
 
 	}
 
+	txt_write_in_file(cpu_file_log, "Finalizando el programa actual");
 	printf("Finalizando el programa actual");
 }
 
@@ -663,6 +701,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if (rec_ret->tipo == SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
@@ -681,6 +720,7 @@ void retornar(t_valor_variable retorno){
 	}
 
 	if(rec_progcount->tipo == SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
@@ -698,6 +738,7 @@ void retornar(t_valor_variable retorno){
 
 	}
 	if (rec_context->tipo == SEGMEN_FAULT){
+		txt_write_in_file(cpu_file_log, "SEGMENTATION FAULT");
 		printf("SEGMENTATION FAULT");
 		exit(1);
 	}
@@ -712,14 +753,15 @@ void retornar(t_valor_variable retorno){
 
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
 	if(rec_alm->tipo == MEM_OVERLOAD){
+		txt_write_in_file(cpu_file_log, "MEMORY OVERLOAD no se pudo guardar en umv");
 		printf("MEMORY OVERLOAD no se pudo guardar");
 		exit(1);
 	}
 	if(rec_alm->tipo == R_ALM_BYTES){
-
+		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");
+		printf("Retornando valor de variable%d en la direccion %d\n", retorno, dir_retorno);
 	}
 
-	printf("Retornando valor de variable%d en la direccion %d\n", retorno, dir_retorno);
 }
 
 void imprimir(t_valor_variable valor_mostrar){
@@ -731,6 +773,7 @@ void imprimir(t_valor_variable valor_mostrar){
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
 	//romper no violentamente con ### inexistente
+	txt_write_in_file(cpu_file_log, "Imprimiendo valor de variable\n");
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
@@ -743,6 +786,7 @@ void imprimirTexto(char* texto){
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
 	//romper no violentamente con ### inexistente
+	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
 	printf("Imprimiendo texto: %s", texto);
 	}
 
@@ -758,6 +802,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	socket_send_quantum_pcb(socketKernel, mpcb);
 	destruir_quantum_pcb(mpcb);
 	//romper no violentamente con ### inexistente
+	txt_write_in_file(cpu_file_log, "Saliendo a i/o en dispositivo\n");
 	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
 }
 
@@ -766,6 +811,8 @@ void wait(t_nombre_semaforo identificador_semaforo){
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
 	//romper no violentamente con ### inexistente
+	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
+
 	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
 }
 void mi_signal(t_nombre_semaforo identificador_semaforo){
@@ -773,9 +820,29 @@ void mi_signal(t_nombre_semaforo identificador_semaforo){
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
 	//romper no violentamente con ### inexistente
+	txt_write_in_file(cpu_file_log,"Haciendo signal a semafor\n");
+
 	printf("Haciendo signal a semaforo%s\n", identificador_semaforo);
 
 }
 
 
+void logear_int(FILE* destino,int32_t un_int){
+	char *aux_string = string_itoa(un_int);
+	txt_write_in_file(destino,aux_string);
+	free(aux_string);
+}
+
+
+void logear_char(FILE* destino,char un_char){
+	if (un_char == '\0'){
+		char *aux_string = "\\0";
+		txt_write_in_file(destino, aux_string);
+	}else{
+		char *aux_string = string_itoa((int)un_char);
+		txt_write_in_file(destino, aux_string);
+		free(aux_string);
+	}
+	txt_write_in_file(destino,"-");
+}
 
