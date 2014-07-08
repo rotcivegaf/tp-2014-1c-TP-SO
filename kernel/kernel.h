@@ -136,5 +136,6 @@
 	void umv_destrui_pcb(int32_t id_pcb);
 	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
 	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
+	void pasar_pcb_exit(t_pcb_otros *pcb);
 
 #endif /* KERNEL_H_ */
