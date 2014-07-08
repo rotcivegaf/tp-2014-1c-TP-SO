@@ -495,6 +495,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_new);
 			sem_incre(&cont_exit);
+			sem_decre(&buff_multiprog);
+			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_new, aux);
@@ -513,6 +515,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_ready);
 			sem_incre(&cont_exit);
+			sem_decre(&buff_multiprog);
+			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_ready, aux);
@@ -531,6 +535,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_block);
 			sem_incre(&cont_exit);
+			sem_decre(&buff_multiprog);
+			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_block, aux);
@@ -549,6 +555,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 			pthread_mutex_unlock(&mutex_exit);
 			pthread_mutex_unlock(&mutex_exec);
 			sem_incre(&cont_exit);
+			sem_decre(&buff_multiprog);
+			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_exec, aux);
@@ -706,6 +714,7 @@ void *manejador_exit(){
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
+			sem_decre(&cont_exit);
 		}
 	}
 	return NULL;
