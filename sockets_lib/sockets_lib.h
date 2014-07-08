@@ -49,6 +49,8 @@
 		WAIT=65,
 		PROX_INSTRUCCION = 66,
 		PCB_Y_QUANTUM = 67,
+		VAR_INEX = 68,
+		SEM_INEX = 69,
 		//mensajes recibidos por la UMV departe del KERNEL
 		PED_MEM_SEG_COD = 200,
 		PED_MEM_IND_ETI = 201,

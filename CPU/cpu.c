@@ -174,9 +174,10 @@ void manejarSegmentationFault(){
 	quantum_actual++;
 	fueFinEjecucion =0;//todo puede q sea 1
 
-	t_men_quantum_pcb *error_umv = crear_men_quantum_pcb(SEGMEN_FAULT, 0, pcb);
-	socket_send_quantum_pcb(socketKernel, error_umv);
-	destruir_quantum_pcb(error_umv);
+	//todo cambie aca porque no hace falta mandar el pcb, no tiene que actualizarse
+	t_men_comun *error_umv = crear_men_comun(SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
+	socket_send_comun(socketKernel, error_umv);
+	destruir_men_comun(error_umv);
 	//como lo haria cuando el analizador de linea
 }
 
@@ -232,9 +233,17 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
+	/* todo cambio: tiene que mandar primero un men comun, por como diferencia el pcp los msjs
+	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
+	socket_send_quantum_pcb(socketKernel, p);
+	destruir_quantum_pcb(p);*/
+
+	t_men_comun *men_fin_quantum = crear_men_comun(FIN_QUANTUM,string_itoa(pcb->id),sizeof(pcb->id));
+	socket_send_comun(socketKernel,men_fin_quantum);
 	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
 	socket_send_quantum_pcb(socketKernel, p);
 	destruir_quantum_pcb(p);
+	destruir_men_comun(men_fin_quantum);
 }
 
 void signal_handler(int sig){
@@ -692,6 +701,19 @@ void wait(t_nombre_semaforo identificador_semaforo){
 	t_men_comun *men = crear_men_comun(WAIT, identificador_semaforo,string_length(identificador_semaforo));
 	socket_send_comun(socketKernel,men);
 	destruir_men_comun(men);
+
+	t_men_comun *men_resp = socket_recv_comun(socketKernel);
+	if(men_resp->tipo != SEM_OK && men_resp->tipo != SEM_BLOQUEADO){
+		printf("Error:esperaba recibir SEM_OK o SEM_BLOQ y recibi:%i",men_resp->tipo);
+	}
+	else{
+		if(men_resp->tipo == SEM_OK){
+			//todo completar para que siga procesando
+		}
+		else{
+			//todo el semaforo esta bloqueado, entonces desalojar (suponiendo que la cpu tenga que cambiar de proceso)
+		}
+	}
 	//romper no violentamente con ### inexistente
 	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
 
