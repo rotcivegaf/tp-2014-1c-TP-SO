@@ -339,9 +339,9 @@ t_men_cpu_umv *crear_men_cpu_umv(int32_t tipo, int32_t base, int32_t offset, int
 	men->offset = offset;
 	men->tam = tam;
 	if (buffer == NULL){
-		men->tam = 0;
-		men->buffer = malloc(men->tam);
-		memcpy(men->buffer, buffer ,men->tam);
+		//men->tam = 0;
+		men->buffer = malloc(0);
+		memcpy(men->buffer, buffer ,0);
 	}else{
 		men->buffer = malloc(tam);
 		memcpy(men->buffer, buffer ,tam);
@@ -424,7 +424,6 @@ char *men_serealizer_cpu_umv(t_men_cpu_umv *self){
 	memcpy(stream+offset, &self->tam, tmp_size = sizeof(int32_t));
 	offset = offset+tmp_size;
 	memcpy(stream + offset, self->buffer, self->tam);
-
 	return stream;
 }
 

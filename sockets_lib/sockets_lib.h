@@ -65,6 +65,7 @@
 		RESP_MEM_IND_ETI = 251,
 		RESP_MEM_IND_COD = 252,
 		RESP_MEM_SEG_STACK = 253,
+		MEN_ALM_OK = 254,
 		//mensajes recibidos por la UMV departe del CPU
 		SOL_BYTES = 300,
 		ALM_BYTES = 301,
