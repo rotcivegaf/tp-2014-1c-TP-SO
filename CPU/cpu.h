@@ -8,11 +8,11 @@
 #ifndef CPU_H_
 #define CPU_H_
 
-#include <parser/metadata_program.h>
-#include <parser/parser.h>
-#include <commons/config.h>
-#include <commons/string.h>
-#include <commons/collections/dictionary.h>
+#include "parser/metadata_program.h"
+#include "parser/parser.h"
+#include "commons/config.h"
+#include "commons/string.h"
+#include "commons/collections/dictionary.h"
 #include "commons/txt.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,36 +25,8 @@
 #include <signal.h>
 #include "sockets_lib.h"
 
-
-
-
-
-//Tipos de datos
-	typedef u_int32_t t_puntero;
-	typedef u_int32_t t_size;
-	typedef u_int32_t t_puntero_instruccion;
-
-	typedef char t_nombre_variable;
-	typedef int t_valor_variable;
-
-	typedef t_nombre_variable* t_nombre_semaforo;
-	typedef t_nombre_variable* t_nombre_etiqueta;
-	typedef  t_nombre_variable* t_nombre_compartida;
-	typedef  t_nombre_variable* t_nombre_dispositivo;
-
 struct sigaction sa;
 volatile sig_atomic_t got_usr1;
-t_dictionary *dic_Variables;
-t_pcb *pcb;
-int socketKernel, socketUmv;
-int32_t base, offset, tam;
-int quantum;
-int quit_sistema = 1;
-char *prox_inst;
-char* etiquetas;
-int32_t fueFinEjecucion;
-int32_t i;
-FILE *cpu_file_log;
 
 void traerIndiceEtiquetas();
 void recibirUnPcb();
