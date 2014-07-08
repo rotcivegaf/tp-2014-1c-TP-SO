@@ -14,7 +14,7 @@ pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
-int32_t quit_sistema = 1; //no seria int?
+int32_t quit_sistema = 1;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
 t_queue *cola_semaforos;
@@ -80,10 +80,10 @@ void *plp(t_param_plp *param_plp){
 	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
 
-	int32_t contador_prog = 1; //aca no saría int?
+	int32_t contador_prog = 1;
 	fd_set master;   // conjunto maestro de sockets
 	fd_set read_fds; // conjunto temporal de sockets para select()
-	int32_t fdmax;        // socket con el mayor valor ACA NO SERIA INT?
+	int32_t fdmax;   // socket con el mayor valor
 
 	//Conecta con la umv
 	handshake_umv(param_plp->ip_umv, param_plp->puerto_umv);
@@ -91,21 +91,25 @@ void *plp(t_param_plp *param_plp){
 	//Abre un server para escuchar las conexiones de los programas
 	int32_t listener_prog = socket_crear_server(param_plp->puerto_prog);
 
-    int32_t prog_new_fd; //aca no es int tmb?
+    int32_t prog_new_fd;
 
 	FD_ZERO(&master);    // borra los conjuntos maestro y temporal de sockets
 	FD_ZERO(&read_fds);
 	FD_SET(listener_prog, &master);
 
-	fdmax = listener_prog; // por ahora es éste //SI FDMAX ES INT, LISTENER_PROG TMB
+	fdmax = listener_prog; // por ahora es éste
 
-	int32_t i; //aca no es int tmb?
+	int32_t i;
+
 	while(quit_sistema){
+
 		read_fds = master; // Copia el conjunto maestro al temporal
+
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PLP-select");
 			exit(1);
 		}
+
 		for(i = 3; i <= fdmax; i++) {
 
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
@@ -125,6 +129,7 @@ void *plp(t_param_plp *param_plp){
 					t_men_comun *men_cod_prog = socket_recv_comun(i);
 
 					if (men_cod_prog->tipo == CONEC_CERRADA) {
+
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
 						socket_cerrar(i);
@@ -134,6 +139,7 @@ void *plp(t_param_plp *param_plp){
 					}
 
 					printf("PLP-select: nuevo prog con socket n°%i\n", i);
+
 					contador_prog++;
 
 					//Pide mem para el prog
@@ -172,7 +178,8 @@ void *plp(t_param_plp *param_plp){
 }
 
 void *pcp(t_param_pcp *param_pcp){
-	int32_t i, fdmax, cpu_new_fd; //lo mismo con int
+
+	int32_t i, fdmax, cpu_new_fd;
 	fd_set master, read_fds;
 
 	// Crea el hilo que pasa los pcb de ready a exec
@@ -190,14 +197,20 @@ void *pcp(t_param_pcp *param_pcp){
 	FD_ZERO(&read_fds);
 	FD_SET(listener_cpu, &master);
 	fdmax = listener_cpu;
+
 	while(quit_sistema){
+
 		read_fds = master;
+
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			perror("PCP-select");
 			exit(1);
 		}
+
 		for(i = 3; i <= fdmax; i++) {
+
 			if (FD_ISSET(i, &read_fds)) {
+
 				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus:
 					cpu_new_fd = socket_accept(listener_cpu);
 					handshake_cpu(cpu_new_fd);
@@ -214,12 +227,17 @@ void *pcp(t_param_pcp *param_pcp){
 					pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
 					FD_SET(cpu_new_fd, &master);
+
 					if (cpu_new_fd > fdmax)
 						fdmax = cpu_new_fd;
+
 				}else{
+
 					// Sino, es un cpu mandando datos
 					t_men_comun *men_cpu = socket_recv_comun(i);
+
 					if (men_cpu->tipo == CONEC_CERRADA) {
+
 						printf("PCP-select: CPU desconectada n°socket %i\n", i);
 
 						// Agarra el cpu a partir de su n° de socket
@@ -245,8 +263,10 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
-					if (men_cpu->tipo == FIN_QUANTUM){
+					if (men_cpu->tipo == FIN_QUANTUM){ //que la cpu primero mande un msj comun y dsp el pcb
+
 						t_cpu *aux_cpu = get_cpu(i);
+
 						if (aux_cpu->id_prog_exec != 0){
 
 							// Actualizacion pcb
@@ -272,16 +292,16 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
-					if(men_cpu->tipo == FIN_EJECUCION){
+					if(men_cpu->tipo == FIN_EJECUCION){//que la cpu solo mande un men comun con tipo FIN_EJECUCION y el dato sea el id
+
 						t_cpu *aux_cpu = get_cpu(i);
-						//Actualizar pcb?
-						t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
+						t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(atoi(men_cpu->dato));
 						aux_pcb_otros->tipo_fin_ejecucion = FIN_EJECUCION;
 						pthread_mutex_lock(&mutex_exit);
 						queue_push(colas->cola_exit,aux_pcb_otros);
-						pthread_mutex_unlock(&mutex_exit);
-
 						sem_incre(&cont_exit);
+						pthread_mutex_unlock(&mutex_exit);
 
 						aux_cpu->id_prog_exec = 0;
 
@@ -292,50 +312,54 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
-					/*
-					 * Primero recibe un msj con el id de la llamada al sistema y el valor,
-					 * dsp otro msj con el id del prog al que le quiere mandar eso
-					 * Manda entonces un msj al prog para que imprima el dato.
-					 */
 					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
 
-						t_cpu *aux_cpu = get_cpu(i);
-						t_pcb_otros *aux_pcb_otros;
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_cpu->id_prog_exec);
-						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
-						//todo habria que mandarle un msj a la cpu de que termino la llamada asi sigue procesando, seria mejor
-						destruir_men_comun(men_cpu);
-						pthread_mutex_lock(&mutex_uso_cola_cpu);
-						queue_push(cola_cpu,aux_cpu);
-						pthread_mutex_unlock(&mutex_uso_cola_cpu);
-						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+						t_men_comun *aux_men_cpu = socket_recv_comun(i);
 
+						if (aux_men_cpu->tipo != ID_PROG)
+
+							printf("Error: esperaba el id de un programa y recibi: %i",aux_men_cpu->tipo);
+
+						t_pcb_otros *aux_pcb_otros;
+						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
+						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
+						destruir_men_comun(men_cpu);
+						destruir_men_comun(aux_men_cpu);
 						continue;
 					}
 					if(men_cpu->tipo == OBTENER_VALOR){
+
 						char *valor	= dictionary_get(diccionario_variables,men_cpu->dato);
-						men_cpu->tipo = VALOR_ASIGNADO; //todo poner otro id para cuando devuelvo el valor, ver con flor
 						men_cpu->dato = valor;
 						socket_send_comun(i,men_cpu);
 						destruir_men_comun(men_cpu);
 						continue;
 					}
 					if(men_cpu->tipo == GRABAR_VALOR){
+
 						t_men_comun *aux_men_cpu = socket_recv_comun(i);
-						if((aux_men_cpu->tipo) == VALOR_ASIGNADO)
+
+						if((aux_men_cpu->tipo) == VALOR_ASIGNADO){
+
 							dictionary_remove(diccionario_variables,men_cpu->dato);
-							dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato); //todo pregunar si se reemplaza el dato o que
+							dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato);
+						}
+
 						destruir_men_comun(men_cpu);
 						destruir_men_comun(aux_men_cpu);
-						//todo porque flor espera un msj aca
 						continue;
 					}
-					if(men_cpu->tipo==WAIT){
+					if(men_cpu->tipo==WAIT){ //la cpu tiene que recibir un msj y hacer un if segun si es SEM_OK (seguir procesando) y si es
+
+						//SEM_BLOQUEADO desalojar
 						int32_t i;
 						t_semaforo *semaforo;
 						int32_t tam = queue_size(cola_semaforos);
+
 						for(i=0;i<tam;i++){
+
 							semaforo = queue_pop(cola_semaforos);
+
 							if(semaforo->id_sem == men_cpu->dato){
 								i = tam;
 							}
@@ -344,6 +368,7 @@ void *pcp(t_param_pcp *param_pcp){
 							}
 						}
 						if(semaforo->valor > 0){
+
 							(semaforo->valor)--;
 							men_cpu->tipo=SEM_OK;
 							socket_send_comun(i,men_cpu);
@@ -351,6 +376,7 @@ void *pcp(t_param_pcp *param_pcp){
 							continue;
 						}
 						else{
+
 							(semaforo->valor)--;
 							t_cpu *aux_cpu = get_cpu(i);
 							t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
@@ -382,11 +408,15 @@ void *pcp(t_param_pcp *param_pcp){
 						}
 					}
 					if(men_cpu->tipo == SIGNAL){
+
 						int32_t i;
 						t_semaforo *semaforo;
 						int32_t tam = queue_size(cola_semaforos);
+
 						for(i=0;i<tam;i++){
+
 							semaforo = queue_pop(cola_semaforos);
+
 							if(semaforo->id_sem == men_cpu->dato){
 								i = tam;
 							}
@@ -394,8 +424,11 @@ void *pcp(t_param_pcp *param_pcp){
 								queue_push(cola_semaforos,semaforo);
 							}
 						}
+
 						(semaforo->valor)++;
+
 						if(queue_size(semaforo->procesos)>0){
+
 							t_pcb_otros *aux_pcb_otros = queue_pop(semaforo->procesos);
 							pthread_mutex_lock(&mutex_ready);
 							queue_push(colas->cola_ready,aux_pcb_otros);
@@ -420,14 +453,19 @@ void *pcp(t_param_pcp *param_pcp){
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
+
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 
 	pthread_mutex_lock(&mutex_exec);
 	int32_t tam = queue_size(colas->cola_exec);
+
 	for(i=0 ;i < tam ;i++){
+
 		aux_pcb_otros = queue_pop(colas->cola_exec);
+
 		if (id_proc == aux_pcb_otros->pcb->id){
+
 			queue_push(colas->cola_exec, aux_pcb_otros);
 			aux_pcb_otros = queue_peek(colas->cola_exec);
 			pthread_mutex_unlock(&mutex_exec);
@@ -441,13 +479,17 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 }
 
 int32_t mover_pcb_exit(int32_t soc_prog){
+
 	int32_t i;
 	t_pcb_otros *aux;
 
 	pthread_mutex_lock(&mutex_new);
+
 	for(i=0; i < queue_size(colas->cola_new) ;i++){
 		aux = queue_pop(colas->cola_new);
+
 		if (aux->n_socket == soc_prog){
+
 			pthread_mutex_lock(&mutex_exit);
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
@@ -460,9 +502,12 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 	pthread_mutex_unlock(&mutex_new);
 
 	pthread_mutex_lock(&mutex_ready);
+
 	for(i=0; i < queue_size(colas->cola_ready) ;i++){
 		aux = queue_pop(colas->cola_ready);
+
 		if (aux->n_socket == soc_prog){
+
 			pthread_mutex_lock(&mutex_exit);
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
@@ -475,9 +520,12 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 	pthread_mutex_unlock(&mutex_ready);
 
 	pthread_mutex_lock(&mutex_block);
+
 	for(i=0; i < queue_size(colas->cola_block) ;i++){
 		aux = queue_pop(colas->cola_block);
+
 		if (aux->n_socket == soc_prog){
+
 			pthread_mutex_lock(&mutex_exit);
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
@@ -490,9 +538,12 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 	pthread_mutex_unlock(&mutex_block);
 
 	pthread_mutex_lock(&mutex_exec);
+
 	for(i=0; i < queue_size(colas->cola_exec) ;i++){
 		aux = queue_pop(colas->cola_exec);
+
 		if (aux->n_socket == soc_prog){
+
 			pthread_mutex_lock(&mutex_exit);
 			queue_push(colas->cola_exit, aux);
 			pthread_mutex_unlock(&mutex_exit);
@@ -507,6 +558,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 }
 
 t_cpu *get_cpu(int32_t soc_cpu){
+
 	int32_t i;
 	t_cpu *cpu;
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
@@ -514,6 +566,7 @@ t_cpu *get_cpu(int32_t soc_cpu){
 
 	for(i=0 ;i < tam ;i++){
 		cpu = queue_pop(cola_cpu);
+
 		if (cpu->soc_cpu == soc_cpu){
 			pthread_mutex_unlock(&mutex_uso_cola_cpu);
 			return cpu;
@@ -526,13 +579,16 @@ t_cpu *get_cpu(int32_t soc_cpu){
 }
 
 t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
+
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 	int32_t tam = queue_size(colas->cola_exec);
 
 	pthread_mutex_lock(&mutex_exec);
+
 	for(i=0 ;i < tam ;i++){
 		aux_pcb_otros = queue_pop(colas->cola_exec);
+
 		if (id_proc == aux_pcb_otros->pcb->id){
 			pthread_mutex_unlock(&mutex_exec);
 			return aux_pcb_otros;
@@ -545,17 +601,19 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 }
 
 void enviar_IO(int32_t soc_cpu, int32_t id_IO){
+
 	t_men_comun *men;
 	t_IO *aux_IO;
 	t_cpu *aux_cpu;
 	aux_cpu = get_cpu(soc_cpu);
-
 	int32_t i;
 
 	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
 	pthread_mutex_lock(&mutex_dispositivos_io);
+
 	for (i=0; i < list_size(dispositivos_IO); i++){
 		aux_IO = list_remove(dispositivos_IO,i);
+
 		if(atoi(aux_IO->id_hio)==id_IO){
 			i=list_size(dispositivos_IO);
 		}
@@ -566,8 +624,10 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	pthread_mutex_unlock(&mutex_dispositivos_io);
 
 	men = socket_recv_comun(soc_cpu);
+
 	if (men->tipo != IO_CANT_UNIDADES)
-		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_CANT_UNIDADES); //si hay un error, no deberia terminar?
+		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_CANT_UNIDADES);
+
 	int32_t cant_unidades = atoi(men->dato);
 
 	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
@@ -596,12 +656,14 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 }
 
 t_pcb_otros *get_peso_min(){
+
 	int32_t i, peso_min = -1;
 	t_pcb_otros *aux;
 
 	int32_t tam_cola = queue_size(colas->cola_new);
 
 	for (i=0;i < tam_cola;i++){
+
 		aux = queue_pop(colas->cola_new);
 		if(peso_min < aux->peso)
 			peso_min = aux->peso;
@@ -609,6 +671,7 @@ t_pcb_otros *get_peso_min(){
 	}
 	for (i=0;i < tam_cola;i++){
 		aux = queue_pop(colas->cola_new);
+
 		if (peso_min == aux->peso)
 			return aux;
 		queue_push(colas->cola_new,aux);
@@ -616,26 +679,32 @@ t_pcb_otros *get_peso_min(){
 	return NULL;
 }
 
-void *manejador_exit(){ //todo dudas en general
+void *manejador_exit(){
+
 	t_pcb_otros *aux_pcb_otros;
 	int32_t soc_prog;
 
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_exit);
-		if (queue_is_empty(colas->cola_exit)){ //aca no hay espera activa??
+
+		if (queue_is_empty(colas->cola_exit)){
 			pthread_mutex_unlock(&mutex_exit);
-			sem_decre(&cont_exit); //por que se decrementa aca y no en el else? No se deberia incrementar aca?
+			sem_decre(&cont_exit);
+
 		}else{
+
 			aux_pcb_otros = queue_pop(colas->cola_exit);
 			pthread_mutex_unlock(&mutex_exit);
+
 			if (aux_pcb_otros->tipo_fin_ejecucion == CPU_DESCONEC ||aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION ){
+
 				t_men_comun *men;
 				men = crear_men_comun(aux_pcb_otros->tipo_fin_ejecucion,"",1);
 				soc_prog = aux_pcb_otros->n_socket;
 				socket_send_comun(soc_prog , men);
 			}
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
-			free(aux_pcb_otros->pcb); //sincronizar, que la umv mande msj cuando termino de destruir los segmentos y recien ahi destruir el pcb
+			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
 		}
 	}
@@ -643,14 +712,19 @@ void *manejador_exit(){ //todo dudas en general
 }
 
 void *manejador_new_ready(t_param_new_ready *param){
+
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_new);
+
 		if (queue_is_empty(colas->cola_new)){
 			pthread_mutex_unlock(&mutex_new);
 			pthread_mutex_lock(&mutex_miltiprog);
+
 		}else{
+
 			//pthread_mutex_unlock(&mutex_new);
 			sem_decre(&libre_multiprog);
+
 			//pthread_mutex_lock(&mutex_new);
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, get_peso_min());
@@ -665,18 +739,24 @@ void *manejador_new_ready(t_param_new_ready *param){
 }
 
 void *manejador_ready_exec(t_param_ready_exec *param){
+
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
 	int32_t res;
+
 	while(quit_sistema){
+
 		pthread_mutex_lock(&mutex_ready);
+
 		if (queue_is_empty(colas->cola_ready)){
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_lock(&mutex_ready_vacia);
 
 		}else{
+
 			pthread_mutex_lock(&mutex_uso_cola_cpu);
 			cpu = get_cpu_libre(&res);
+
 			if(res == 0){
 				pthread_mutex_unlock(&mutex_ready);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -685,8 +765,7 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 			}else{
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
-				//todo ver si el quantum siempre es el mismo, sino habria que agregarlo a pcb_otros
-				//para que se actualice cuando llega desde el pcb
+
 				socket_send_pcb(cpu->soc_cpu,aux_pcb_otros->pcb,param->quantum);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
@@ -701,12 +780,15 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 }
 
 t_cpu *get_cpu_libre(int32_t *res){
+
 	int32_t i;
 	t_cpu *cpu;
 
 	int32_t tam = queue_size(cola_cpu);
+
 	for(i=0 ;i < tam ;i++){
 		cpu = queue_pop(cola_cpu);
+
 		if (cpu->id_prog_exec == 0){
 			*res = 1;
 			return cpu;
@@ -717,7 +799,7 @@ t_cpu *get_cpu_libre(int32_t *res){
 	return cpu;
 }
 
-void umv_destrui_pcb(int32_t id_pcb){ //ojo que hay que sincronizar los mensajes con la umv
+void umv_destrui_pcb(int32_t id_pcb){
 
 	t_men_seg *men_seg;
 	men_seg = crear_men_seg(DESTR_SEGS, id_pcb, 0);
@@ -727,11 +809,10 @@ void umv_destrui_pcb(int32_t id_pcb){ //ojo que hay que sincronizar los mensajes
 
 t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t contador_id_programa){
 
-	//ojo que hay que sincronizar los mensajes con la umv
-
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	t_men_comun* men;
 	char *etis = metadata_program->etiquetas;
+
 	// Escribe el segmento de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
 	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
@@ -763,7 +844,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	return pcb;
 }
 
-t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog){ //ojo que hay que sincronizar los msj con la umv
+t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog){
 
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
 	resp_sol->memoria_insuficiente = 0;
@@ -784,7 +865,7 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	}
 
 	if( resp_men_cod->tipo != RESP_MEM_SEG_COD)
-		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_COD,resp_men_cod->tipo); //por que no termina si hay un error??
+		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_COD,resp_men_cod->tipo);
 
 	t_dir_mem dir_mem_cod = atoi(resp_men_cod->dato);
 	resp_sol->dir_primer_byte_umv_segmento_codigo = dir_mem_cod;
@@ -795,6 +876,7 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	ped_mem = crear_men_seg( PED_MEM_IND_ETI , id_prog, tam);
 	socket_send_seg(soc_umv, ped_mem);
 	resp_mem = socket_recv_comun(soc_umv);
+
 	if (resp_mem->tipo == MEM_OVERLOAD){
 		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
 		destruir_men_comun(resp_mem);
@@ -871,14 +953,16 @@ void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la um
 }
 
 void manejador_IO(t_IO *io){
-	//Sincronizar acceso a la cola
+
 	while(quit_sistema){
+
 		if(queue_size(io->procesos)==0)
 			pthread_mutex_lock(&(io->mutex_dispositivo));
 		else{
-		t_IO_espera *proceso = queue_pop(io->procesos);
-		int32_t tamanio_cola_block = queue_size(colas->cola_block);
-		int32_t i;
+
+			t_IO_espera *proceso = queue_pop(io->procesos);
+			int32_t tamanio_cola_block = queue_size(colas->cola_block);
+			int32_t i;
 
 		for(i=0; i<proceso->unidades;i++)
 			sleep(io->hio_sleep);
@@ -1152,6 +1236,7 @@ void *imp_colas (){
 }
 
 void crear_cont(sem_t *sem ,int32_t val_ini){
+
 	if(sem_init(sem, 0, val_ini)== -1){
 		perror("No se puede crear el semáforo");
 		exit(1);
