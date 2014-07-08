@@ -258,7 +258,7 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
-					if (men_cpu->tipo == FIN_QUANTUM){ //que la cpu primero mande un msj comun y dsp el pcb
+					if (men_cpu->tipo == FIN_QUANTUM){
 
 						t_cpu *aux_cpu = get_cpu(i);
 
@@ -287,7 +287,7 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						continue;
 					}
-					if(men_cpu->tipo == FIN_EJECUCION){//que la cpu solo mande un men comun con tipo FIN_EJECUCION y el dato sea el id
+					if(men_cpu->tipo == FIN_EJECUCION){
 
 						t_cpu *aux_cpu = get_cpu(i);
 
@@ -340,20 +340,21 @@ void *pcp(t_param_pcp *param_pcp){
 						if (valor!=NULL){
 							men_cpu->dato = valor;
 							socket_send_comun(i,men_cpu);
-							destruir_men_comun(men_cpu);
 						}else{
 							t_cpu *aux_cpu = get_cpu(i);
 							t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
-							pthread_mutex_lock(&mutex_uso_cola_cpu);
-							queue_push(cola_cpu,aux_cpu);
-							pthread_mutex_unlock(&mutex_uso_cola_cpu);
-							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+							aux_cpu->id_prog_exec = 0;
 
 							aux_pcb->tipo_fin_ejecucion=VAR_INEX;
 							pasar_pcb_exit(aux_pcb);
 							men_cpu->tipo = VAR_INEX;
 							socket_send_comun(i,men_cpu);
+
+							pthread_mutex_lock(&mutex_uso_cola_cpu);
+							queue_push(cola_cpu,aux_cpu);
+							pthread_mutex_unlock(&mutex_uso_cola_cpu);
+							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						}
 						destruir_men_comun(men_cpu);
 						continue;
@@ -366,19 +367,22 @@ void *pcp(t_param_pcp *param_pcp){
 
 							if (dictionary_remove(diccionario_variables,men_cpu->dato)!=NULL){
 								dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato);
+								//todo mandar msj al cpu de que se grabo la var, si no se queda esperando un msj..
 							}else{
 								t_cpu *aux_cpu = get_cpu(i);
 								t_pcb_otros *aux_pcb = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
+								aux_cpu->id_prog_exec = 0;
+
+								aux_pcb->tipo_fin_ejecucion=VAR_INEX; //todo hacer los case para VAR y SEM INEX en programa
+								pasar_pcb_exit(aux_pcb);
+								men_cpu->tipo = VAR_INEX;
+								socket_send_comun(i,men_cpu);
 
 								pthread_mutex_lock(&mutex_uso_cola_cpu);
 								queue_push(cola_cpu,aux_cpu);
 								pthread_mutex_unlock(&mutex_uso_cola_cpu);
 								pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-
-								aux_pcb->tipo_fin_ejecucion=VAR_INEX; //todo definir en el .h de la biblio de socket y en programa fin de ejec
-								pasar_pcb_exit(aux_pcb);
-								men_cpu->tipo = VAR_INEX;
-								socket_send_comun(i,men_cpu);
 							}
 						}
 						else{
@@ -389,8 +393,7 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(aux_men_cpu);
 						continue;
 					}
-					if(men_cpu->tipo==WAIT){ //la cpu tiene que recibir un msj y hacer un if segun si es SEM_OK (seguir procesando) y si es
-						//SEM_BLOQUEADO desalojar
+					if(men_cpu->tipo==WAIT){
 						int32_t i;
 						t_semaforo *semaforo;
 						int32_t tam = queue_size(cola_semaforos);
@@ -411,21 +414,16 @@ void *pcp(t_param_pcp *param_pcp){
 						if(encontre==1){
 
 							if(semaforo->valor > 0){
-
 								(semaforo->valor)--;
 								men_cpu->tipo=SEM_OK;
 								socket_send_comun(i,men_cpu);
-								destruir_men_comun(men_cpu);
-								continue;
 							}
 							else{
-
 								(semaforo->valor)--;
 								t_cpu *aux_cpu = get_cpu(i);
 								t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
-								t_men_comun *aux_men_cpu = malloc(sizeof(t_men_comun));
-								aux_men_cpu->tipo=SEM_BLOQUEADO;
+								t_men_comun *aux_men_cpu = crear_men_comun(SEM_BLOQUEADO,men_cpu->dato,sizeof(men_cpu->dato));
 								socket_send_comun(i,aux_men_cpu);
 
 								// Actualizacion pcb
@@ -446,22 +444,25 @@ void *pcp(t_param_pcp *param_pcp){
 
 								queue_push(cola_semaforos,semaforo);
 								destruir_men_comun(aux_men_cpu);
-								destruir_men_comun(men_cpu);
 								}
 						}else{
 							t_cpu *aux_cpu = get_cpu(i);
 							t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
-							pthread_mutex_lock(&mutex_uso_cola_cpu);
-							queue_push(cola_cpu,aux_cpu);
-							pthread_mutex_unlock(&mutex_uso_cola_cpu);
-							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+							aux_cpu->id_prog_exec = 0;
 
 							aux_pcb->tipo_fin_ejecucion=SEM_INEX;
 							pasar_pcb_exit(aux_pcb);
 							men_cpu->tipo = SEM_INEX;
 							socket_send_comun(i,men_cpu);
+
+							pthread_mutex_lock(&mutex_uso_cola_cpu);
+							queue_push(cola_cpu,aux_cpu);
+							pthread_mutex_unlock(&mutex_uso_cola_cpu);
+							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 							}
+						destruir_men_comun(men_cpu);
+						continue;
 					}
 					if(men_cpu->tipo == SIGNAL){
 
@@ -489,27 +490,31 @@ void *pcp(t_param_pcp *param_pcp){
 							if(queue_size(semaforo->procesos)>0){
 
 								t_pcb_otros *aux_pcb_otros = queue_pop(semaforo->procesos);
+								//todo falta sacarlo de los bloqueados
 								pthread_mutex_lock(&mutex_ready);
 								queue_push(colas->cola_ready,aux_pcb_otros);
 								pthread_mutex_unlock(&mutex_ready);
 								pthread_mutex_lock(&mutex_ready_vacia);
 							}
 							queue_push(cola_semaforos,semaforo);
-							destruir_men_comun(men_cpu);
 						}else{
 							t_cpu *aux_cpu = get_cpu(i);
 							t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
-							pthread_mutex_lock(&mutex_uso_cola_cpu);
-							queue_push(cola_cpu,aux_cpu);
-							pthread_mutex_unlock(&mutex_uso_cola_cpu);
-							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+							aux_cpu->id_prog_exec = 0;
 
 							aux_pcb->tipo_fin_ejecucion=SEM_INEX;
 							pasar_pcb_exit(aux_pcb);
 							men_cpu->tipo = SEM_INEX;
 							socket_send_comun(i,men_cpu);
+
+							pthread_mutex_lock(&mutex_uso_cola_cpu);
+							queue_push(cola_cpu,aux_cpu);
+							pthread_mutex_unlock(&mutex_uso_cola_cpu);
+							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						}
+						destruir_men_comun(men_cpu);
+						continue;
 					}
 					if (men_cpu->tipo == IO_ID){
 						enviar_IO(i, atoi(men_cpu->dato));
@@ -561,6 +566,7 @@ void pasar_pcb_exit(t_pcb_otros *pcb){
 	sem_incre(&libre_multiprog);
 }
 
+//Para buscar un pcb por su socket, xq no se sabe en que cola esta(cuando se cae la conexion), lo encuentra y lo pasa a exit
 int32_t mover_pcb_exit(int32_t soc_prog){
 
 	int32_t i;
@@ -572,14 +578,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		aux = queue_pop(colas->cola_new);
 
 		if (aux->n_socket == soc_prog){
-
-			pthread_mutex_lock(&mutex_exit);
-			queue_push(colas->cola_exit, aux);
-			pthread_mutex_unlock(&mutex_exit);
+			pasar_pcb_exit(aux);
 			pthread_mutex_unlock(&mutex_new);
-			sem_incre(&cont_exit);
-			sem_decre(&buff_multiprog);
-			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_new, aux);
@@ -592,14 +592,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		aux = queue_pop(colas->cola_ready);
 
 		if (aux->n_socket == soc_prog){
-
-			pthread_mutex_lock(&mutex_exit);
-			queue_push(colas->cola_exit, aux);
-			pthread_mutex_unlock(&mutex_exit);
+			pasar_pcb_exit(aux);
 			pthread_mutex_unlock(&mutex_ready);
-			sem_incre(&cont_exit);
-			sem_decre(&buff_multiprog);
-			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_ready, aux);
@@ -612,14 +606,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		aux = queue_pop(colas->cola_block);
 
 		if (aux->n_socket == soc_prog){
-
-			pthread_mutex_lock(&mutex_exit);
-			queue_push(colas->cola_exit, aux);
-			pthread_mutex_unlock(&mutex_exit);
+			pasar_pcb_exit(aux);
 			pthread_mutex_unlock(&mutex_block);
-			sem_incre(&cont_exit);
-			sem_decre(&buff_multiprog);
-			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_block, aux);
@@ -632,14 +620,8 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 		aux = queue_pop(colas->cola_exec);
 
 		if (aux->n_socket == soc_prog){
-
-			pthread_mutex_lock(&mutex_exit);
-			queue_push(colas->cola_exit, aux);
-			pthread_mutex_unlock(&mutex_exit);
+			pasar_pcb_exit(aux);
 			pthread_mutex_unlock(&mutex_exec);
-			sem_incre(&cont_exit);
-			sem_decre(&buff_multiprog);
-			sem_incre(&libre_multiprog);
 			return 0;
 		}
 		queue_push(colas->cola_exec, aux);
