@@ -401,14 +401,22 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 
 	//recibo el valor
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
-
 	t_valor_variable valor;
-	memcpy(&valor, respuesta->dato,respuesta->tam_dato);
-	destruir_men_comun(respuesta);
 
-	txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
-	txt_write_in_file(cpu_file_log, "el valor \n");
-	printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
+	if(respuesta->tipo == VAR_INEX){
+		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
+		printf("Error en acceso a la variable %s, no existe", variable);
+		valor = 0; //todo asigno 0 si la variable no existe
+		//romper
+	}
+	else{
+		memcpy(&valor, respuesta->dato,respuesta->tam_dato);
+
+		txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
+		txt_write_in_file(cpu_file_log, "el valor \n");
+		printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
+	}
+	destruir_men_comun(respuesta);
 	return valor;
 }
 
@@ -422,8 +430,20 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 	enviar_men_comun_destuir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
 
+	t_men_comun *respuesta = socket_recv_comun(socketKernel);
+
+	if(respuesta->tipo == VALOR_ASIGNADO){
 	txt_write_in_file(cpu_file_log, "Asignando a variable compartida \n");
 	printf("Asignando a variable compartida %s el valor %d \n", variable, valor);
+	}
+	else{
+		if(respuesta->tipo == VAR_INEX){
+			txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
+			printf("Error en acceso a la variable %s, no existe", variable);
+			//romper
+		}
+	}
+	destruir_men_comun(respuesta);
 	return valor;
 	}
 
@@ -639,33 +659,45 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 
 void wait(t_nombre_semaforo identificador_semaforo){
 	enviar_men_comun_destuir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
+	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
+	printf("Haciendo wait a semaforo %s\n", identificador_semaforo);
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
-	if(men_resp->tipo != SEM_OK && men_resp->tipo != SEM_BLOQUEADO){
-		printf("Error:esperaba recibir SEM_OK o SEM_BLOQ y recibi:%i",men_resp->tipo);
-	}
-	else{
-		if(men_resp->tipo == SEM_OK){
-			//todo completar para que siga procesando
-		}
-		else{
-			//todo el semaforo esta bloqueado, entonces desalojar (suponiendo que la cpu tenga que cambiar de proceso)
-		}
-	}
-	//romper no violentamente con ### inexistente
-	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
 
-	printf("Haciendo wait a semaforo%s\n", identificador_semaforo);
+	switch(men_resp->tipo){
+		case SEM_OK:
+			//El semaforo esta disponible, seguir procesando o lo que sea
+			break;
+		case SEM_BLOQUEADO:
+			//El semaforo esta bloqueado, desalojar(suponiendo que tiene que cambiar de proceso, si es asi, mandar el pcb)
+			break;
+		case SEM_INEX:
+			printf("Acceso a semaforo %s inexistente \n",identificador_semaforo);
+			txt_write_in_file(cpu_file_log,"Acceso a semaforo inexistente");
+			//romper
+			break;
+		default:
+			printf("El tipo de dato recibido: %i es erroneo\n",men_resp->tipo);
+			txt_write_in_file(cpu_file_log,"Se recibio un msj del kernel de tipo erroneo");
+			break;
+	}
+	destruir_men_comun(men_resp);
 }
 
 void mi_signal(t_nombre_semaforo identificador_semaforo){
 	enviar_men_comun_destuir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
 
-	//romper no violentamente con ### inexistente
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
-
 	printf("Haciendo signal a semaforo %s\n", identificador_semaforo);
 
+	t_men_comun *respuesta = socket_recv_comun(socketKernel);
+
+	if(respuesta->tipo == SEM_INEX){
+		txt_write_in_file(cpu_file_log,"Signal a semaforo inexistente\n");
+		printf("Signal a semaforo %s inexistente \n", identificador_semaforo);
+		//romper no violentamente con ### inexistente
+	}
+	destruir_men_comun(respuesta);
 }
 
 void logear_int(FILE* destino,int32_t un_int){
