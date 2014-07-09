@@ -9,6 +9,7 @@
 	#include <unistd.h>
 	//commons
 	#include <commons/config.h>
+	#include <commons/txt.h>
 	#include <commons/collections/dictionary.h>
 	#include <commons/collections/queue.h>
 	//parser-ansisop
@@ -137,5 +138,8 @@
 	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
 	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
+	void pasar_pcbBlock_exit(int32_t id_pcb);
+	void llamada_erronea(int32_t tipo_error, int32_t soc_cpu);
+	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
 #endif /* KERNEL_H_ */
