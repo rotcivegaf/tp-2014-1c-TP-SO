@@ -12,8 +12,9 @@ pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_exit_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
-sem_t buff_multiprog, libre_multiprog, cont_exit;
+sem_t buff_multiprog, libre_multiprog; //, cont_exit;
 int32_t quit_sistema = 1;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
@@ -33,7 +34,7 @@ int main(void){
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
 	//Inicializacion semaforos
-	crear_cont(&cont_exit , 0);
+	//crear_cont(&cont_exit , 0);
 	crear_cont(&buff_multiprog , 0); //cantidad de procesos entre ready y exec
 	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
 
@@ -386,7 +387,7 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						destruir_men_comun(aux_men_cpu);
 
-						txt_write_in_file(pcp_log,"Llamada al sistema:IMPRIMIR por cpu con socket n°:");
+						txt_write_in_file(pcp_log,"IMPRIMIR por cpu con socket n°:");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
 
@@ -426,7 +427,7 @@ void *pcp(t_param_pcp *param_pcp){
 								logear_int(pcp_log,i);
 								txt_write_in_file(pcp_log,"\n");
 
-								//todo mandar msj al cpu de que se grabo la var, si no se queda esperando un msj..
+								socket_send_comun(i,aux_men_cpu);
 							}else{
 								llamada_erronea(VAR_INEX,i);
 								txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
@@ -473,15 +474,14 @@ void *pcp(t_param_pcp *param_pcp){
 								(semaforo->valor)--;
 								t_cpu *aux_cpu = get_cpu(i);
 
-								t_men_comun *aux_men_cpu = crear_men_comun(SEM_BLOQUEADO,men_cpu->dato,sizeof(men_cpu->dato));
-								socket_send_comun(i,aux_men_cpu);
+								men_cpu->tipo = SEM_BLOQUEADO;
+								socket_send_comun(i,men_cpu);
 
 								t_pcb_otros *aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
 
 								queue_push(semaforo->procesos,aux_pcb_otros);
 
 								queue_push(cola_semaforos,semaforo);
-								destruir_men_comun(aux_men_cpu);
 								}
 
 						txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
@@ -521,6 +521,7 @@ void *pcp(t_param_pcp *param_pcp){
 
 						if(encontre==1){
 							(semaforo->valor)++;
+							socket_send_comun(i,men_cpu);
 
 							if(queue_size(semaforo->procesos)>0){
 								t_pcb_otros *aux_pcb_otros = queue_pop(semaforo->procesos);
@@ -609,8 +610,9 @@ void pasar_pcbBlock_exit(int32_t id_pcb){
 void pasar_pcb_exit(t_pcb_otros *pcb){
 	pthread_mutex_lock(&mutex_exit);
 	queue_push(colas->cola_exit,pcb);
-	sem_incre(&cont_exit);
+	//sem_incre(&cont_exit);
 	pthread_mutex_unlock(&mutex_exit);
+	pthread_mutex_unlock(&mutex_exit_vacia);
 
 	sem_decre(&buff_multiprog);
 	sem_incre(&libre_multiprog);
@@ -837,8 +839,8 @@ void *manejador_exit(){
 
 		if (queue_is_empty(colas->cola_exit)){
 			pthread_mutex_unlock(&mutex_exit);
-			sem_decre(&cont_exit);
-
+			//sem_decre(&cont_exit);
+			pthread_mutex_lock(&mutex_exit_vacia);
 		}else{
 
 			aux_pcb_otros = queue_pop(colas->cola_exit);
@@ -854,7 +856,7 @@ void *manejador_exit(){
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
-			sem_decre(&cont_exit);
+			//sem_decre(&cont_exit);
 		}
 	}
 	return NULL;
