@@ -9,6 +9,7 @@
 	#include <unistd.h>
 	//commons
 	#include <commons/config.h>
+	#include <commons/txt.h>
 	#include <commons/collections/dictionary.h>
 	#include <commons/collections/queue.h>
 	//parser-ansisop
@@ -140,5 +141,7 @@
 	void pasar_pcbBlock_exit(int32_t id_pcb);
 	void llamada_erronea(int32_t tipo_error, int32_t soc_cpu);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
+	void logear_int(FILE* destino,int32_t un_int);
+	void logear_char(FILE* destino,char un_char);
 
 #endif /* KERNEL_H_ */

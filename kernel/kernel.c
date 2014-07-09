@@ -18,11 +18,19 @@ int32_t quit_sistema = 1;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
 t_queue *cola_semaforos;
+FILE *plp_log;
+FILE *pcp_log;
 
 int main(void){
-	diccionario_variables = dictionary_create();
+	diccionario_variables = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
 	cola_semaforos = queue_create();
 	t_datos_config *diccionario_config = levantar_config();
+
+	plp_log = txt_open_for_append("./kernel/logs/cpu.log");
+	txt_write_in_file(plp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+
+	pcp_log = txt_open_for_append("./kernel/logs/cpu.log");
+	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
 	//Inicializacion semaforos
 	crear_cont(&cont_exit , 0);
@@ -52,7 +60,8 @@ int main(void){
 	pthread_create(&hilo_pcp, NULL, pcp, (void *)param_pcp);
 	pthread_join(hilo_plp, NULL);
 	pthread_join(hilo_pcp, NULL);
-	
+
+	//todo todos estos free y demas, es como si no estuvieran para el valgrind..
 	free(param_plp->puerto_prog);
 	free(param_plp->puerto_umv);
 	free(param_plp->ip_umv);
@@ -90,7 +99,7 @@ void *plp(t_param_plp *param_plp){
 
 	//Abre un server para escuchar las conexiones de los programas
 	int32_t listener_prog = socket_crear_server(param_plp->puerto_prog);
-
+	txt_write_in_file(plp_log,"Escuchando conexiones entrantes de programas \n");
     int32_t prog_new_fd;
 
 	FD_ZERO(&master);    // borra los conjuntos maestro y temporal de sockets
@@ -106,6 +115,7 @@ void *plp(t_param_plp *param_plp){
 		read_fds = master; // Copia el conjunto maestro al temporal
 
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+			txt_write_in_file(plp_log,"Error en el select \n");
 			perror("PLP-select");
 			exit(1);
 		}
@@ -118,6 +128,11 @@ void *plp(t_param_plp *param_plp){
 
 					prog_new_fd = socket_accept(listener_prog);
 					handshake_prog(prog_new_fd);
+
+					txt_write_in_file(plp_log,"Se acepto la conexion de un nuevo programa con socket n°:");
+					logear_int(plp_log,prog_new_fd);
+					txt_write_in_file(plp_log,"\n");
+
 					FD_SET(prog_new_fd, &master);
 
 					if (prog_new_fd > fdmax) // Actualiza el socket maximo
@@ -129,7 +144,9 @@ void *plp(t_param_plp *param_plp){
 					t_men_comun *men_cod_prog = socket_recv_comun(i);
 
 					if (men_cod_prog->tipo == CONEC_CERRADA) {
-
+						txt_write_in_file(plp_log,"Cerro la conexion el programa con socket n°:");
+						logear_int(plp_log,i);
+						txt_write_in_file(plp_log,"\n");
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
 						socket_cerrar(i);
@@ -139,6 +156,9 @@ void *plp(t_param_plp *param_plp){
 					}
 
 					printf("PLP-select: nuevo prog con socket n°%i\n", i);
+					txt_write_in_file(plp_log,"Nuevo programa con socket n°:");
+					logear_int(plp_log,i);
+					txt_write_in_file(plp_log,"\n");
 
 					contador_prog++;
 
@@ -146,6 +166,9 @@ void *plp(t_param_plp *param_plp){
 					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog->dato, param_plp->tam_stack,contador_prog);
 
 					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
+						txt_write_in_file(plp_log,"Memoria insuficiente para el programa con socket n°:");
+						logear_int(plp_log,i);
+						txt_write_in_file(plp_log,"\n");
 
 						//Avisa al programa que no hay memoria
 						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
@@ -167,6 +190,12 @@ void *plp(t_param_plp *param_plp){
 						queue_push(colas->cola_new,pcb_otros);
 						pthread_mutex_unlock(&mutex_new);
 						pthread_mutex_unlock(&mutex_miltiprog);
+
+						txt_write_in_file(plp_log,"Se creo el pcb para el programa con socket n°:");
+						logear_int(plp_log,i);
+						txt_write_in_file(plp_log," , su id es:");
+						logear_int(plp_log,pcb_otros->pcb->id);
+						txt_write_in_file(plp_log,"\n");
 					}
 					destruir_men_comun(men_cod_prog);
 				}
@@ -193,6 +222,8 @@ void *pcp(t_param_pcp *param_pcp){
 	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 
 	int32_t listener_cpu = socket_crear_server(param_pcp->puerto_cpu);
+	txt_write_in_file(pcp_log,"Escuchando conexiones entrantes de cpus \n");
+
 	FD_ZERO(&master);
 	FD_ZERO(&read_fds);
 	FD_SET(listener_cpu, &master);
@@ -203,6 +234,7 @@ void *pcp(t_param_pcp *param_pcp){
 		read_fds = master;
 
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+			txt_write_in_file(pcp_log,"Error en el select \n");
 			perror("PCP-select");
 			exit(1);
 		}
@@ -214,6 +246,11 @@ void *pcp(t_param_pcp *param_pcp){
 				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus:
 					cpu_new_fd = socket_accept(listener_cpu);
 					handshake_cpu(cpu_new_fd);
+
+					txt_write_in_file(pcp_log,"Se acepto la conexion de un nuevo programa con socket n°:");
+					logear_int(plp_log,cpu_new_fd);
+					txt_write_in_file(pcp_log,"\n");
+
 					t_cpu *cpu = malloc(sizeof(t_cpu));
 
 					// Arma estructura con el n° de socket del cpu y el id del prog que esta ejecutando
@@ -237,7 +274,9 @@ void *pcp(t_param_pcp *param_pcp){
 					t_men_comun *men_cpu = socket_recv_comun(i);
 
 					if (men_cpu->tipo == CONEC_CERRADA) {
-
+						txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
+						logear_int(pcp_log,i);
+						txt_write_in_file(pcp_log,"\n");
 						printf("PCP-select: CPU desconectada n°socket %i\n", i);
 
 						// Agarra el cpu a partir de su n° de socket
@@ -283,6 +322,10 @@ void *pcp(t_param_pcp *param_pcp){
 							queue_push(cola_cpu,aux_cpu);
 							pthread_mutex_unlock(&mutex_uso_cola_cpu);
 							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
+							txt_write_in_file(pcp_log,"Termino un quantum del programa:");
+							logear_int(pcp_log,aux_pcb_otros->pcb->id);
+							txt_write_in_file(pcp_log,"\n");
 						}
 						destruir_men_comun(men_cpu);
 						continue;
@@ -302,6 +345,11 @@ void *pcp(t_param_pcp *param_pcp){
 						pthread_mutex_unlock(&mutex_uso_cola_cpu);
 						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						destruir_men_comun(men_cpu);
+
+						txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
+						logear_int(pcp_log,aux_pcb_otros->pcb->id);
+						txt_write_in_file(pcp_log,"\n");
+
 						continue;
 					}
 					if((men_cpu->tipo == SEGMEN_FAULT)){
@@ -318,6 +366,11 @@ void *pcp(t_param_pcp *param_pcp){
 						pthread_mutex_unlock(&mutex_uso_cola_cpu);
 						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 						destruir_men_comun(men_cpu);
+
+						txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
+						logear_int(pcp_log,aux_pcb_otros->pcb->id);
+						txt_write_in_file(pcp_log,"\n");
+
 						continue;
 					}
 					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
@@ -332,6 +385,11 @@ void *pcp(t_param_pcp *param_pcp){
 						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
 						destruir_men_comun(men_cpu);
 						destruir_men_comun(aux_men_cpu);
+
+						txt_write_in_file(pcp_log,"Llamada al sistema:IMPRIMIR por cpu con socket n°:");
+						logear_int(pcp_log,i);
+						txt_write_in_file(pcp_log,"\n");
+
 						continue;
 					}
 					if(men_cpu->tipo == OBTENER_VALOR){
@@ -340,8 +398,17 @@ void *pcp(t_param_pcp *param_pcp){
 						if (valor!=NULL){
 							men_cpu->dato = valor;
 							socket_send_comun(i,men_cpu);
+
+							txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+
 						}else{
 							llamada_erronea(VAR_INEX,i);
+							txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+
 						}
 						destruir_men_comun(men_cpu);
 						continue;
@@ -354,13 +421,24 @@ void *pcp(t_param_pcp *param_pcp){
 
 							if (dictionary_remove(diccionario_variables,men_cpu->dato)!=NULL){
 								dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato);
+
+								txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
+								logear_int(pcp_log,i);
+								txt_write_in_file(pcp_log,"\n");
+
 								//todo mandar msj al cpu de que se grabo la var, si no se queda esperando un msj..
 							}else{
 								llamada_erronea(VAR_INEX,i);
+								txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
+								logear_int(pcp_log,i);
+								txt_write_in_file(pcp_log,"\n");
 							}
 						}
 						else{
 							printf("Error: esperaba recibir VALOR_ASIGNADO y recibi: %i",aux_men_cpu->tipo);
+							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (esperaba recibir el valor a asignar) por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
 						}
 						destruir_men_comun(men_cpu);
 						destruir_men_comun(aux_men_cpu);
@@ -405,9 +483,18 @@ void *pcp(t_param_pcp *param_pcp){
 								queue_push(cola_semaforos,semaforo);
 								destruir_men_comun(aux_men_cpu);
 								}
+
+						txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
+						logear_int(pcp_log,i);
+						txt_write_in_file(pcp_log,"\n");
 						}
 						else{
 							llamada_erronea(SEM_INEX,i);
+
+							txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+
 						}
 						destruir_men_comun(men_cpu);
 						continue;
@@ -440,8 +527,18 @@ void *pcp(t_param_pcp *param_pcp){
 								pasar_pcbBlock_exit(aux_pcb_otros->pcb->id);
 							}
 							queue_push(cola_semaforos,semaforo);
+
+							txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+
 						}else{
 							llamada_erronea(SEM_INEX,i);
+
+							txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+
 						}
 						destruir_men_comun(men_cpu);
 						continue;
@@ -1010,8 +1107,10 @@ void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la um
 
 	if(mensaje_inicial->tipo == HS_UMV){
 		printf("UMV conectada\n");
+		txt_write_in_file(plp_log,"Conectado a la UMV \n");
 	}else{
 		printf("ERROR HANDSHAKE");
+		txt_write_in_file(plp_log,"Error en el handshake con la UMV \n");
 	}
 	destruir_men_comun(mensaje_inicial);
 }
@@ -1161,12 +1260,12 @@ void handshake_prog(int32_t soc){
 	t_men_comun *men_hs;
 	men_hs = socket_recv_comun(soc);
 
-	if(men_hs->tipo != HS_PROG)
+	if(men_hs->tipo != HS_PROG){
 		printf("ERROR se esperaba HS_PROG y se recibio %i\n",men_hs->tipo);
-
+		txt_write_in_file(plp_log,"Error en el handshake con el programa \n");
+	}
 	men_hs->tipo = HS_KERNEL;
 	socket_send_comun(soc, men_hs);
-
 	destruir_men_comun(men_hs);
 }
 
@@ -1334,3 +1433,22 @@ t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
 
 	return aux;
 }
+
+void logear_int(FILE* destino,int32_t un_int){
+	char *aux_string = string_itoa(un_int);
+	txt_write_in_file(destino,aux_string);
+	free(aux_string);
+}
+
+void logear_char(FILE* destino,char un_char){
+	if (un_char == '\0'){
+		char *aux_string = "\\0";
+		txt_write_in_file(destino, aux_string);
+	}else{
+		char *aux_string = string_itoa((int)un_char);
+		txt_write_in_file(destino, aux_string);
+		free(aux_string);
+	}
+	txt_write_in_file(destino,"-");
+}
+
