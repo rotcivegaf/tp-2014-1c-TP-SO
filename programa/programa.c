@@ -50,23 +50,34 @@ int main(int argc, char *argv[]){
 			printf("%s",mensaje_recibido->dato);
 			break;
 		case CPU_DESCONEC:
-			printf("\nCPU DESCONECTADA\n");
+			printf("CPU DESCONECTADA\n");
 			log_error(logger,"Se desconecto la CPU que estaba ejecutando el programa");
 			fin_ejecucion = 1;
 			break;
 		case CONEC_CERRADA:
-			log_error(logger,"Se cayó la conexion con el kernel");
+			printf("Se cayo la conexion con el kernel \n");
+			log_error(logger,"Se cayó la conexion con el kernel ");
 			fin_ejecucion = 1;
 			break;
 		case FIN_EJECUCION:
-			printf("\nEjecucion finalizada\n");
+			printf("Ejecucion finalizada \n");
 			log_info(logger,"Finalizo la ejecucion del script correctamente");
 			fin_ejecucion = 1;
 			break;
 		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
-			printf("\nMemory Overload\n");
+			printf("Memory Overload\n");
 			log_error(logger,"No hay memoria suficiente para ejecutar el programa");
+			break;
+		case VAR_INEX:
+			fin_ejecucion = 1;
+			printf("Acceso a variable global inexistente \n");
+			log_error(logger,"Acceso a variable global inexistente");
+			break;
+		case SEM_INEX:
+			fin_ejecucion = 1;
+			printf("Acceso a semaforo inexistente \n");
+			log_error(logger,"Acceso a semaforo inexistente");
 			break;
 		default:
 			sleep(1);
