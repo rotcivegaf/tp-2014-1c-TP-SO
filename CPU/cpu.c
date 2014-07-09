@@ -98,9 +98,7 @@ void traerIndiceEtiquetas(){
 	offset=0;
 	tam=pcb->tam_indice_etiquetas;
 
-	t_men_cpu_umv *sol_etiquetas = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_etiquetas);
-	destruir_men_cpu_umv(sol_etiquetas);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_etiq = socket_recv_comun(socketUmv);
 	if(rec_etiq->tipo == R_SOL_BYTES){
@@ -134,13 +132,12 @@ void crearDiccionario(){
 	int32_t i;
 
 	if (tam_contexto > 0){//regenerar diccionario
-		base = pcb->dir_primer_byte_umv_contexto_actual;
+		base = pcb->dir_primer_byte_umv_segmento_stack;
 		for(i=0;i<tam_contexto;i++){
 			offset= (i)*5;
 			tam=1;
-			t_men_cpu_umv *sol_var = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-			socket_send_cpu_umv(socketUmv, sol_var);
-			destruir_men_cpu_umv(sol_var);
+
+			enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
 
@@ -169,40 +166,33 @@ void manejarSegmentationFault(){
 	quantum_actual++;
 	fueFinEjecucion =0;//todo puede q sea 1
 
-	t_men_comun *error_umv = crear_men_comun(SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
-	socket_send_comun(socketKernel, error_umv);
-	destruir_men_comun(error_umv);
+	enviar_men_comun_destuir(socketKernel, SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
 	//como lo haria cuando el analizador de linea
 }
 
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
-	int32_t base;
-	int32_t *offset = malloc(sizeof(int32_t));
-	int32_t *tam = malloc(sizeof(int32_t));;
-	char* proxInst = NULL;
-	t_men_cpu_umv *men_sol_inst;
+	int32_t base, offset, tam;
+	char *proxInst;
 	t_men_comun *men_base_offset;
-	//mandarle a la umv el cambio de proceso activo  pcb->id
-	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
 
-	men_sol_inst = crear_men_cpu_umv(SOL_BYTES, pcb->dir_primer_byte_umv_indice_codigo, 8*pcb->program_counter, 8, NULL);
-	socket_send_cpu_umv(socketUmv, men_sol_inst);
-	destruir_men_cpu_umv(men_sol_inst);
+	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
+	base = pcb->dir_primer_byte_umv_indice_codigo;
+	offset = pcb->program_counter*8;
+	tam = 8;
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	men_base_offset = socket_recv_comun(socketUmv);
 	if((men_base_offset->tam_dato != 8) || (men_base_offset->tipo!=R_SOL_BYTES))//por si la UMV me llega a mandar un tamanio distinto al q pedi o si el tipo de dato es diferente
 		printf("ERROR el tamanio recibido:%i es distinto a 8, o el tipo de dato:%i es distinto a R_SOL_BYTES\n",men_base_offset->tam_dato,men_base_offset->tipo);
 
-	memcpy(offset, men_base_offset->dato, 4);
-	memcpy(tam, men_base_offset->dato+4, 4);
+	memcpy(&offset, men_base_offset->dato, 4);
+	memcpy(&tam, men_base_offset->dato+4, 4);
 	destruir_men_comun(men_base_offset);
 
 	base = pcb->dir_primer_byte_umv_segmento_codigo;
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
-	men_sol_inst = crear_men_cpu_umv(SOL_BYTES, base, *offset, *tam, NULL);
-	socket_send_cpu_umv(socketUmv, men_sol_inst);
-	destruir_men_cpu_umv(men_sol_inst);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	//recibir la instruccion a ejecutar
 	t_men_comun *rec_inst = socket_recv_comun(socketUmv);
@@ -219,21 +209,19 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	if(rec_inst->tipo ==SEGMEN_FAULT){
 		manejarSegmentationFault();
 		destruir_men_comun(rec_inst);
-		return proxInst;
+		return NULL;
 	}
 	printf("ERROR tipo de dato:%i, recibido es erroneo\n", rec_inst->tipo);
-	return proxInst;
+	return NULL;
 }
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
+	enviar_men_comun_destuir(socketKernel, FIN_QUANTUM, string_itoa(pcb->id), sizeof(int32_t));
 
-	t_men_comun *men_fin_quantum = crear_men_comun(FIN_QUANTUM,string_itoa(pcb->id),sizeof(pcb->id));
-	socket_send_comun(socketKernel,men_fin_quantum);
 	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
 	socket_send_quantum_pcb(socketKernel, p);
 	destruir_quantum_pcb(p);
-	destruir_men_comun(men_fin_quantum);
 }
 
 void signal_handler(int sig){
@@ -251,28 +239,21 @@ void signal_handler(int sig){
 }
 
 void preservarContexto(){
-	int32_t base, offset, tam, aux_PC_aumentado;
-	base = pcb->dir_primer_byte_umv_contexto_actual;
-	offset = pcb->cant_var_contexto_actual*5;	// la posicion siguiente al ultimo valor de la ultima varaible
+	int32_t base, offset, tam;
+	base = pcb->dir_primer_byte_umv_segmento_stack;
+	offset = pcb->dir_primer_byte_umv_contexto_actual - pcb->dir_primer_byte_umv_segmento_stack + (pcb->cant_var_contexto_actual*5);	// la posicion siguiente al ultimo valor de la ultima varaible
 	tam = sizeof(int32_t);
-	char * buffer = malloc(tam);
-	memcpy(buffer, &base, tam);
 
-
-	t_men_cpu_umv *save_context = crear_men_cpu_umv(ALM_BYTES,base, offset, tam, buffer);
-	socket_send_cpu_umv(socketUmv, save_context);
-	destruir_men_cpu_umv(save_context);
+	char *buffer = copiar_int_to_buffer(pcb->dir_primer_byte_umv_contexto_actual);
+	enviar_men_cpu_umv_destuir(ALM_BYTES, base, offset, tam, buffer);
 	free(buffer);
 
 	t_men_comun *r_con = socket_recv_comun(socketUmv);
 	if (r_con->tipo == R_ALM_BYTES){
 		destruir_men_comun(r_con);
 		offset = offset + 4;
-		aux_PC_aumentado = pcb->program_counter + 1;
-		memcpy(buffer, &aux_PC_aumentado, tam);
-		t_men_cpu_umv *save_proxins = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-		socket_send_cpu_umv(socketUmv, save_proxins);
-		destruir_men_cpu_umv(save_proxins);
+		char *buffer = copiar_int_to_buffer(pcb->program_counter);
+		enviar_men_cpu_umv_destuir(ALM_BYTES, base, offset, tam, buffer);
 		free(buffer);
 
 		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
@@ -293,15 +274,14 @@ void preservarContexto(){
 		manejarSegmentationFault();
 		return;
 	}
+	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_con->tipo);
 }
 
 void finalizarContexto(){//todo si finaliza por un error es distinto???
 
 	//todo creo q tendria q decirle al kernel, q el programa imprima todas las variables
 
-	t_men_comun *men_fin = crear_men_comun(FIN_EJECUCION, string_itoa(pcb->id), sizeof(int32_t));
-	socket_send_comun(socketKernel, men_fin);
-	destruir_men_comun(men_fin);
+	enviar_men_comun_destuir(socketKernel, FIN_EJECUCION, string_itoa(pcb->id), sizeof(int32_t));
 
 	fueFinEjecucion = 1;
 
@@ -311,8 +291,8 @@ void finalizarContexto(){//todo si finaliza por un error es distinto???
 //Primitivas ANSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
-	base = pcb->dir_primer_byte_umv_contexto_actual;
-	offset= (pcb->cant_var_contexto_actual)*5;
+	base = pcb->dir_primer_byte_umv_segmento_stack;
+	offset= (pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack)+(pcb->cant_var_contexto_actual)*5;
 
 	tam = sizeof(int32_t)+1;
 	int32_t pos_mem = base + offset;
@@ -320,9 +300,8 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	printf("Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
 	char *buffer=malloc(tam);
 	buffer[0]=identificador_variable;
-	t_men_cpu_umv *alm_bytes = crear_men_cpu_umv(ALM_BYTES, base, offset,tam , buffer);
-	socket_send_cpu_umv(socketUmv, alm_bytes);
-	destruir_men_cpu_umv(alm_bytes);
+
+	enviar_men_cpu_umv_destuir(ALM_BYTES, base, offset, tam, buffer);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
@@ -373,14 +352,11 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
 	t_valor_variable valor;
 
-	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
+	int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
 	int32_t offset = direccion_variable-base+1;
 	int32_t tam= sizeof(int32_t);
 
-	t_men_cpu_umv *sol_val = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
-
-	socket_send_cpu_umv(socketUmv,sol_val);
-	destruir_men_cpu_umv(sol_val);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	//recibir de umv 4 bytes de valor_variable
 	t_men_comun *men_comun = socket_recv_comun(socketUmv);
@@ -399,16 +375,13 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-	int32_t base = pcb->dir_primer_byte_umv_contexto_actual;
+	int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
 	int32_t offset = direccion_variable-base+1;
 
 	int32_t tam = sizeof(t_valor_variable);
-	char* buffer = malloc(tam);
-	memcpy(buffer, &valor,tam);
-
-	t_men_cpu_umv  *men_asig= crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	socket_send_cpu_umv(socketUmv, men_asig);
-	destruir_men_cpu_umv(men_asig);
+	char *buffer = copiar_int_to_buffer(valor);
+	enviar_men_cpu_umv_destuir(ALM_BYTES, base, offset, tam, buffer);
+	free(buffer);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
@@ -424,14 +397,14 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	t_men_comun *m = crear_men_comun(OBTENER_VALOR, variable, sizeof(variable));
-	socket_send_comun(socketKernel, m);
+	enviar_men_comun_destuir(socketKernel, OBTENER_VALOR, variable, string_length(variable));
 
 	//recibo el valor
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
 
 	t_valor_variable valor;
 	memcpy(&valor, respuesta->dato,respuesta->tam_dato);
+	destruir_men_comun(respuesta);
 
 	txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
 	txt_write_in_file(cpu_file_log, "el valor \n");
@@ -442,16 +415,12 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_variable valor){
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
-	t_men_comun *var =crear_men_comun(GRABAR_VALOR, variable, sizeof(variable));
+
+	enviar_men_comun_destuir(socketKernel, GRABAR_VALOR, variable, string_length(variable));
 
 	char *c =  string_itoa(valor);
-	t_men_comun *val_asignado = crear_men_comun(VALOR_ASIGNADO, c, sizeof(c));
 
-	socket_send_comun(socketKernel,var);
-	socket_send_comun(socketKernel, val_asignado);
-
-	destruir_men_comun(var);
-	destruir_men_comun(val_asignado);
+	enviar_men_comun_destuir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
 
 	txt_write_in_file(cpu_file_log, "Asignando a variable compartida \n");
 	printf("Asignando a variable compartida %s el valor %d \n", variable, valor);
@@ -483,31 +452,28 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	/*Preserva el contexto de ejecución actual para poder retornar luego al mismo.*/
 	preservarContexto();
 
-
 	pcb->cant_var_contexto_actual = 0;
-	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+1;
-
-	irAlLabel(etiqueta);
+	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+8;
+	destruir_dic_Variables();
+	crearDiccionario();
 
 	txt_write_in_file(cpu_file_log, "Llamando sin retorno a etiqueta\n");
 	printf("Llamando sin retorno a etiqueta %s\n", etiqueta);
-
-	}
+	irAlLabel(etiqueta);
+}
 
 void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	int32_t base, offset, tam;
 	//preservar el contexto, agrega al segmento stack la dir de memoria del contexto anterior y la cantidad de variables del contex anterior
 	preservarContexto();
 	//aca le digo a la umv q me guarde en el stack la dir de la variable a la q tengo q asignarle el valor retornado por la "funcion"
-	base = pcb->dir_primer_byte_umv_contexto_actual;
-	offset = (pcb->cant_var_contexto_actual*5)+8;
-	tam = sizeof(int32_t);
-	char* buffer = malloc(tam);
-	memcpy(buffer, &donde_retornar, tam);
 
-	t_men_cpu_umv *save_retorno = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	socket_send_cpu_umv(socketUmv, save_retorno);
-	destruir_men_cpu_umv(save_retorno);
+	base = pcb->dir_primer_byte_umv_segmento_stack;
+	offset = (pcb->dir_primer_byte_umv_contexto_actual - pcb->dir_primer_byte_umv_segmento_stack) + (pcb->cant_var_contexto_actual*5)+8;
+	tam = sizeof(int32_t);
+
+	char *buffer = copiar_int_to_buffer(donde_retornar);
+	enviar_men_cpu_umv_destuir(ALM_BYTES, base, offset, tam, buffer);
 	free(buffer);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
@@ -515,19 +481,25 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 		txt_write_in_file(cpu_file_log, "Se almaceno la direccion de retorno \n");
 		printf("Se almaceno la direccion de retorno\n");
 
+		//actualizo las estructuras
 		pcb->cant_var_contexto_actual = 0;
-		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+offset;
+		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+offset+4;
+		destruir_dic_Variables();
+		crearDiccionario();
 		irAlLabel(etiqueta);
 
 		txt_write_in_file(cpu_file_log, "Llamando con retorno a la etiqueta\n");
-		printf("Llamando con retorno a etiqueta %s y retorna en %d", etiqueta, donde_retornar);
+		printf("Llamando con retorno a etiqueta %s y retorna en %i\n", etiqueta, donde_retornar);
+		return;
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
+		return;
 	}
+	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
 }
 
-void finalizar(void){
+void finalizar(void){//esto creo q falla todo
 	int32_t base, offset, tam;
 
 	//si es el fin de programa, le digo al kernel q finalizo y salgo de la funcion
@@ -537,13 +509,12 @@ void finalizar(void){
 		printf("Finalizando el programa actual\n");
 		return;
 	}
-	base= pcb->dir_primer_byte_umv_contexto_actual-1;
-	offset= sizeof(int32_t);
+	//todo arreglar
+	base= pcb->dir_primer_byte_umv_segmento_stack;
+	offset= 0;
 	tam=sizeof(int32_t);
 
-	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_progcount);
-	destruir_men_cpu_umv(sol_progcount);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
 	if(rec_progcount->tipo == R_SOL_BYTES){
@@ -557,13 +528,10 @@ void finalizar(void){
 
 	offset= offset-4;
 
-	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_context);
-	destruir_men_cpu_umv(sol_context);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_context= socket_recv_comun(socketUmv);
 	if(rec_context->tipo == R_SOL_BYTES){
-
 		int32_t context;
 		memcpy(&context, rec_context->dato,rec_context->tam_dato);
 		pcb->dir_primer_byte_umv_contexto_actual = context;
@@ -577,118 +545,89 @@ void finalizar(void){
 void retornar(t_valor_variable retorno){
 	int32_t base, offset, tam;
 	int32_t dir_retorno;
-	int32_t context;
+	int32_t prog_counter;
+	int32_t dir_context_ant;
 
+	//consigo 3 int, el primero para asignarle el valor retorno, el segundo para el program counter a retornar y el tercero para la dir de memoria al contexto anterior
+	tam= 12;
+	base= pcb->dir_primer_byte_umv_segmento_stack;
+	offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack- 12;
 
-	base= pcb->dir_primer_byte_umv_contexto_actual-1;
-	offset= sizeof(int32_t);
-	tam=sizeof(int32_t);
-
-
-	base=pcb->dir_primer_byte_umv_contexto_actual;
-	offset= 4;
-	tam=sizeof(int32_t);
-
-
-	t_men_cpu_umv *sol_ret = crear_men_cpu_umv(SOL_BYTES,base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_ret);
-	destruir_men_cpu_umv(sol_ret);
+	enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
-	if(rec_ret->tipo == R_SOL_BYTES){
-		memcpy(&dir_retorno, rec_ret->dato,rec_ret->tam_dato);
+	if(rec_ret->tipo == R_SOL_BYTES){//todo no se si anda
+		memcpy(&dir_context_ant, rec_ret->dato,sizeof(int32_t));
+		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
+		memcpy(&dir_retorno, rec_ret->dato+8,sizeof(int32_t));
+	}else{
+		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
 	}
 
-	if (rec_ret->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
+	//actializar el pcb
+	pcb->cant_var_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-12)/5;
+	pcb->program_counter=prog_counter;
+	pcb->dir_primer_byte_umv_contexto_actual=dir_context_ant;
+	//regenero el dic_variables
+	destruir_dic_Variables();
+	dic_Variables = dictionary_create();
+	int32_t i;
+	base= pcb->dir_primer_byte_umv_segmento_stack;
+	tam= 1;
+	for(i=0;i<pcb->cant_var_contexto_actual;i++){//todo meter en una funcion
+		offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack + (i*5);
+
+		enviar_men_cpu_umv_destuir(SOL_BYTES, base, offset, tam, NULL);
+
+		t_men_comun *men_var = socket_recv_comun(socketUmv);
+		char *key = malloc(2);
+		key[0] = men_var->dato[0];
+		key[1] = '\0';
+		int32_t *pos = malloc(sizeof(int32_t));
+		*pos = base + offset;
+		dictionary_put(dic_Variables, key, pos );
 	}
 
+	//almaceno la variable retorno en el contexto anterior
+	char *buffer = copiar_int_to_buffer(retorno);
 
-	offset= offset-4;
+	enviar_men_cpu_umv_destuir(ALM_BYTES, dir_retorno, 0, sizeof(int32_t), buffer);//todo probar q funka
 
-	t_men_cpu_umv *sol_progcount = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_progcount);
-	destruir_men_cpu_umv(sol_progcount);
-
-	t_men_comun *rec_progcount= socket_recv_comun(socketUmv);
-	if(rec_progcount->tipo == R_SOL_BYTES){
-		int32_t prog_counter;
-		memcpy(&prog_counter, rec_progcount->dato,rec_progcount->tam_dato);
-		pcb->program_counter= prog_counter;
-	}
-
-	if(rec_progcount->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
-	}
-
-	offset= offset-4;
-
-	t_men_cpu_umv *sol_context = crear_men_cpu_umv(SOL_BYTES, base, offset, tam, NULL);
-	socket_send_cpu_umv(socketUmv, sol_context);
-	destruir_men_cpu_umv(sol_context);
-
-	t_men_comun *rec_context= socket_recv_comun(socketUmv);
-	if(rec_context->tipo == R_SOL_BYTES){
-		int32_t context;
-		memcpy(&context, rec_context->dato,rec_context->tam_dato);
-		pcb->dir_primer_byte_umv_contexto_actual = context;
-
-	}
-	if (rec_context->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
-	}
-
-
-	base = context;
-	offset= dir_retorno +1;
-	char* buffer = string_itoa(retorno);
-	t_men_cpu_umv *alm_val = crear_men_cpu_umv(ALM_BYTES, base, offset, tam, buffer);
-	socket_send_cpu_umv(socketUmv, alm_val);
-	destruir_men_cpu_umv(alm_val);
-
+	free(buffer);
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
-	if(rec_alm->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
-	}
 	if(rec_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");
-		printf("Retornando valor de variable%d en la direccion %d\n", retorno, dir_retorno);
+		printf("Retornando valor de variable:%d en la direccion %d\n", retorno, dir_retorno);
+	}else{
+		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
 	}
-
 }
 
 void imprimir(t_valor_variable valor_mostrar){
 	char *aux = string_itoa(valor_mostrar);
-	t_men_comun *men = crear_men_comun(IMPRIMIR_VALOR,aux ,string_length(aux));
-	socket_send_comun(socketKernel,men);
 
-	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_comun(socketKernel,men);
-	destruir_men_comun(men);
+	enviar_men_comun_destuir(socketKernel, IMPRIMIR_VALOR, aux, string_length(aux));
+
+	enviar_men_comun_destuir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
 
 	txt_write_in_file(cpu_file_log, "Imprimiendo valor de variable\n");
 	printf("Imprimiendo valor de variable %d\n", valor_mostrar);
 }
 
 void imprimirTexto(char* texto){
-	t_men_comun *men = crear_men_comun(IMPRIMIR_TEXTO, texto,string_length(texto));
-	socket_send_comun(socketKernel,men);
+	enviar_men_comun_destuir(socketKernel, IMPRIMIR_TEXTO, texto, string_length(texto));
 
-	men = crear_men_comun(ID_PROG,string_itoa(pcb->id) ,string_length(string_itoa(pcb->id)));
-	socket_send_comun(socketKernel,men);
-	destruir_men_comun(men);
+	enviar_men_comun_destuir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
 
 	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
 	printf("Imprimiendo texto: %s", texto);
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	t_men_comun *men = crear_men_comun(IO_ID, dispositivo,string_length(dispositivo));
-	char *cant_unidades = string_itoa(tiempo);
-	men = crear_men_comun(IO_CANT_UNIDADES, cant_unidades,string_length(cant_unidades));
-	socket_send_comun(socketKernel,men);
-	destruir_men_comun(men);
-
+	enviar_men_comun_destuir(socketKernel, IO_ID, dispositivo, string_length(dispositivo));
+	char *aux_tiempo = string_itoa(tiempo);
+	enviar_men_comun_destuir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo));
+	free(aux_tiempo);
 
 	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, mpcb);
@@ -699,9 +638,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	t_men_comun *men = crear_men_comun(WAIT, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_comun(socketKernel,men);
-	destruir_men_comun(men);
+	enviar_men_comun_destuir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
 	if(men_resp->tipo != SEM_OK && men_resp->tipo != SEM_BLOQUEADO){
@@ -722,9 +659,8 @@ void wait(t_nombre_semaforo identificador_semaforo){
 }
 
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	t_men_comun *men = crear_men_comun(SIGNAL, identificador_semaforo,string_length(identificador_semaforo));
-	socket_send_comun(socketKernel,men);
-	destruir_men_comun(men);
+	enviar_men_comun_destuir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
+
 	//romper no violentamente con ### inexistente
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
 
@@ -753,13 +689,15 @@ void logear_char(FILE* destino,char un_char){
 void handshake_umv(char *puerto, char *ip){
 	//envio a la UMV
 	socketUmv = socket_crear_client(puerto,ip);
-	t_men_comun *mensaje_inicial = crear_men_comun(HS_CPU,"",string_length(""));
-	socket_send_comun(socketUmv,mensaje_inicial);
+
+	enviar_men_comun_destuir(socketUmv, HS_CPU, "", string_length(""));
+
 	//espero coneccion de la UMV
-	mensaje_inicial = socket_recv_comun(socketUmv);
+	t_men_comun *mensaje_inicial = socket_recv_comun(socketUmv);
 	if(mensaje_inicial->tipo == HS_UMV){
 		txt_write_in_file(cpu_file_log, "UMV conectada \n");
 		printf("UMV conectada\n");
+		destruir_men_comun(mensaje_inicial);
 	}else{
 		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE UMV\n");
 		printf("ERROR HANDSHAKE\n");
@@ -769,13 +707,15 @@ void handshake_umv(char *puerto, char *ip){
 void handshake_kernel(char *puerto, char *ip){
 	//envio al kernel
 	socketKernel = socket_crear_client(puerto,ip);
-	t_men_comun *mensaje_inicial = crear_men_comun(HS_CPU,"",string_length(""));
-	socket_send_comun(socketKernel,mensaje_inicial);
+
+	enviar_men_comun_destuir(socketKernel, HS_CPU, "", string_length(""));
+
 	//espero conexion de kernel
-	mensaje_inicial = socket_recv_comun(socketKernel);
+	t_men_comun *mensaje_inicial = socket_recv_comun(socketKernel);
 	if(mensaje_inicial->tipo == HS_KERNEL){
 		txt_write_in_file(cpu_file_log, "Kernel conectado\n");
 		printf("Kernel conectado\n");
+		destruir_men_comun(mensaje_inicial);
 	}else{
 		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE KERNEL \n");
 		printf("ERROR HANDSHAKE\n");
@@ -791,7 +731,7 @@ void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *i
 	printf("------------------------------------------------------------------------------------\n\n");
 }
 
-void destruir_dic_Variables(){//todo creo q esto no funka
+void destruir_dic_Variables(){
 	void _liberar_pos(int32_t *pos){
 		free(pos);
 	}
@@ -800,7 +740,17 @@ void destruir_dic_Variables(){//todo creo q esto no funka
 
 void cambio_PA(int32_t id_proc){
 	printf("Cambio el proceso activo al proceso nº%i\n",id_proc);
-	t_men_cpu_umv *men_cpu_umv = crear_men_cpu_umv(CAMBIO_PA, id_proc, 0, 0, NULL);
+	enviar_men_cpu_umv_destuir(CAMBIO_PA, id_proc, 0, 0, NULL);
+}
+//recibe un int y lo transforma en un char *
+char *copiar_int_to_buffer(int32_t un_int){
+	char *ret = malloc(sizeof(int32_t));
+	memcpy(ret, &un_int, sizeof(int32_t));
+	return ret;
+}
+/*envia un mensaje cpu umv y lo destruye */
+void enviar_men_cpu_umv_destuir(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer){
+	t_men_cpu_umv *men_cpu_umv = crear_men_cpu_umv(tipo, base, offset,tam , buffer);
 	socket_send_cpu_umv(socketUmv, men_cpu_umv);
 	destruir_men_cpu_umv(men_cpu_umv);
 }
