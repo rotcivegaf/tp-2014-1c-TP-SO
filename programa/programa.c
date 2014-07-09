@@ -50,7 +50,7 @@ int main(int argc, char *argv[]){
 			printf("%s",mensaje_recibido->dato);
 			break;
 		case CPU_DESCONEC:
-			printf("CPU DESCONECTADA\n");
+			printf("\nCPU DESCONECTADA\n");
 			log_error(logger,"Se desconecto la CPU que estaba ejecutando el programa");
 			fin_ejecucion = 1;
 			break;
@@ -59,13 +59,13 @@ int main(int argc, char *argv[]){
 			fin_ejecucion = 1;
 			break;
 		case FIN_EJECUCION:
-			printf("Ejecucion finalizada");
+			printf("\nEjecucion finalizada\n");
 			log_info(logger,"Finalizo la ejecucion del script correctamente");
 			fin_ejecucion = 1;
 			break;
 		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
-			printf("Memory Overload\n");
+			printf("\nMemory Overload\n");
 			log_error(logger,"No hay memoria suficiente para ejecutar el programa");
 			break;
 		default:
