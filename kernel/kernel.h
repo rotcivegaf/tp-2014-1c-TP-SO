@@ -142,4 +142,6 @@
 	void llamada_erronea(int32_t tipo_error, int32_t soc_cpu);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
+	void logear_int(FILE* destino,int32_t un_int);
+
 #endif /* KERNEL_H_ */

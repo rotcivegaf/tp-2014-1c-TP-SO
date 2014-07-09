@@ -26,10 +26,10 @@ int main(void){
 	cola_semaforos = queue_create();
 	t_datos_config *diccionario_config = levantar_config();
 
-	plp_log = txt_open_for_append("./kernel/logs/cpu.log");
+	plp_log = txt_open_for_append("./kernel/logs/plp.log");
 	txt_write_in_file(plp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
-	pcp_log = txt_open_for_append("./kernel/logs/cpu.log");
+	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
 	//Inicializacion semaforos
