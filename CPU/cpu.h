@@ -44,7 +44,7 @@ void parsearUnaInstruccion(char* unaIns);
 void errorDeProxInstruccion(int socketKernel);
 char* solicitarProxSentenciaAUmv();
 void preservarContexto();
-void finalizarContexto();
+void finalizarContexto(int32_t tipo_fin);
 void logear_int(FILE* destino,int32_t un_int);
 void logear_char(FILE* destino,char un_char);
 void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *ipUmv);
@@ -72,5 +72,6 @@ void mi_signal(t_nombre_semaforo identificador_semaforo);
 
 void enviar_men_cpu_umv_destuir(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer);
 char *copiar_int_to_buffer(int32_t un_int);
+void regenerar_dicc_var();
 
 #endif /* CPU_H_ */
