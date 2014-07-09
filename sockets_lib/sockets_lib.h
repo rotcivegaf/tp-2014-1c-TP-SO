@@ -94,6 +94,7 @@
 
 	t_men_comun *crear_men_comun(int32_t tipo, char *dato,int32_t tam);
 	int socket_send_comun(int soc,t_men_comun *men);
+	void enviar_men_comun_destuir(int32_t soc, int32_t tipo, char *dato, int32_t tam);
 	t_men_comun *socket_recv_comun(int soc);
 	char *men_serealizer_comun(t_men_comun *self);
 	t_men_comun *men_deserealizer_comun(char *stream);

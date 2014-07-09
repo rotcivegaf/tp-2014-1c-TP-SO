@@ -117,6 +117,13 @@ int socket_send_comun(int soc,t_men_comun *men){
 	return pude_enviar;
 }
 
+/*envia un mensaje comun y lo destruye */
+void enviar_men_comun_destuir(int32_t soc, int32_t tipo, char *dato, int32_t tam){
+	t_men_comun *men_comun = crear_men_comun(tipo, dato, tam);
+	socket_send_comun(soc, men_comun);
+	destruir_men_comun(men_comun);
+}
+
 /*recibe un mensaje comun del socket conectado
  *los mensajes comunes pueden ser de cualquier tipo y tamanio, y tienen un solo dato
  *retorna el mensaje recibido o
