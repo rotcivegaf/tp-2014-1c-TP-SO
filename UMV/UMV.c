@@ -489,9 +489,11 @@ int32_t crearSegmento(t_men_seg *men_ped){
 
 	txt_write_in_file(umv_file_log,"Creo el segmento del proceso nº");
 	logear_int(umv_file_log,men_ped->id_prog);
-	txt_write_in_file(umv_file_log," de tamanio: ");
+	txt_write_in_file(umv_file_log,", tamanio: ");
 	logear_int(umv_file_log,men_ped->tam_seg);
-	txt_write_in_file(umv_file_log," y tipo: ");
+	txt_write_in_file(umv_file_log,", dir logica: ");
+	logear_int(umv_file_log, aux_seg->dir_logica);
+	txt_write_in_file(umv_file_log,", tipo: ");
 	traducir_tipo_de_seg_y_logear(men_ped->tipo);
 	txt_write_in_file(umv_file_log,"\n");
 
