@@ -14,7 +14,7 @@ pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
-int32_t quit_sistema = 1;
+int32_t quit_sistema = 1, QUANTUM_MAX;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
 t_queue *cola_semaforos;
@@ -85,9 +85,7 @@ void *plp(t_param_plp *param_plp){
 
 	//Creacion del hilo que maneja el pasaje de pcbs de new a ready
 	pthread_t hilo_new_ready;
-	t_param_new_ready *param_new_ready = malloc(sizeof(t_param_new_ready));
-	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
-	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
+	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
 
 	int32_t contador_prog = 0;
 	fd_set master;   // conjunto maestro de sockets
@@ -214,9 +212,7 @@ void *pcp(t_param_pcp *param_pcp){
 
 	// Crea el hilo que pasa los pcb de ready a exec
 	pthread_t hilo_ready_exec;
-	t_param_ready_exec *param_ready_exec = malloc(sizeof(t_param_ready_exec));
-	param_ready_exec->quantum = param_pcp->quantum;
-	pthread_create(&hilo_ready_exec, NULL, manejador_ready_exec, (void *)param_ready_exec);
+	pthread_create(&hilo_ready_exec, NULL, manejador_ready_exec,NULL);
 
 	// Crea el hilo que maneja las llegadas de pcbs a exit
 	pthread_t hilo_exit;
@@ -804,21 +800,14 @@ void *manejador_exit(){
 	return NULL;
 }
 
-void *manejador_new_ready(t_param_new_ready *param){
-
+void *manejador_new_ready(){
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_new);
-
 		if (queue_is_empty(colas->cola_new)){
 			pthread_mutex_unlock(&mutex_new);
 			pthread_mutex_lock(&mutex_miltiprog);
-
 		}else{
-
-			//pthread_mutex_unlock(&mutex_new);
 			sem_decre(&libre_multiprog);
-
-			//pthread_mutex_lock(&mutex_new);
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, get_peso_min());
 			pthread_mutex_unlock(&mutex_new);
@@ -827,11 +816,10 @@ void *manejador_new_ready(t_param_new_ready *param){
 			sem_incre(&buff_multiprog);
 		}
 	}
-	free(param);
 	return NULL;
 }
 
-void *manejador_ready_exec(t_param_ready_exec *param){
+void *manejador_ready_exec(){
 
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
@@ -859,7 +847,7 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
 
-				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,param->quantum);
+				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,QUANTUM_MAX);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -1102,7 +1090,7 @@ t_datos_config *levantar_config(){
 	}
 
 	ret->multiprogramacion = config_get_int_value( diccionario_config, "MULTIPROGRAMACION");
-	ret->quantum = config_get_int_value( diccionario_config, "QUANTUM");
+	QUANTUM_MAX = config_get_int_value( diccionario_config, "QUANTUM");
 	ret->retardo = config_get_int_value( diccionario_config, "RETARDO");
 	ret->tam_stack = config_get_int_value( diccionario_config, "TAMANIO_STACK");
 	ret->variables_globales = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
@@ -1144,7 +1132,7 @@ t_datos_config *levantar_config(){
 
 	printf("Varias\n");
 	printf("	Multiprogramacion = %i\n", ret->multiprogramacion);
-	printf("	Quantum = %i\n", ret->quantum);
+	printf("	Quantum = %i\n", QUANTUM_MAX);
 	printf("	Retardo =  %i\n", ret->retardo);
 	printf("	Tamanio Stack = %i\n", ret->tam_stack);
 	printf("Variables Globales\n");
@@ -1335,7 +1323,6 @@ t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
 	aux->cola_IO = diccionario_config->cola_IO;
 	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->puerto_cpu = diccionario_config->puerto_cpu;
-	aux->quantum = diccionario_config->quantum;
 	aux->retardo = diccionario_config->retardo;
 	aux->semaforos = diccionario_config->semaforos;
 	aux->valor_semaforos = diccionario_config->valor_semaforos;

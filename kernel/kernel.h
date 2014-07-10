@@ -26,12 +26,6 @@
 	void sem_decre(sem_t *sem);
 
 	typedef struct{
-		int32_t multiprogramacion;
-	} t_param_new_ready;
-	typedef struct{
-		int32_t quantum;
-	} t_param_ready_exec;
-	typedef struct{
 		int32_t cant_unidades;
 		int32_t retardo;
 		int32_t id_proc;
@@ -68,7 +62,6 @@
 		t_queue *cola_IO;
 		char **semaforos;
 		char **valor_semaforos;
-		int32_t  quantum;
 		char **variables_globales;
 	} t_param_pcp;
 	typedef struct{
@@ -80,7 +73,6 @@
 		char **semaforos;
 		char **valor_semaforos;
 		int32_t  multiprogramacion;
-		int32_t  quantum;
 		int32_t  retardo;
 		int32_t  tam_stack;
 		char **variables_globales;
