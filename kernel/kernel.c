@@ -15,7 +15,7 @@ pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
-t_list *dispositivos_IO;
+t_dictionary *dispositivos_IO;
 t_dictionary *diccionario_variables;
 t_dictionary *dicc_sem;
 FILE *plp_log;
@@ -24,8 +24,8 @@ FILE *pcp_log;
 int main(void){
 	diccionario_variables = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
 	dicc_sem = dictionary_create();
-	//Lista dispositivos
-	dispositivos_IO = list_create();
+	//diccionario dispositivos
+	dispositivos_IO = dictionary_create();
 
 	t_datos_config *diccionario_config = levantar_config();
 
@@ -49,9 +49,6 @@ int main(void){
 	colas->cola_exec = queue_create();
 	colas->cola_exit = queue_create();
 
-	//Lista dispositivos
-	dispositivos_IO = list_create();
-
 	//parametros plp pcp
 	t_param_plp *param_plp = ini_pram_plp(diccionario_config);
 	t_param_pcp *param_pcp = ini_pram_pcp(diccionario_config);
@@ -70,17 +67,12 @@ int main(void){
 	free(param_plp->ip_umv);
 	free(param_plp);
 	free(param_pcp->puerto_cpu);
-	free(param_pcp->semaforos);
-	free(param_pcp->valor_semaforos);
-	free(param_pcp->variables_globales);
-	queue_destroy(param_pcp->cola_IO);
 	queue_destroy(colas->cola_block);
 	queue_destroy(colas->cola_exec);
 	queue_destroy(colas->cola_exit);
 	queue_destroy(colas->cola_new);
 	queue_destroy(colas->cola_ready);
 	queue_destroy(cola_cpu);
-	list_destroy(dispositivos_IO);
 	return EXIT_SUCCESS;
 }
 
@@ -732,7 +724,7 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	espera->id_prog = (aux_cpu->id_prog_exec);
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
-	pthread_mutex_unlock(&(aux_IO->mutex_dispositivo));
+	sem_incre(&(aux_IO->cont_cant_proc));
 
 	actualizar_pcb_y_bloq(aux_cpu);
 
@@ -840,7 +832,7 @@ void *manejador_ready_exec(){
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
 
-				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,QUANTUM_MAX);
+				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -990,31 +982,12 @@ int32_t calcular_peso(t_men_comun *men_cod_prog){
 	return (5 * (metadata_program->cantidad_de_etiquetas) + 3 * (metadata_program->cantidad_de_funciones) + (metadata_program->instrucciones_size));
 }
 
-void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la umv
-
-	//envio a la UMV
-	soc_umv = socket_crear_client(puerto_umv,ip_umv);
-
-	enviar_men_comun_destruir(soc_umv,HS_KERNEL,NULL,0);
-	//espero coneccion de la UMV
-	t_men_comun *mensaje_inicial = socket_recv_comun(soc_umv);
-
-	if(mensaje_inicial->tipo == HS_UMV){
-		printf("UMV conectada\n");
-		txt_write_in_file(plp_log,"Conectado a la UMV \n");
-	}else{
-		printf("ERROR HANDSHAKE");
-		txt_write_in_file(plp_log,"Error en el handshake con la UMV \n");
-	}
-	destruir_men_comun(mensaje_inicial);
-}
-
-void manejador_IO(t_IO *io){
+void *manejador_IO(t_IO *io){
 
 	while(quit_sistema){
 
 		if(queue_size(io->procesos)==0)
-			pthread_mutex_lock(&(io->mutex_dispositivo));
+			sem_decre(&(io->cont_cant_proc));
 		else{
 
 			t_IO_espera *proceso = queue_pop(io->procesos);
@@ -1025,9 +998,10 @@ void manejador_IO(t_IO *io){
 
 			pasar_pcbBlock_exit(proceso->id_prog);
 
-			pthread_mutex_unlock(&(io->mutex_dispositivo));
+			sem_decre(&(io->cont_cant_proc));
 		}
 	}
+	return NULL;
 }
 
 void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
@@ -1052,21 +1026,17 @@ t_datos_config *levantar_config(){
 		printf("	ID:%s ,Valor:%i\n", key, un_sem->valor);
 	}
 	int i;
-	t_IO *aux_IO;
-	char **id_hios = malloc(sizeof(char));
-	char **hio_sleeps = malloc(sizeof(char));
 	t_config *diccionario_config = config_create("./kernel/kernel_config");
 	t_datos_config *ret = malloc(sizeof(t_datos_config));
 	ret->puerto_prog = config_get_string_value( diccionario_config, "Puerto_prog");
 	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
 	ret->ip_umv = config_get_string_value( diccionario_config, "IP_UMV");
 	ret->puerto_umv = config_get_string_value( diccionario_config, "Puerto_umv");
-	ret->cola_IO = queue_create();
-	id_hios = config_get_array_value( diccionario_config, "ID_HIO");
-	hio_sleeps = config_get_array_value( diccionario_config, "HIO");
+	char **id_hios = config_get_array_value( diccionario_config, "ID_HIO");
+	char **hio_sleeps = config_get_array_value( diccionario_config, "HIO");
 
 
-	for (i=0; id_hios[i] != '\0'; i++){
+	/*for (i=0; id_hios[i] != '\0'; i++){
 
 		t_IO *new_IO = malloc(sizeof(t_IO));
 		crear_cont(&(new_IO->cont_cant_proc) , 0);
@@ -1076,7 +1046,10 @@ t_datos_config *levantar_config(){
 		new_IO->procesos = queue_create();
 		list_add(dispositivos_IO, new_IO);
 		pthread_create(&(new_IO->hilo), NULL, (void *)manejador_IO, (void*)new_IO);
-	}
+	}*/
+
+	free(id_hios);
+	free(hio_sleeps);
 
 	char **aux_id_sem = config_get_array_value( diccionario_config, "SEMAFOROS");
 	char **aux_valor = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
@@ -1107,16 +1080,8 @@ t_datos_config *levantar_config(){
 	printf("	IP     = %s\n", ret->ip_umv);
 	printf("	Puerto = %s\n", ret->puerto_umv);
 	printf("Entrada/Salida\n");
-	printf("	ID    = ");
 
-	for (i=0; i < queue_size(ret->cola_IO); i++){
-		aux_IO = queue_pop(ret->cola_IO);
-		printf("%s ", aux_IO->id_hio);
-		queue_push(ret->cola_IO, aux_IO);
-	}
-
-	printf("Entrada/Salida\n");
-	list_iterate(dispositivos_IO, (void*)_imp_disp);
+	dictionary_iterator(dispositivos_IO, (void *)_imp_disp);
 
 	printf("\nSemaforos\n");
 	dictionary_iterator(diccionario_variables, (void *)_imp_sem);
@@ -1313,7 +1278,6 @@ t_param_plp *ini_pram_plp(t_datos_config *diccionario_config){
 	aux->puerto_prog = diccionario_config->puerto_prog;
 	aux->ip_umv = diccionario_config->ip_umv;
 	aux->puerto_umv = diccionario_config->puerto_umv;
-	aux->retardo = diccionario_config->retardo;
 	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->tam_stack = diccionario_config->tam_stack;
 
@@ -1324,13 +1288,8 @@ t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
 
 	t_param_pcp *aux = malloc(sizeof(t_param_pcp));
 
-	aux->cola_IO = diccionario_config->cola_IO;
 	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->puerto_cpu = diccionario_config->puerto_cpu;
-	aux->retardo = diccionario_config->retardo;
-	aux->semaforos = diccionario_config->semaforos;
-	aux->valor_semaforos = diccionario_config->valor_semaforos;
-	aux->variables_globales = diccionario_config->variables_globales;
 
 	return aux;
 }
