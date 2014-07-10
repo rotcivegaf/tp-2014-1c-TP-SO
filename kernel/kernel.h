@@ -25,11 +25,6 @@
 	void sem_incre(sem_t *sem);
 	void sem_decre(sem_t *sem);
 
-	typedef struct{
-		int32_t cant_unidades;
-		int32_t retardo;
-		int32_t id_proc;
-	} t_param_IO;
 	typedef struct {
 		int32_t soc_cpu;
 		int32_t id_prog_exec;
@@ -51,38 +46,28 @@
 		char *puerto_prog;
 		char *ip_umv;
 		char *puerto_umv;
-		int32_t  retardo;
-		int32_t  max_multiprogramacion;
-		int32_t  tam_stack;
+		int32_t max_multiprogramacion;
+		int32_t tam_stack;
 	} t_param_plp;
 	typedef struct{
 		char *puerto_cpu;
-		int32_t  retardo;
-		int32_t  max_multiprogramacion;
+		int32_t max_multiprogramacion;
 		t_queue *cola_IO;
-		char **semaforos;
-		char **valor_semaforos;
-		char **variables_globales;
 	} t_param_pcp;
 	typedef struct{
 		char *puerto_prog;
 		char *puerto_cpu;
 		char *ip_umv;
 		char *puerto_umv;
-		t_queue *cola_IO;
-		char **semaforos;
-		char **valor_semaforos;
-		int32_t  multiprogramacion;
-		int32_t  retardo;
-		int32_t  tam_stack;
-		char **variables_globales;
+		int32_t multiprogramacion;
+		int32_t tam_stack;
 	} t_datos_config;
 	typedef struct{
 		char *id_hio;
 		int32_t  hio_sleep;
 		t_queue *procesos;
 		pthread_t hilo;
-		pthread_mutex_t mutex_dispositivo;
+		sem_t cont_cant_proc;
 	} t_IO;
 	typedef struct{
 		int32_t id_prog;
@@ -96,7 +81,6 @@
 		int32_t  memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
-		char *id_sem;
 		int32_t valor;
 		t_queue *procesos;
 	}t_semaforo;
@@ -116,6 +100,7 @@
 	void *manejador_new_ready();
 	void *manejador_ready_exec();
 	void *manejador_exit();
+	void *manejador_IO(t_IO *io);
 	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
 	int32_t  mover_pcb_exit(int32_t  soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
@@ -130,9 +115,11 @@
 	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb,int32_t  quantum);
 	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
-	void pasar_pcbBlock_exit(int32_t id_pcb);
+	void pasar_pcbBlock_ready(int32_t id_pcb);
 	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
+	//funciones del pcp
+
 
 	void logear_int(FILE* destino,int32_t un_int);
 

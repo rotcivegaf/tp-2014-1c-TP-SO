@@ -12,18 +12,20 @@ pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t buff_multiprog, libre_multiprog, cont_exit;
-int32_t quit_sistema = 1, QUANTUM_MAX;
+int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
-t_queue *cola_semaforos;
+t_dictionary *dicc_sem;
 FILE *plp_log;
 FILE *pcp_log;
 
 int main(void){
 	diccionario_variables = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
-	cola_semaforos = queue_create();
+	dicc_sem = dictionary_create();
+	//Lista dispositivos
+	dispositivos_IO = list_create();
+
 	t_datos_config *diccionario_config = levantar_config();
 
 	plp_log = txt_open_for_append("./kernel/logs/plp.log");
@@ -46,9 +48,6 @@ int main(void){
 	colas->cola_exec = queue_create();
 	colas->cola_exit = queue_create();
 
-	//Lista dispositivos
-	dispositivos_IO = list_create();
-
 	//parametros plp pcp
 	t_param_plp *param_plp = ini_pram_plp(diccionario_config);
 	t_param_pcp *param_pcp = ini_pram_pcp(diccionario_config);
@@ -67,9 +66,6 @@ int main(void){
 	free(param_plp->ip_umv);
 	free(param_plp);
 	free(param_pcp->puerto_cpu);
-	free(param_pcp->semaforos);
-	free(param_pcp->valor_semaforos);
-	free(param_pcp->variables_globales);
 	queue_destroy(param_pcp->cola_IO);
 	queue_destroy(colas->cola_block);
 	queue_destroy(colas->cola_exec);
@@ -77,7 +73,6 @@ int main(void){
 	queue_destroy(colas->cola_new);
 	queue_destroy(colas->cola_ready);
 	queue_destroy(cola_cpu);
-	list_destroy(dispositivos_IO);
 	return EXIT_SUCCESS;
 }
 
@@ -194,7 +189,7 @@ void *plp(t_param_plp *param_plp){
 				}
 			}
 		}
-	sleep(param_plp->retardo);
+	sleep(_RETARDO);
 	}
 	return NULL;
 }
@@ -336,7 +331,6 @@ void *pcp(t_param_pcp *param_pcp){
 						aux_cpu = get_cpu(i);
 						aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 						aux_pcb_otros->tipo_fin_ejecucion = SEGMEN_FAULT;
-
 						pasar_pcb_exit(aux_pcb_otros);
 
 						aux_cpu->id_prog_exec = 0;
@@ -417,14 +411,12 @@ void *pcp(t_param_pcp *param_pcp){
 								queue_push(cola_semaforos,semaforo);
 							}
 						}
-						if(encontre==1){
-
+						if(encontre){
 							if(semaforo->valor > 0){
 								(semaforo->valor)--;
 								men_cpu->tipo=SEM_OK;
 								socket_send_comun(i,men_cpu);
 							}else{
-								(semaforo->valor)--;
 								aux_cpu = get_cpu(i);
 
 								men_cpu->tipo = SEM_BLOQUEADO;
@@ -470,7 +462,7 @@ void *pcp(t_param_pcp *param_pcp){
 
 							if(queue_size(semaforo->procesos)>0){
 								aux_pcb_otros = queue_pop(semaforo->procesos);
-								pasar_pcbBlock_exit(aux_pcb_otros->pcb->id);
+								pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
 							}
 							queue_push(cola_semaforos,semaforo);
 
@@ -498,7 +490,7 @@ void *pcp(t_param_pcp *param_pcp){
 				}
 			}
 		}
-	sleep(param_pcp->retardo);
+	sleep(_RETARDO);
 	}
 	return NULL;
 }
@@ -529,7 +521,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 	return NULL;
 }
 
-void pasar_pcbBlock_exit(int32_t id_pcb){
+void pasar_pcbBlock_ready(int32_t id_pcb){
 	int32_t i = 0;
 	pthread_mutex_lock(&mutex_block);
 	int32_t tamanio_cola_block = queue_size(colas->cola_block);
@@ -544,8 +536,7 @@ void pasar_pcbBlock_exit(int32_t id_pcb){
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_ready_vacia);
 			i=tamanio_cola_block;
-		}
-		else {
+		}else{
 			queue_push(colas->cola_block,pcb_aux);
 		}
 	}
@@ -713,7 +704,6 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	int32_t i;
 
 	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
-	pthread_mutex_lock(&mutex_dispositivos_io);
 
 	for (i=0; i < list_size(dispositivos_IO); i++){
 		aux_IO = list_remove(dispositivos_IO,i);
@@ -725,7 +715,6 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 			list_add(dispositivos_IO,aux_IO);
 		}
 	}
-	pthread_mutex_unlock(&mutex_dispositivos_io);
 
 	men = socket_recv_comun(soc_cpu);
 
@@ -739,11 +728,33 @@ void enviar_IO(int32_t soc_cpu, int32_t id_IO){
 	espera->id_prog = (aux_cpu->id_prog_exec);
 	espera->unidades = cant_unidades;
 	queue_push(aux_IO->procesos,espera);
-	pthread_mutex_unlock(&(aux_IO->mutex_dispositivo));
+	sem_incre(&(aux_IO->cont_cant_proc));
 
 	actualizar_pcb_y_bloq(aux_cpu);
 
 	destruir_men_comun(men);
+}
+
+void *manejador_IO(t_IO *io){
+	//list_add(dispositivos_IO,io->hilo);
+	while(quit_sistema){
+
+		if(queue_size(io->procesos)==0)
+			sem_decre(&(io->cont_cant_proc));
+		else{
+
+			t_IO_espera *proceso = queue_pop(io->procesos);
+			int32_t i;
+
+			for(i=0; i<proceso->unidades;i++)
+				sleep(io->hio_sleep);
+
+			pasar_pcbBlock_ready(proceso->id_prog);
+
+			sem_decre(&(io->cont_cant_proc));
+		}
+	}
+	return NULL;
 }
 
 t_pcb_otros *get_peso_min(){
@@ -847,7 +858,7 @@ void *manejador_ready_exec(){
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
 
-				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,QUANTUM_MAX);
+				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -997,46 +1008,6 @@ int32_t calcular_peso(t_men_comun *men_cod_prog){
 	return (5 * (metadata_program->cantidad_de_etiquetas) + 3 * (metadata_program->cantidad_de_funciones) + (metadata_program->instrucciones_size));
 }
 
-void handshake_umv(char *ip_umv, char *puerto_umv){ //sincronizar msjs con la umv
-
-	//envio a la UMV
-	soc_umv = socket_crear_client(puerto_umv,ip_umv);
-
-	enviar_men_comun_destruir(soc_umv,HS_KERNEL,NULL,0);
-	//espero coneccion de la UMV
-	t_men_comun *mensaje_inicial = socket_recv_comun(soc_umv);
-
-	if(mensaje_inicial->tipo == HS_UMV){
-		printf("UMV conectada\n");
-		txt_write_in_file(plp_log,"Conectado a la UMV \n");
-	}else{
-		printf("ERROR HANDSHAKE");
-		txt_write_in_file(plp_log,"Error en el handshake con la UMV \n");
-	}
-	destruir_men_comun(mensaje_inicial);
-}
-
-void manejador_IO(t_IO *io){
-
-	while(quit_sistema){
-
-		if(queue_size(io->procesos)==0)
-			pthread_mutex_lock(&(io->mutex_dispositivo));
-		else{
-
-			t_IO_espera *proceso = queue_pop(io->procesos);
-			int32_t i;
-
-			for(i=0; i<proceso->unidades;i++)
-				sleep(io->hio_sleep);
-
-			pasar_pcbBlock_exit(proceso->id_prog);
-
-			pthread_mutex_unlock(&(io->mutex_dispositivo));
-		}
-	}
-}
-
 void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
 	t_men_quantum_pcb * men_pcb= crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb);
 	socket_send_quantum_pcb(soc,men_pcb);
@@ -1049,9 +1020,16 @@ void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
 }
 
 t_datos_config *levantar_config(){
-
+	void _imp_disp(t_IO *io){
+		printf("	ID:%s ,Sleep:%i\n",io->id_hio,io->hio_sleep);
+	}
+	void _imp_var_glob(char* key, int32_t valor){
+		printf("	ID:%s ,Valor:%i\n", key, valor);
+	}
+	void _imp_sem(char* key, t_semaforo *un_sem){
+		printf("	ID:%s ,Valor:%i\n", key, un_sem->valor);
+	}
 	int i;
-	t_IO *aux_IO;
 	char **id_hios = malloc(sizeof(char));
 	char **hio_sleeps = malloc(sizeof(char));
 	t_config *diccionario_config = config_create("./kernel/kernel_config");
@@ -1060,86 +1038,63 @@ t_datos_config *levantar_config(){
 	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
 	ret->ip_umv = config_get_string_value( diccionario_config, "IP_UMV");
 	ret->puerto_umv = config_get_string_value( diccionario_config, "Puerto_umv");
-	ret->cola_IO = queue_create();
 	id_hios = config_get_array_value( diccionario_config, "ID_HIO");
 	hio_sleeps = config_get_array_value( diccionario_config, "HIO");
 
 
 	for (i=0; id_hios[i] != '\0'; i++){
-
 		t_IO *new_IO = malloc(sizeof(t_IO));
+		crear_cont(&(new_IO->cont_cant_proc) , 0);
 		new_IO->id_hio = id_hios[i];
 		new_IO->hio_sleep = atoi(hio_sleeps[i]);
 
 		new_IO->procesos = queue_create();
-		queue_push(ret->cola_IO, new_IO);
-		pthread_create(&(new_IO->hilo), NULL, (void*)manejador_IO, (void*)new_IO);
+		list_add(dispositivos_IO, new_IO);
+		pthread_create(&(new_IO->hilo), NULL, (void *)manejador_IO, (void*)new_IO);
 	}
 
-	ret->semaforos = config_get_array_value( diccionario_config, "SEMAFOROS");
-	ret->valor_semaforos = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
+	char **aux_id_sem = config_get_array_value( diccionario_config, "SEMAFOROS");
+	char **aux_valor = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
 
-	for(i=0;ret->semaforos[i] != '\0'; i++){
-
+	for(i=0;aux_id_sem[i] != '\0'; i++){
 		t_semaforo *new_sem = malloc(sizeof(t_semaforo));
-		new_sem->id_sem = ret->semaforos[i];
-		new_sem->valor = atoi(ret->valor_semaforos[i]);
-
+		new_sem->valor = atoi(aux_valor[i]);
 		new_sem->procesos = queue_create();
-		queue_push(cola_semaforos,new_sem);
+		dictionary_put(dicc_sem, aux_id_sem[i],new_sem);
 	}
+
+	free(aux_id_sem);
+	free(aux_valor);
 
 	ret->multiprogramacion = config_get_int_value( diccionario_config, "MULTIPROGRAMACION");
-	QUANTUM_MAX = config_get_int_value( diccionario_config, "QUANTUM");
-	ret->retardo = config_get_int_value( diccionario_config, "RETARDO");
+	_QUANTUM_MAX = config_get_int_value( diccionario_config, "QUANTUM");
+	_RETARDO = config_get_int_value( diccionario_config, "RETARDO");
 	ret->tam_stack = config_get_int_value( diccionario_config, "TAMANIO_STACK");
-	ret->variables_globales = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
+	char **aux_var_glob = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
 
-	for (i=0; ret->variables_globales[i] != '\0'; i++){
-		int32_t *aux_i=malloc(sizeof(int32_t));
-		dictionary_put(diccionario_variables,ret->variables_globales[i],aux_i);
-	}
-
+	for (i=0; aux_var_glob[i] != '\0'; i++)
+		dictionary_put(diccionario_variables, aux_var_glob[i],0);
+	free(aux_var_glob);
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
 	printf("Puerto Proc-Prog = %s\n", ret->puerto_prog);
 	printf("Puerto CPU = %s\n", ret->puerto_cpu);
 	printf("UMV\n");
 	printf("	IP     = %s\n", ret->ip_umv);
 	printf("	Puerto = %s\n", ret->puerto_umv);
+
+
 	printf("Entrada/Salida\n");
-	printf("	ID    = ");
-
-	for (i=0; i < queue_size(ret->cola_IO); i++){
-		aux_IO = queue_pop(ret->cola_IO);
-		printf("%s ", aux_IO->id_hio);
-		queue_push(ret->cola_IO, aux_IO);
-	}
-
-	printf("\n	Sleep = ");
-
-	for (i=0; i < queue_size(ret->cola_IO); i++){
-		aux_IO = queue_pop(ret->cola_IO);
-		printf("%i ", aux_IO->hio_sleep);
-		queue_push(ret->cola_IO, aux_IO);
-	}
+	list_iterate(dispositivos_IO, (void*)_imp_disp);
 
 	printf("\nSemaforos\n");
-
-	for (i=0; ret->semaforos[i] != '\0'; i++){
-		printf("	ID    = %s\n", ret->semaforos[i]);
-		printf("	Valor = %s\n", ret->valor_semaforos[i]);
-	}
-
+	dictionary_iterator(diccionario_variables, (void *)_imp_sem);
 	printf("Varias\n");
 	printf("	Multiprogramacion = %i\n", ret->multiprogramacion);
-	printf("	Quantum = %i\n", QUANTUM_MAX);
-	printf("	Retardo =  %i\n", ret->retardo);
+	printf("	Quantum = %i\n", _QUANTUM_MAX);
+	printf("	Retardo =  %i\n", _RETARDO);
 	printf("	Tamanio Stack = %i\n", ret->tam_stack);
 	printf("Variables Globales\n");
-
-	for (i=0; ret->variables_globales[i] != '\0'; i++){
-		printf("	ID    = %s\n", ret->variables_globales[i]);
-	}
+	dictionary_iterator(diccionario_variables, (void *)_imp_var_glob);
 
 	printf("------------------------------------------------------------------------------------\n\n");
 	return ret;
@@ -1165,6 +1120,23 @@ void handshake_prog(int32_t soc){
 	destruir_men_comun(men_hs);
 
 	enviar_men_comun_destruir(soc,HS_KERNEL,NULL,0);
+}
+
+void handshake_umv(char *ip_umv, char *puerto_umv){
+	//envio a la UMV
+	soc_umv = socket_crear_client(puerto_umv,ip_umv);
+
+	enviar_men_comun_destruir(soc_umv,HS_KERNEL,NULL,0);
+	//espero coneccion de la UMV
+	t_men_comun *men_hs = socket_recv_comun(soc_umv);
+
+	if(men_hs->tipo != HS_UMV){
+		printf("ERROR HANDSHAKE");
+		txt_write_in_file(plp_log,"Error en el handshake con la UMV \n");
+	}
+	printf("UMV conectada\n");
+	txt_write_in_file(plp_log,"Conectado a la UMV \n");
+	destruir_men_comun(men_hs);
 }
 
 void *imp_colas (){
@@ -1309,7 +1281,6 @@ t_param_plp *ini_pram_plp(t_datos_config *diccionario_config){
 	aux->puerto_prog = diccionario_config->puerto_prog;
 	aux->ip_umv = diccionario_config->ip_umv;
 	aux->puerto_umv = diccionario_config->puerto_umv;
-	aux->retardo = diccionario_config->retardo;
 	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->tam_stack = diccionario_config->tam_stack;
 
@@ -1317,16 +1288,9 @@ t_param_plp *ini_pram_plp(t_datos_config *diccionario_config){
 }
 
 t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
-
 	t_param_pcp *aux = malloc(sizeof(t_param_pcp));
-
-	aux->cola_IO = diccionario_config->cola_IO;
 	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->puerto_cpu = diccionario_config->puerto_cpu;
-	aux->retardo = diccionario_config->retardo;
-	aux->semaforos = diccionario_config->semaforos;
-	aux->valor_semaforos = diccionario_config->valor_semaforos;
-	aux->variables_globales = diccionario_config->variables_globales;
 
 	return aux;
 }
@@ -1348,4 +1312,3 @@ void logear_char(FILE* destino,char un_char){
 	}
 	txt_write_in_file(destino,"-");
 }
-
