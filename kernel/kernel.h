@@ -135,7 +135,7 @@
 	t_cpu *get_cpu_libre(int32_t  *res);
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
-	void socket_send_pcb(int32_t  soc,t_pcb *pcb,int32_t  quantum);
+	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb,int32_t  quantum);
 	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
 	void pasar_pcbBlock_exit(int32_t id_pcb);

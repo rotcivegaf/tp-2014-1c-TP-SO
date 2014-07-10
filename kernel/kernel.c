@@ -360,8 +360,8 @@ void *pcp(t_param_pcp *param_pcp){
 
 						if (men_id_prog->tipo != ID_PROG)
 							printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
-
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(men_id_prog->dato));
+						int32_t aux_i = atoi(men_id_prog->dato);
+						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
 
 						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
 						destruir_men_comun(men_id_prog);
@@ -859,7 +859,7 @@ void *manejador_ready_exec(t_param_ready_exec *param){
 				aux_pcb_otros = queue_pop(colas->cola_ready);
 				pthread_mutex_unlock(&mutex_ready);
 
-				socket_send_pcb(cpu->soc_cpu,aux_pcb_otros->pcb,param->quantum);
+				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,param->quantum);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
@@ -1049,8 +1049,10 @@ void manejador_IO(t_IO *io){
 	}
 }
 
-void socket_send_pcb(int32_t soc,t_pcb *pcb,int32_t quantum){
-	socket_send_quantum_pcb(soc,crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb));
+void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
+	t_men_quantum_pcb * men_pcb= crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb);
+	socket_send_quantum_pcb(soc,men_pcb);
+	destruir_quantum_pcb(men_pcb);
 }
 
 void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
