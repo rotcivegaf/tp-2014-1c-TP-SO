@@ -1045,7 +1045,7 @@ t_datos_config *levantar_config(){
 	dictionary_iterator(dispositivos_IO, (void *)_imp_disp);
 
 	printf("\nSemaforos\n");
-	dictionary_iterator(diccionario_variables, (void *)_imp_sem);
+	dictionary_iterator(dicc_sem, (void *)_imp_sem);
 	printf("Varias\n");
 	printf("	Multiprogramacion = %i\n", ret->multiprogramacion);
 	printf("	Quantum = %i\n", _QUANTUM_MAX);
