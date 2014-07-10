@@ -118,8 +118,12 @@
 	void pasar_pcbBlock_ready(int32_t id_pcb);
 	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
+<<<<<<< HEAD
 	//funciones del pcp
 
+=======
+	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
+>>>>>>> b69359ec525046f252f63fee3fea0401141dd075
 
 	void logear_int(FILE* destino,int32_t un_int);
 
