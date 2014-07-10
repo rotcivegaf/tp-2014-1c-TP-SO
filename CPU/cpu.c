@@ -279,6 +279,25 @@ void preservarContexto(){
 void finalizarContexto(int32_t tipo_fin){
 	int32_t i, base, offset;
 
+	if(tipo_fin == SEM_INEX){
+			printf("ERROR,el semaforo es inexistente\n");
+			quantum_actual= quantum_max;
+			fueFinEjecucion=1;
+			return;
+		}
+
+	if (tipo_fin == SEM_BLOQUEADO){
+		quantum_actual = quantum_max;
+		fueFinEjecucion=1;
+
+	}
+	if(tipo_fin == VAR_INEX){
+		printf("ERROR,la variable global es inexistente\n");
+		quantum_actual= quantum_max;
+		fueFinEjecucion=1;
+		return;
+	}
+
 	if (tipo_fin == ERROR){
 		printf("ERROR, la etiqueta no se ha encontrado pero creo q esta fuera del alcanse del tp\n");
 		fueFinEjecucion = 1;
@@ -453,8 +472,8 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	if(respuesta->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
 		printf("Error en acceso a la variable %s, no existe", variable);
-		valor = 0; //todo asigno 0 si la variable no existe
-		//todo romper
+		valor = 0;//todo asigno 0 si la variable no existe
+		finalizarContexto(VAR_INEX);//todo romper
 	}else{
 		memcpy(&valor, respuesta->dato,respuesta->tam_dato);
 
@@ -477,7 +496,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	if(men_resp->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
 		printf("Error en acceso a la variable %s, no existe", variable);
-		//todo romper
+		finalizarContexto(VAR_INEX);
 		destruir_men_comun(men_resp);
 		return -1;
 	}
@@ -592,7 +611,7 @@ void finalizar(void){
 		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
 	}
 
-	//actializar el pcb
+	//actualizar el pcb
 	pcb->cant_var_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
 	pcb->program_counter=prog_counter;
 	pcb->dir_primer_byte_umv_contexto_actual=dir_context_ant;
@@ -622,12 +641,12 @@ void retornar(t_valor_variable retorno){
 		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
 	}
 
-	//actializar el pcb
+	//actualizar el pcb
 	pcb->cant_var_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-12)/5;
 	pcb->program_counter=prog_counter;
 	pcb->dir_primer_byte_umv_contexto_actual=dir_context_ant;
 
-	void regenerar_dicc_var();
+	regenerar_dicc_var();
 
 	//almaceno la variable retorno en el contexto anterior
 	char *buffer = copiar_int_to_buffer(retorno);
@@ -673,7 +692,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, mpcb);
 	destruir_quantum_pcb(mpcb);
-	//romper no violentamente con ### inexistente
+
 	txt_write_in_file(cpu_file_log, "Saliendo a i/o en dispositivo\n");
 	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
 }
@@ -688,14 +707,21 @@ void wait(t_nombre_semaforo identificador_semaforo){
 	switch(men_resp->tipo){
 		case SEM_OK:
 			//El semaforo esta disponible, seguir procesando o lo que sea
+			printf("Se recibio el mensaje SEM_OK, se continuara con la ejecucion\n");
+			txt_write_in_file(cpu_file_log, "El semaforo esta disponible, se continua con la ejecucion.");
+			//No hago nada, continua con la ejecucion normalmente
 			break;
 		case SEM_BLOQUEADO:
+			finalizarContexto(SEM_BLOQUEADO); // para que no busque la proxima instruccion, y se quede bloqueado
+			// no hace falta mandar nada al kernel, ya que al avisar que lo bloquea lo manda a bloqueado por get_cpu
+			printf("Se recibio el mensaje SEM_BLOQUEADO del semaforo,se bloquea el programa n° %i\n", pcb->id);
+			txt_write_in_file(cpu_file_log, "Se bloqueo el programa por un semaforo, se desaloja de la cpu.");
 			//El semaforo esta bloqueado, desalojar(suponiendo que tiene que cambiar de proceso, si es asi, mandar el pcb)
 			break;
 		case SEM_INEX:
 			printf("Acceso a semaforo %s inexistente \n",identificador_semaforo);
 			txt_write_in_file(cpu_file_log,"Acceso a semaforo inexistente");
-			//romper
+			finalizarContexto(SEM_INEX);
 			break;
 		default:
 			printf("El tipo de dato recibido: %i es erroneo\n",men_resp->tipo);
@@ -716,8 +742,8 @@ void mi_signal(t_nombre_semaforo identificador_semaforo){
 	if(respuesta->tipo == SEM_INEX){
 		txt_write_in_file(cpu_file_log,"Signal a semaforo inexistente\n");
 		printf("Signal a semaforo %s inexistente \n", identificador_semaforo);
-		//romper no violentamente con ### inexistente
-	}
+		finalizarContexto(SEM_INEX);
+		}
 	destruir_men_comun(respuesta);
 }
 
