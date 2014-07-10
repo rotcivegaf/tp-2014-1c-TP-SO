@@ -12,9 +12,8 @@ pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_exit_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
-sem_t buff_multiprog, libre_multiprog; //, cont_exit;
+sem_t buff_multiprog, libre_multiprog, cont_exit;
 int32_t quit_sistema = 1;
 t_list *dispositivos_IO;
 t_dictionary *diccionario_variables;
@@ -34,7 +33,7 @@ int main(void){
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
 	//Inicializacion semaforos
-	//crear_cont(&cont_exit , 0);
+	crear_cont(&cont_exit , 0);
 	crear_cont(&buff_multiprog , 0); //cantidad de procesos entre ready y exec
 	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
 
@@ -90,7 +89,7 @@ void *plp(t_param_plp *param_plp){
 	param_new_ready->multiprogramacion = param_plp->max_multiprogramacion;
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, (void *)param_new_ready);
 
-	int32_t contador_prog = 1;
+	int32_t contador_prog = 0;
 	fd_set master;   // conjunto maestro de sockets
 	fd_set read_fds; // conjunto temporal de sockets para select()
 	int32_t fdmax;   // socket con el mayor valor
@@ -122,7 +121,6 @@ void *plp(t_param_plp *param_plp){
 		}
 
 		for(i = 3; i <= fdmax; i++) {
-
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
 
 				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
@@ -150,7 +148,6 @@ void *plp(t_param_plp *param_plp){
 						txt_write_in_file(plp_log,"\n");
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
-						socket_cerrar(i);
 						FD_CLR(i, &master); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
 						break;
@@ -164,7 +161,7 @@ void *plp(t_param_plp *param_plp){
 					contador_prog++;
 
 					//Pide mem para el prog
-					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog->dato, param_plp->tam_stack,contador_prog);
+					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog, param_plp->tam_stack,contador_prog);
 
 					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
 						txt_write_in_file(plp_log,"Memoria insuficiente para el programa con socket n°:");
@@ -172,13 +169,12 @@ void *plp(t_param_plp *param_plp){
 						txt_write_in_file(plp_log,"\n");
 
 						//Avisa al programa que no hay memoria
-						t_men_comun *men_no_hay_mem = malloc(sizeof(t_men_comun));
-						men_no_hay_mem->tipo = MEM_OVERLOAD;
-						men_no_hay_mem->dato = string_itoa(contador_prog);
+						char *aux_sring = string_itoa(contador_prog);
+						t_men_comun *men_no_hay_mem = crear_men_comun(MEM_OVERLOAD,aux_sring,string_length(aux_sring));
+						free(aux_sring);
 						socket_send_comun(i, men_no_hay_mem);
 						destruir_men_comun(men_no_hay_mem);
 						free(resp_sol);
-
 					}else{
 
 						//Crea el pcb y lo pone en new
@@ -208,9 +204,15 @@ void *plp(t_param_plp *param_plp){
 }
 
 void *pcp(t_param_pcp *param_pcp){
-
-	int32_t i, fdmax, cpu_new_fd;
+	int32_t i,j, fdmax, cpu_new_fd,tam,encontre=0;
 	fd_set master, read_fds;
+	t_cpu *aux_cpu;
+	t_pcb_otros *aux_pcb_otros;
+	t_men_comun *men_id_prog;
+	t_men_comun *men_grab_valor;
+	t_semaforo *semaforo;
+	int32_t *valor;
+	char *string_valor;
 
 	// Crea el hilo que pasa los pcb de ready a exec
 	pthread_t hilo_ready_exec;
@@ -244,11 +246,11 @@ void *pcp(t_param_pcp *param_pcp){
 
 			if (FD_ISSET(i, &read_fds)) {
 
-				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus:
+				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus(se conecta una nueva cpu)
 					cpu_new_fd = socket_accept(listener_cpu);
 					handshake_cpu(cpu_new_fd);
 
-					txt_write_in_file(pcp_log,"Se acepto la conexion de un nuevo programa con socket n°:");
+					txt_write_in_file(pcp_log,"Se acepto la conexion de una nueva CPU con socket n°:");
 					logear_int(plp_log,cpu_new_fd);
 					txt_write_in_file(pcp_log,"\n");
 
@@ -273,51 +275,40 @@ void *pcp(t_param_pcp *param_pcp){
 
 					// Sino, es un cpu mandando datos
 					t_men_comun *men_cpu = socket_recv_comun(i);
-
-					if (men_cpu->tipo == CONEC_CERRADA) {
+					switch(men_cpu->tipo){
+					case CONEC_CERRADA:
 						txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
 						printf("PCP-select: CPU desconectada n°socket %i\n", i);
-
 						// Agarra el cpu a partir de su n° de socket
-						t_cpu *aux_cpu = get_cpu(i);
-
+						aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
-
 							// Saca el pcb que corresponde de la cola de ejec a partir del id
-							t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+							aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 							aux_pcb_otros->tipo_fin_ejecucion= CPU_DESCONEC;
-
 							// Pone el pcb en exit
 							pasar_pcb_exit(aux_pcb_otros);
 						}
 						free(aux_cpu);
 						socket_cerrar(i);
 						FD_CLR(i, &master);
-						destruir_men_comun(men_cpu);
-						continue;
-					}
-					if (men_cpu->tipo == FIN_QUANTUM){
-
-						t_cpu *aux_cpu = get_cpu(i);
-
+						break;
+					case FIN_QUANTUM:
+						aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
-
 							// Actualizacion pcb
-							t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-							t_pcb *pcb_recibido = socket_recv_quantum_pcb(i)->pcb;
+							aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+							t_men_quantum_pcb *men_quenatum_pcb = socket_recv_quantum_pcb(i);
+							t_pcb *pcb_recibido = men_quenatum_pcb->pcb;
 							actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
-
 							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
-
 							// Pone el pcb en ready
 							pthread_mutex_lock(&mutex_ready);
 							queue_push(colas->cola_ready,aux_pcb_otros);
 							pthread_mutex_unlock(&mutex_ready);
 							pthread_mutex_unlock(&mutex_ready_vacia);
-
 							// Pone el cpu devuelta en la cola de cpus
 							pthread_mutex_lock(&mutex_uso_cola_cpu);
 							queue_push(cola_cpu,aux_cpu);
@@ -327,15 +318,12 @@ void *pcp(t_param_pcp *param_pcp){
 							txt_write_in_file(pcp_log,"Termino un quantum del programa:");
 							logear_int(pcp_log,aux_pcb_otros->pcb->id);
 							txt_write_in_file(pcp_log,"\n");
-						}
-						destruir_men_comun(men_cpu);
-						continue;
-					}
-					if(men_cpu->tipo == FIN_EJECUCION){
-
-						t_cpu *aux_cpu = get_cpu(i);
-
-						t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(atoi(men_cpu->dato));
+						}else
+							printf("ERROR ningun cpu esta procesando el proceso con socket nº%i\n",i);
+						break;
+					case FIN_EJECUCION:
+						aux_cpu = get_cpu(i);
+						aux_pcb_otros = get_pcb_otros_exec(atoi(men_cpu->dato));
 						aux_pcb_otros->tipo_fin_ejecucion = FIN_EJECUCION;
 						pasar_pcb_exit(aux_pcb_otros);
 
@@ -345,17 +333,14 @@ void *pcp(t_param_pcp *param_pcp){
 						queue_push(cola_cpu,aux_cpu);
 						pthread_mutex_unlock(&mutex_uso_cola_cpu);
 						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-						destruir_men_comun(men_cpu);
 
 						txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
-
-						continue;
-					}
-					if((men_cpu->tipo == SEGMEN_FAULT)){
-						t_cpu *aux_cpu = get_cpu(i);
-						t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+						break;
+					case SEGMEN_FAULT:
+						aux_cpu = get_cpu(i);
+						aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 						aux_pcb_otros->tipo_fin_ejecucion = SEGMEN_FAULT;
 
 						pasar_pcb_exit(aux_pcb_otros);
@@ -366,155 +351,126 @@ void *pcp(t_param_pcp *param_pcp){
 						queue_push(cola_cpu,aux_cpu);
 						pthread_mutex_unlock(&mutex_uso_cola_cpu);
 						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-						destruir_men_comun(men_cpu);
 
 						txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
+						break;
+					case IMPRIMIR_TEXTO:
+					case IMPRIMIR_VALOR:
+						men_id_prog = socket_recv_comun(i);
 
-						continue;
-					}
-					if ((men_cpu->tipo == IMPRIMIR_TEXTO) || (men_cpu->tipo == IMPRIMIR_VALOR)) {
+						if (men_id_prog->tipo != ID_PROG)
+							printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
 
-						t_men_comun *aux_men_cpu = socket_recv_comun(i);
+						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(men_id_prog->dato));
 
-						if (aux_men_cpu->tipo != ID_PROG)
-							printf("Error: esperaba el id de un programa y recibi: %i",aux_men_cpu->tipo);
-
-						t_pcb_otros *aux_pcb_otros;
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(atoi(aux_men_cpu->dato));
 						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
-						destruir_men_comun(men_cpu);
-						destruir_men_comun(aux_men_cpu);
+						destruir_men_comun(men_id_prog);
 
-						txt_write_in_file(pcp_log,"IMPRIMIR por cpu con socket n°:");
+						txt_write_in_file(pcp_log,"IMPRIMIR por cpu con socket n°");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
-
-						continue;
-					}
-					if(men_cpu->tipo == OBTENER_VALOR){
-
-						char *valor	= dictionary_get(diccionario_variables,men_cpu->dato);
-						if (valor!=NULL){
-							men_cpu->dato = valor;
-							socket_send_comun(i,men_cpu);
-
+						enviar_resp_cpu(i, R_IMPRIMIR);
+						break;
+					case OBTENER_VALOR:
+						if (dictionary_has_key(diccionario_variables, men_cpu->dato)){
+							valor = dictionary_get(diccionario_variables,men_cpu->dato);
+							string_valor = string_itoa(*valor);
+							t_men_comun *men_valor_var = crear_men_comun(R_OBTENER_VALOR,string_valor,string_length(string_valor));
+							socket_send_comun(i,men_valor_var);
+							destruir_men_comun(men_valor_var);
 							txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
-
 						}else{
-							llamada_erronea(VAR_INEX,i);
+							llamada_erronea(i, VAR_INEX);
 							txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
-
 						}
-						destruir_men_comun(men_cpu);
-						continue;
-					}
-					if(men_cpu->tipo == GRABAR_VALOR){
+						break;
+					case GRABAR_VALOR:
+						if (dictionary_has_key(diccionario_variables, men_cpu->dato)){
+							t_men_comun *men_valor_var = crear_men_comun(R_GRABAR_VALOR,NULL,0);
+							socket_send_comun(i,men_valor_var);
+							destruir_men_comun(men_valor_var);
 
-						t_men_comun *aux_men_cpu = socket_recv_comun(i);
+							men_grab_valor = socket_recv_comun(i);
+							if((men_grab_valor->tipo) != VALOR_ASIGNADO)
+								printf("ERROR: esperaba recibir VALOR_ASIGNADO y recibi: %i",men_grab_valor->tipo);
 
-						if((aux_men_cpu->tipo) == VALOR_ASIGNADO){
+							dictionary_remove(diccionario_variables,men_cpu->dato);//todo free???
+							int32_t *aux_i = malloc(sizeof(int32_t));
+							*aux_i= atoi(men_grab_valor->dato);
+							dictionary_put(diccionario_variables,men_cpu->dato,aux_i);
 
-							if (dictionary_remove(diccionario_variables,men_cpu->dato)!=NULL){
-								dictionary_put(diccionario_variables,men_cpu->dato,aux_men_cpu->dato);
-
-								txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
-								logear_int(pcp_log,i);
-								txt_write_in_file(pcp_log,"\n");
-
-								socket_send_comun(i,aux_men_cpu);
-							}else{
-								llamada_erronea(VAR_INEX,i);
-								txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
-								logear_int(pcp_log,i);
-								txt_write_in_file(pcp_log,"\n");
-							}
-						}
-						else{
-							printf("Error: esperaba recibir VALOR_ASIGNADO y recibi: %i",aux_men_cpu->tipo);
-							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (esperaba recibir el valor a asignar) por cpu con socket n°:");
+							destruir_men_comun(men_grab_valor);
+							txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
+							logear_int(pcp_log,i);
+							txt_write_in_file(pcp_log,"\n");
+						}else{
+							llamada_erronea(i, VAR_INEX);
+							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
 						}
-						destruir_men_comun(men_cpu);
-						destruir_men_comun(aux_men_cpu);
-						continue;
-					}
-					if(men_cpu->tipo==WAIT){
-						int32_t i;
-						t_semaforo *semaforo;
-						int32_t tam = queue_size(cola_semaforos);
-						int32_t encontre=0;
-						for(i=0;i<tam;i++){
-
+						break;
+					case WAIT:
+						tam = queue_size(cola_semaforos);
+						encontre=0;
+						for(j=0;j<tam;j++){
 							semaforo = queue_pop(cola_semaforos);
-
 							if(semaforo->id_sem == men_cpu->dato){
-								i = tam;
+								j = tam;
 								encontre=1;
-							}
-							else{
+							}else{
 								queue_push(cola_semaforos,semaforo);
 							}
 						}
-
 						if(encontre==1){
 
 							if(semaforo->valor > 0){
 								(semaforo->valor)--;
 								men_cpu->tipo=SEM_OK;
 								socket_send_comun(i,men_cpu);
-							}
-							else{
+							}else{
 								(semaforo->valor)--;
-								t_cpu *aux_cpu = get_cpu(i);
+								aux_cpu = get_cpu(i);
 
 								men_cpu->tipo = SEM_BLOQUEADO;
 								socket_send_comun(i,men_cpu);
 
-								t_pcb_otros *aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
+								aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
 
 								queue_push(semaforo->procesos,aux_pcb_otros);
 
 								queue_push(cola_semaforos,semaforo);
-								}
+							}
 
 						txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
-						}
-						else{
-							llamada_erronea(SEM_INEX,i);
+						}else{
+							llamada_erronea(i, SEM_INEX);
 
 							txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
-
 						}
-						destruir_men_comun(men_cpu);
-						continue;
-					}
-					if(men_cpu->tipo == SIGNAL){
+						break;
+					case SIGNAL:
+						tam = queue_size(cola_semaforos);
+						encontre=0;
 
-						int32_t i;
-						t_semaforo *semaforo;
-						int32_t tam = queue_size(cola_semaforos);
-						int32_t encontre=0;
-
-						for(i=0;i<tam;i++){
+						for(j=0;j<tam;j++){
 
 							semaforo = queue_pop(cola_semaforos);
 
 							if(semaforo->id_sem == men_cpu->dato){
-								i = tam;
+								j = tam;
 								encontre=1;
-							}
-							else{
+							}else{
 								queue_push(cola_semaforos,semaforo);
 							}
 						}
@@ -524,7 +480,7 @@ void *pcp(t_param_pcp *param_pcp){
 							socket_send_comun(i,men_cpu);
 
 							if(queue_size(semaforo->procesos)>0){
-								t_pcb_otros *aux_pcb_otros = queue_pop(semaforo->procesos);
+								aux_pcb_otros = queue_pop(semaforo->procesos);
 								pasar_pcbBlock_exit(aux_pcb_otros->pcb->id);
 							}
 							queue_push(cola_semaforos,semaforo);
@@ -534,28 +490,34 @@ void *pcp(t_param_pcp *param_pcp){
 							txt_write_in_file(pcp_log,"\n");
 
 						}else{
-							llamada_erronea(SEM_INEX,i);
+							llamada_erronea(i, SEM_INEX);
 
 							txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
 
 						}
-						destruir_men_comun(men_cpu);
-						continue;
-					}
-					if (men_cpu->tipo == IO_ID){
+						break;
+					case IO_ID:
 						enviar_IO(i, atoi(men_cpu->dato));
-						continue;
+						break;
+					default:
+						printf("ERROR se esperaba al recibir el tipo de dato:%i\n", men_cpu->tipo);
+						break;
 					}
-
+					destruir_men_comun(men_cpu);
 				}
 			}
 		}
 	sleep(param_pcp->retardo);
 	}
-
 	return NULL;
+}
+
+void enviar_resp_cpu(int32_t soc_cpu, int32_t tipo_mensaje){
+	t_men_comun *men_sincro_ok= crear_men_comun(tipo_mensaje ,NULL, 0);
+	socket_send_comun(soc_cpu, men_sincro_ok);
+	destruir_men_comun(men_sincro_ok);
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
@@ -610,9 +572,8 @@ void pasar_pcbBlock_exit(int32_t id_pcb){
 void pasar_pcb_exit(t_pcb_otros *pcb){
 	pthread_mutex_lock(&mutex_exit);
 	queue_push(colas->cola_exit,pcb);
-	//sem_incre(&cont_exit);
+	sem_incre(&cont_exit);
 	pthread_mutex_unlock(&mutex_exit);
-	pthread_mutex_unlock(&mutex_exit_vacia);
 
 	sem_decre(&buff_multiprog);
 	sem_incre(&libre_multiprog);
@@ -682,8 +643,7 @@ int32_t mover_pcb_exit(int32_t soc_prog){
 	return -1;
 }
 
-void llamada_erronea(int32_t tipo_error, int32_t soc_cpu){
-	t_men_comun *men_cpu = crear_men_comun(tipo_error,NULL,0);
+void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
@@ -691,14 +651,14 @@ void llamada_erronea(int32_t tipo_error, int32_t soc_cpu){
 
 	aux_pcb->tipo_fin_ejecucion=tipo_error;
 	pasar_pcb_exit(aux_pcb);
+	t_men_comun *men_cpu = crear_men_comun(tipo_error,NULL,0);
 	socket_send_comun(soc_cpu,men_cpu);
+	destruir_men_comun(men_cpu);
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-
-	destruir_men_comun(men_cpu);
 }
 
 t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
@@ -839,8 +799,7 @@ void *manejador_exit(){
 
 		if (queue_is_empty(colas->cola_exit)){
 			pthread_mutex_unlock(&mutex_exit);
-			//sem_decre(&cont_exit);
-			pthread_mutex_lock(&mutex_exit_vacia);
+			sem_decre(&cont_exit);
 		}else{
 
 			aux_pcb_otros = queue_pop(colas->cola_exit);
@@ -848,15 +807,14 @@ void *manejador_exit(){
 
 			//if (aux_pcb_otros->tipo_fin_ejecucion == CPU_DESCONEC ||aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION )
 
-			t_men_comun *men;
-			men = crear_men_comun(aux_pcb_otros->tipo_fin_ejecucion,"",1);
+			t_men_comun *men = crear_men_comun(aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
 			soc_prog = aux_pcb_otros->n_socket;
 			socket_send_comun(soc_prog , men);
-
+			socket_cerrar(soc_prog);
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
-			//sem_decre(&cont_exit);
+			sem_decre(&cont_exit);
 		}
 	}
 	return NULL;
@@ -951,27 +909,37 @@ t_cpu *get_cpu_libre(int32_t *res){
 }
 
 void umv_destrui_pcb(int32_t id_pcb){
-
-	t_men_seg *men_seg;
-	men_seg = crear_men_seg(DESTR_SEGS, id_pcb, 0);
+	t_men_seg *men_seg = crear_men_seg(DESTR_SEGS, id_pcb, 0);
 	socket_send_seg(soc_umv, men_seg);
 	destruir_men_seg(men_seg);
+	//recibo respuesta para sincronizar
+	t_men_comun *men_resp = socket_recv_comun(soc_umv);
+	if (men_resp->tipo != SINCRO_OK)
+		printf("ERROR se esperaba, de la UMV, un tipo de mensaje SINCRO_OK y se recibio:%i\n",men_resp->tipo);
+	destruir_men_comun(men_resp);
 }
 
 t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t contador_id_programa){
 
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	t_men_comun* men;
+	t_men_seg *men_esc;
 	char *etis = metadata_program->etiquetas;
 
 	// Escribe el segmento de codigo
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
+	men_esc = crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0);
+	socket_send_seg(soc_umv,men_esc);
+	destruir_men_seg(men_esc);
 	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
-	socket_send_comun(soc_umv, men);
 
+	socket_send_comun(soc_umv, men);
+	destruir_men_comun(men);
 	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-		if(men->tipo != MEN_ALM_OK)
-			printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	if(men->tipo != MEN_ALM_OK)
+		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	destruir_men_comun(men);
+
+
 
 	// Escribe el segmento de indice de etiquetas
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
@@ -979,8 +947,8 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	socket_send_comun(soc_umv, men);
 
 	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-		if(men->tipo != MEN_ALM_OK)
-			printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	if(men->tipo != MEN_ALM_OK)
+		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
 
 	// Escribe el segmento de indice de codigo
 	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
@@ -989,8 +957,8 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	socket_send_comun(soc_umv, men);
 
 	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-		if(men->tipo != MEN_ALM_OK)
-			printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	if(men->tipo != MEN_ALM_OK)
+		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = contador_id_programa;
@@ -1007,7 +975,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	return pcb;
 }
 
-t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog){
+t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int32_t id_prog){
 
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
 	resp_sol->memoria_insuficiente = 0;
@@ -1016,7 +984,7 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	int32_t tam = 0;
 
 	//pido mem para el codigo del script
-	ped_mem = crear_men_seg(PED_MEM_SEG_COD,id_prog,string_length(script));
+	ped_mem = crear_men_seg(PED_MEM_SEG_COD,id_prog,men_cod_prog->tam_dato);
 	socket_send_seg(soc_umv, ped_mem);
 	t_men_comun *resp_men_cod = socket_recv_comun(soc_umv);
 
@@ -1034,7 +1002,7 @@ t_resp_sol_mem * solicitar_mem(char *script, int32_t tam_stack, int32_t id_prog)
 	resp_sol->dir_primer_byte_umv_segmento_codigo = dir_mem_cod;
 
 	//pido mem para el indice de etiquetas y funciones
-	t_metadata_program* metadata_program = metadata_desde_literal(script);
+	t_metadata_program* metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	tam = (metadata_program->etiquetas_size);
 	ped_mem = crear_men_seg( PED_MEM_IND_ETI , id_prog, tam);
 	socket_send_seg(soc_umv, ped_mem);
@@ -1195,7 +1163,8 @@ t_datos_config *levantar_config(){
 	ret->variables_globales = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
 
 	for (i=0; ret->variables_globales[i] != '\0'; i++){
-		dictionary_put(diccionario_variables,ret->variables_globales[i],NULL);
+		int32_t *aux_i=malloc(sizeof(int32_t));
+		dictionary_put(diccionario_variables,ret->variables_globales[i],aux_i);
 	}
 
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");

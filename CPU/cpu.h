@@ -70,8 +70,9 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo);
 void wait(t_nombre_semaforo identificador_semaforo);
 void mi_signal(t_nombre_semaforo identificador_semaforo);
 
-void enviar_men_cpu_umv_destuir(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer);
+void enviar_men_cpu_umv_destruir(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer);
 char *copiar_int_to_buffer(int32_t un_int);
 void regenerar_dicc_var();
+void recibir_resp_kernel(int32_t tipo_men_esperado);
 
 #endif /* CPU_H_ */

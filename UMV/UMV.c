@@ -98,7 +98,7 @@ void *admin_conecciones(){
 			crear_hilo_detached(&hilo_conec_cpu, admin_conec_cpu, param_cpu);
 			break;
 		default:
-			printf("ERROR se esperaba recibir un tipo handshake y se recibio %i", men_hs->tipo);
+			printf("ERROR se esperaba recibir un tipo handshake y se recibio %i\n", men_hs->tipo);
 			break;
 		}
 		destruir_men_comun(men_hs);
@@ -127,6 +127,9 @@ void *admin_conec_kernel(){
 			break;
 		case DESTR_SEGS:
 			destruirSegmentos(men_seg->id_prog);
+			t_men_comun *aux_men= crear_men_comun(SINCRO_OK,NULL,0);
+			socket_send_comun(soc_kernel,aux_men);
+			destruir_men_comun(aux_men);
 			break;
 		case PED_MEM_SEG_COD:
 			gestionar_ped_seg(men_seg, RESP_MEM_SEG_COD);
@@ -174,11 +177,10 @@ void gestionar_alm_seg(int32_t id_proc){
 }
 
 void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
-	t_seg *aux_seg;
 
-	aux_seg = buscar_segmento_tipo_seg(id_proc, aux_men->tipo);
+	t_seg *aux_seg = buscar_segmento_tipo_seg(id_proc, aux_men->tipo);
 	if (aux_men->tam_dato != aux_seg->tam_seg){
-		printf("ERROR EL TAM DEL SEG ES ERRONEO\n");
+		printf("ERROR el tamanio:%i del segmento que se va a almacenar es distinto al tamanio:%i del segmento reservado\n",aux_men->tam_dato , aux_seg->tam_seg);
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
 		memcpy(&mem_prin[aux_seg->dir_fisica],aux_men->dato,aux_men->tam_dato);

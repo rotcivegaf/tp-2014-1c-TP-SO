@@ -44,10 +44,13 @@ int main(int argc, char *argv[]){
 
 		switch(mensaje_recibido->tipo){
 		case IMPRIMIR_VALOR:
-			printf("%d",atoi(mensaje_recibido->dato));
+			for(i=0;i<mensaje_recibido->tam_dato;i++)
+				printf("%c",mensaje_recibido->dato[i]);
 			break;
 		case IMPRIMIR_TEXTO:
-			printf("%s",mensaje_recibido->dato);
+			for(i=0;i<mensaje_recibido->tam_dato;i++)
+				printf("%c",mensaje_recibido->dato[i]);
+			printf("\n");
 			break;
 		case CPU_DESCONEC:
 			printf("CPU DESCONECTADA\n");

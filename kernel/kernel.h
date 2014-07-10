@@ -113,7 +113,7 @@
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
-	t_resp_sol_mem * solicitar_mem(char *script, int32_t  tam_stack, int32_t  id_prog);
+	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t  tam_stack, int32_t  id_prog);
 	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t  contador_id_programa);
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
 	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
@@ -139,9 +139,11 @@
 	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
 	void pasar_pcbBlock_exit(int32_t id_pcb);
-	void llamada_erronea(int32_t tipo_error, int32_t soc_cpu);
+	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
 	void logear_int(FILE* destino,int32_t un_int);
+
+	void enviar_resp_cpu(int32_t soc_cpu, int32_t tipo_mensaje);
 
 #endif /* KERNEL_H_ */
