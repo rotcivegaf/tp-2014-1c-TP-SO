@@ -316,36 +316,13 @@ void *pcp(t_param_pcp *param_pcp){
 							printf("ERROR ningun cpu esta procesando el proceso con socket nº%i\n",i);
 						break;
 					case FIN_EJECUCION:
-						aux_cpu = get_cpu(i);
-						aux_pcb_otros = get_pcb_otros_exec(atoi(men_cpu->dato));
-						aux_pcb_otros->tipo_fin_ejecucion = FIN_EJECUCION;
-						pasar_pcb_exit(aux_pcb_otros);
-
-						aux_cpu->id_prog_exec = 0;
-
-						pthread_mutex_lock(&mutex_uso_cola_cpu);
-						queue_push(cola_cpu,aux_cpu);
-						pthread_mutex_unlock(&mutex_uso_cola_cpu);
-						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-
+						fin_ejecucion(FIN_EJECUCION,i);
 						txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
 						break;
 					case SEGMEN_FAULT:
-						aux_cpu = get_cpu(i);
-						aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
-						aux_pcb_otros->tipo_fin_ejecucion = SEGMEN_FAULT;
-
-						pasar_pcb_exit(aux_pcb_otros);
-
-						aux_cpu->id_prog_exec = 0;
-
-						pthread_mutex_lock(&mutex_uso_cola_cpu);
-						queue_push(cola_cpu,aux_cpu);
-						pthread_mutex_unlock(&mutex_uso_cola_cpu);
-						pthread_mutex_unlock(&mutex_cola_cpu_vacia);
-
+						fin_ejecucion(SEGMEN_FAULT,i);
 						txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
@@ -501,6 +478,20 @@ void *pcp(t_param_pcp *param_pcp){
 	sleep(param_pcp->retardo);
 	}
 	return NULL;
+}
+
+void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
+	t_cpu *aux_cpu = get_cpu(socket_cpu);
+	t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+	aux_pcb_otros->tipo_fin_ejecucion = tipo;
+	pasar_pcb_exit(aux_pcb_otros);
+
+	aux_cpu->id_prog_exec = 0;
+
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
