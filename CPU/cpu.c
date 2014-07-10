@@ -32,9 +32,12 @@ int32_t quantum_max;
 char* etiquetas;
 int32_t fueFinEjecucion = 0;
 FILE *cpu_file_log;
+int32_t pid_cpu;
 
 int main(){
 	got_usr1 = 0;
+
+
 
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
 	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
@@ -51,6 +54,8 @@ int main(){
 	char *puertoUmv = config_get_string_value(unaConfig, "Puerto_UMV");
 	char *ipUmv = config_get_string_value(unaConfig, "IP_UMV");
 	imprimo_config(puertoKernel, ipKernel, puertoUmv, ipUmv);
+
+	printf("El PID de este CPU es %d \n", getpid());
 
 	/*conexion con el kernel*/
 	handshake_kernel(puertoKernel, ipKernel);
@@ -226,15 +231,32 @@ void salirPorQuantum(){
 void signal_handler(int sig){
 	got_usr1 =1;
 
+	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
+	printf("Se recibio la SIGUSR1");
+
+	while(quantum_actual <= quantum_max){
+		char* proxInstrucc = solicitarProxSentenciaAUmv();
+		analizadorLinea(proxInstrucc, &functions, &kernel_functions);
+		free(proxInstrucc);
+		quantum_actual ++;
+	}
+	if(!fueFinEjecucion){
+		salirPorQuantum();
+	}
+	txt_write_in_file(cpu_file_log, "SIGUSR1 - Se termina de ejecutar el quantum actual \n");
+	printf("SIGUSR1 - Se termina de ejecutar el quantum actual");
+
+	free(etiquetas);
+	free(pcb);
+	cambio_PA(0);
+	destruir_dic_Variables();
+
 	t_men_quantum_pcb *m = crear_men_quantum_pcb(CPU_DESCONEC, 0, pcb);
 	socket_send_quantum_pcb(socketKernel, m);
 	destruir_quantum_pcb(m);
 
-	fueFinEjecucion = 1;
-
-	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
-	printf("Se recibio la SIGUSR1");
-
+	txt_write_in_file(cpu_file_log, "Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
+	printf("Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
 }
 
 void preservarContexto(){
