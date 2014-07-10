@@ -195,7 +195,7 @@ void *plp(t_param_plp *param_plp){
 }
 
 void *pcp(t_param_pcp *param_pcp){
-	int32_t i,j, fdmax, cpu_new_fd,tam,encontre=0;
+	int32_t i, fdmax, cpu_new_fd;
 	fd_set master, read_fds;
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
@@ -378,24 +378,14 @@ void *pcp(t_param_pcp *param_pcp){
 						}
 						break;
 					case WAIT:
-						tam = queue_size(cola_semaforos);
-						encontre=0;
-						for(j=0;j<tam;j++){
-							semaforo = queue_pop(cola_semaforos);
-							if(semaforo->id_sem == men_cpu->dato){
-								j = tam;
-								encontre=1;
-							}else{
-								queue_push(cola_semaforos,semaforo);
-							}
-						}
-						if(encontre){
+						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
+
+						if(semaforo != NULL){
 							if(semaforo->valor > 0){
 								(semaforo->valor)--;
 								men_cpu->tipo=SEM_OK;
 								socket_send_comun(i,men_cpu);
 							}else{
-								(semaforo->valor)--;
 								aux_cpu = get_cpu(i);
 
 								men_cpu->tipo = SEM_BLOQUEADO;
@@ -404,8 +394,6 @@ void *pcp(t_param_pcp *param_pcp){
 								aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
 
 								queue_push(semaforo->procesos,aux_pcb_otros);
-
-								queue_push(cola_semaforos,semaforo);
 							}
 
 						txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
@@ -420,22 +408,9 @@ void *pcp(t_param_pcp *param_pcp){
 						}
 						break;
 					case SIGNAL:
-						tam = queue_size(cola_semaforos);
-						encontre=0;
+						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
 
-						for(j=0;j<tam;j++){
-
-							semaforo = queue_pop(cola_semaforos);
-
-							if(semaforo->id_sem == men_cpu->dato){
-								j = tam;
-								encontre=1;
-							}else{
-								queue_push(cola_semaforos,semaforo);
-							}
-						}
-
-						if(encontre==1){
+						if(semaforo != NULL){
 							(semaforo->valor)++;
 							socket_send_comun(i,men_cpu);
 
@@ -443,7 +418,6 @@ void *pcp(t_param_pcp *param_pcp){
 								aux_pcb_otros = queue_pop(semaforo->procesos);
 								pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
 							}
-							queue_push(cola_semaforos,semaforo);
 
 							txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
 							logear_int(pcp_log,i);
@@ -455,11 +429,10 @@ void *pcp(t_param_pcp *param_pcp){
 							txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
-
 						}
 						break;
 					case IO_ID:
-						enviar_IO(i, atoi(men_cpu->dato));
+						enviar_IO(i, men_cpu->dato);
 						break;
 					default:
 						printf("ERROR se esperaba al recibir el tipo de dato:%i\n", men_cpu->tipo);
@@ -514,7 +487,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 	return NULL;
 }
 
-void pasar_pcbBlock_exit(int32_t id_pcb){
+void pasar_pcbBlock_ready(int32_t id_pcb){
 	int32_t i = 0;
 	pthread_mutex_lock(&mutex_block);
 	int32_t tamanio_cola_block = queue_size(colas->cola_block);
@@ -689,28 +662,15 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 	return NULL;
 }
 
-void enviar_IO(int32_t soc_cpu, int32_t id_IO){
+void enviar_IO(int32_t soc_cpu, char *id_IO){
 
 	t_men_comun *men;
 	t_IO *aux_IO;
 	t_cpu *aux_cpu;
 	aux_cpu = get_cpu(soc_cpu);
-	int32_t i;
 
 	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
-	pthread_mutex_lock(&mutex_dispositivos_io);
-
-	for (i=0; i < list_size(dispositivos_IO); i++){
-		aux_IO = list_remove(dispositivos_IO,i);
-
-		if(atoi(aux_IO->id_hio)==id_IO){
-			i=list_size(dispositivos_IO);
-		}
-		else{
-			list_add(dispositivos_IO,aux_IO);
-		}
-	}
-	pthread_mutex_unlock(&mutex_dispositivos_io);
+	aux_IO = dictionary_get(dispositivos_IO, id_IO);
 
 	men = socket_recv_comun(soc_cpu);
 
@@ -994,9 +954,9 @@ void *manejador_IO(t_IO *io){
 			int32_t i;
 
 			for(i=0; i<proceso->unidades;i++)
-				sleep(io->hio_sleep);
+				sleep(io->io_sleep);
 
-			pasar_pcbBlock_exit(proceso->id_prog);
+			pasar_pcbBlock_ready(proceso->id_prog);
 
 			sem_decre(&(io->cont_cant_proc));
 		}
@@ -1016,8 +976,8 @@ void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
 }
 
 t_datos_config *levantar_config(){
-	void _imp_disp(t_IO *io){
-		printf("	ID:%s ,Sleep:%i\n",io->id_hio,io->hio_sleep);
+	void _imp_disp(char *key, t_IO *io){
+		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
 	void _imp_var_glob(char* key, int32_t valor){
 		printf("	ID:%s ,Valor:%i\n", key, valor);
@@ -1032,24 +992,23 @@ t_datos_config *levantar_config(){
 	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
 	ret->ip_umv = config_get_string_value( diccionario_config, "IP_UMV");
 	ret->puerto_umv = config_get_string_value( diccionario_config, "Puerto_umv");
-	char **id_hios = config_get_array_value( diccionario_config, "ID_HIO");
-	char **hio_sleeps = config_get_array_value( diccionario_config, "HIO");
+	char **id_ios = config_get_array_value( diccionario_config, "ID_HIO");
+	char **io_sleeps = config_get_array_value( diccionario_config, "HIO");
 
 
-	/*for (i=0; id_hios[i] != '\0'; i++){
+	for (i=0; id_ios[i] != '\0'; i++){
 
 		t_IO *new_IO = malloc(sizeof(t_IO));
 		crear_cont(&(new_IO->cont_cant_proc) , 0);
-		new_IO->id_hio = id_hios[i];
-		new_IO->hio_sleep = atoi(hio_sleeps[i]);
-
+		new_IO->io_sleep = atoi(io_sleeps[i]);
 		new_IO->procesos = queue_create();
-		list_add(dispositivos_IO, new_IO);
-		pthread_create(&(new_IO->hilo), NULL, (void *)manejador_IO, (void*)new_IO);
-	}*/
 
-	free(id_hios);
-	free(hio_sleeps);
+		dictionary_put(dicc_sem, id_ios[i],new_IO);
+		pthread_create(&(new_IO->hilo), NULL, (void *)manejador_IO, (void*)new_IO);
+	}
+
+	free(id_ios);
+	free(io_sleeps);
 
 	char **aux_id_sem = config_get_array_value( diccionario_config, "SEMAFOROS");
 	char **aux_valor = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
@@ -1072,7 +1031,9 @@ t_datos_config *levantar_config(){
 
 	for (i=0; aux_var_glob[i] != '\0'; i++)
 		dictionary_put(diccionario_variables, aux_var_glob[i],0);
+
 	free(aux_var_glob);
+
 	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
 	printf("Puerto Proc-Prog = %s\n", ret->puerto_prog);
 	printf("Puerto CPU = %s\n", ret->puerto_cpu);

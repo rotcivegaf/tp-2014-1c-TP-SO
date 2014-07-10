@@ -63,8 +63,7 @@
 		int32_t tam_stack;
 	} t_datos_config;
 	typedef struct{
-		char *id_hio;
-		int32_t  hio_sleep;
+		int32_t  io_sleep;
 		t_queue *procesos;
 		pthread_t hilo;
 		sem_t cont_cant_proc;
@@ -106,7 +105,7 @@
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	t_cpu *get_cpu(int32_t  soc_cpu);
-	void enviar_IO(int32_t  soc_cpu, int32_t id_IO);
+	void enviar_IO(int32_t  soc_cpu, char *id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	void *entrar_IO();
 	t_cpu *get_cpu_libre(int32_t  *res);
