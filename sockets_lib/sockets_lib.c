@@ -118,7 +118,7 @@ int socket_send_comun(int soc,t_men_comun *men){
 }
 
 /*envia un mensaje comun y lo destruye */
-void enviar_men_comun_destuir(int32_t soc, int32_t tipo, char *dato, int32_t tam){
+void enviar_men_comun_destruir(int32_t soc, int32_t tipo, char *dato, int32_t tam){
 	t_men_comun *men_comun = crear_men_comun(tipo, dato, tam);
 	socket_send_comun(soc, men_comun);
 	destruir_men_comun(men_comun);
@@ -491,6 +491,12 @@ int socket_send_seg(int soc,t_men_seg *men){
 		printf("NO PUDE MANDAR TODO\n");
 	free(stream);
 	return pude_enviar;
+}
+
+void enviar_umv_mem_seg_destruir(int32_t soc, int32_t tipo_men,int32_t id_prog,int32_t tam_seg){
+	t_men_seg *mem_seg = crear_men_seg(tipo_men,id_prog,tam_seg);
+	socket_send_seg(soc, mem_seg);
+	destruir_men_seg(mem_seg);
 }
 
 /*recibe un mensaje de pedido de segmento del socket conectado

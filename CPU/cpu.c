@@ -216,7 +216,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
-	enviar_men_comun_destuir(socketKernel, FIN_QUANTUM, string_itoa(pcb->id), sizeof(int32_t));
+	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, string_itoa(pcb->id), sizeof(int32_t));
 
 	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
 	socket_send_quantum_pcb(socketKernel, p);
@@ -285,7 +285,7 @@ void finalizarContexto(int32_t tipo_fin){
 		return;
 	}
 	if (tipo_fin == SEGMEN_FAULT){
-		enviar_men_comun_destuir(socketKernel, SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
+		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
 		fueFinEjecucion = 1;
 	}
 	if (tipo_fin == OK){
@@ -326,7 +326,7 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_cont_var);
 			destruir_men_comun(men_nombre_var);
 		}
-		enviar_men_comun_destuir(socketKernel, FIN_EJECUCION, string_itoa(pcb->id), sizeof(int32_t));
+		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, string_itoa(pcb->id), sizeof(int32_t));
 		fueFinEjecucion = 1;
 	}
 	txt_write_in_file(cpu_file_log, "Mandando a Kernel-PCP el pcb de un programa que se termino de ejecutar\n");
@@ -441,7 +441,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	enviar_men_comun_destuir(socketKernel, OBTENER_VALOR, variable, string_length(variable));
+	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable));
 
 	//recibo el valor
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
@@ -471,7 +471,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
 
-	enviar_men_comun_destuir(socketKernel, GRABAR_VALOR, variable, string_length(variable));
+	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable));
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
 	if(men_resp->tipo == VAR_INEX){
@@ -483,7 +483,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	}
 	if(men_resp->tipo == R_GRABAR_VALOR){
 		char *c =  string_itoa(valor);
-		enviar_men_comun_destuir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
+		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
 		free(c);
 		return valor;
 	}
@@ -653,9 +653,9 @@ void imprimir(t_valor_variable valor_mostrar){
 void imprimirTexto(char* texto){
 	char *aux_string = string_duplicate(texto);
 	string_trim(&aux_string);
-	enviar_men_comun_destuir(socketKernel, IMPRIMIR_TEXTO, aux_string, string_length(aux_string));
+	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, aux_string, string_length(aux_string));
 
-	enviar_men_comun_destuir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
+	enviar_men_comun_destruir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
 
 	recibir_resp_kernel(R_IMPRIMIR);
 
@@ -665,9 +665,9 @@ void imprimirTexto(char* texto){
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	enviar_men_comun_destuir(socketKernel, IO_ID, dispositivo, string_length(dispositivo));
+	enviar_men_comun_destruir(socketKernel, IO_ID, dispositivo, string_length(dispositivo));
 	char *aux_tiempo = string_itoa(tiempo);
-	enviar_men_comun_destuir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo));
+	enviar_men_comun_destruir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo));
 	free(aux_tiempo);
 
 	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
@@ -679,7 +679,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destuir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
+	enviar_men_comun_destruir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
 	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
 	printf("Haciendo wait a semaforo %s\n", identificador_semaforo);
 
@@ -706,7 +706,7 @@ void wait(t_nombre_semaforo identificador_semaforo){
 }
 
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destuir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
+	enviar_men_comun_destruir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
 
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
 	printf("Haciendo signal a semaforo %s\n", identificador_semaforo);
@@ -743,7 +743,7 @@ void handshake_umv(char *puerto, char *ip){
 	//envio a la UMV
 	socketUmv = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destuir(socketUmv, HS_CPU, "", string_length(""));
+	enviar_men_comun_destruir(socketUmv, HS_CPU, "", string_length(""));
 
 	//espero coneccion de la UMV
 	t_men_comun *mensaje_inicial = socket_recv_comun(socketUmv);
@@ -761,7 +761,7 @@ void handshake_kernel(char *puerto, char *ip){
 	//envio al kernel
 	socketKernel = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destuir(socketKernel, HS_CPU, "", string_length(""));
+	enviar_men_comun_destruir(socketKernel, HS_CPU, "", string_length(""));
 
 	//espero conexion de kernel
 	t_men_comun *mensaje_inicial = socket_recv_comun(socketKernel);

@@ -93,7 +93,7 @@
 
 	t_men_comun *crear_men_comun(int32_t tipo, char *dato,int32_t tam);
 	int socket_send_comun(int soc,t_men_comun *men);
-	void enviar_men_comun_destuir(int32_t soc, int32_t tipo, char *dato, int32_t tam);
+	void enviar_men_comun_destruir(int32_t soc, int32_t tipo, char *dato, int32_t tam);
 	t_men_comun *socket_recv_comun(int soc);
 	char *men_serealizer_comun(t_men_comun *self);
 	t_men_comun *men_deserealizer_comun(char *stream);
@@ -151,6 +151,7 @@
 
 	t_men_seg *crear_men_seg(int32_t tipo, int32_t id_prog, int32_t tam_seg);
 	int socket_send_seg(int soc,t_men_seg *men);
+	void enviar_umv_mem_seg_destruir(int32_t soc, int32_t tipo_men,int32_t id_prog,int32_t tam_seg);
 	t_men_seg *socket_recv_seg(int soc);
 	char *men_serealizer_seg(t_men_seg *self);
 	t_men_seg *men_deserealizer_seg(char *stream);
