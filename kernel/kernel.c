@@ -1136,114 +1136,68 @@ void handshake_umv(char *ip_umv, char *puerto_umv){
 	destruir_men_comun(men_hs);
 }
 
-void *imp_colas (){
-
+void imprimir_cola(t_queue *cola){
 	int32_t i;
 	t_pcb_otros *aux;
 
+	if (queue_is_empty(cola)){
+		printf("*************COLA VACIA********************");
+	}else {
+		for(i=0; i < queue_size(cola) ;i++){
+			aux = queue_pop(cola);
+			printf("%i/%i - ",aux->pcb->id,aux->peso);
+			queue_push(cola, aux);
+		}
+	}
+}
+
+void *imp_colas (){
+	char opcion;
+
 	while(quit_sistema){
 
-		usleep(5000*1000);
+		do {
+			scanf("%c", &opcion);
+		} while (opcion != 'i');
+
+		pthread_mutex_lock(&mutex_new);
+		pthread_mutex_lock(&mutex_ready);
+		pthread_mutex_lock(&mutex_block);
+		pthread_mutex_lock(&mutex_exec);
+		pthread_mutex_lock(&mutex_exit);
 
 		printf("--COLA-NEW---------------------------------------------------------\n");
 		printf("|PID/PESO= ");
-
-		pthread_mutex_lock(&mutex_new);
-
-		if (queue_is_empty(colas->cola_new)){
-			printf("*************COLA VACIA********************");
-		}else {
-
-			for(i=0; i < queue_size(colas->cola_new) ;i++){
-				aux = queue_pop(colas->cola_new);
-				printf("%i/%i - ",aux->pcb->id,aux->peso);
-				queue_push(colas->cola_new, aux);
-			}
-		}
-
-		pthread_mutex_unlock(&mutex_new);
-
+		imprimir_cola(colas->cola_new);
 		printf("\n");
+
 		printf("--COLA-READY-------------------------------------------------------\n");
-		printf("|  PID   = ");
-
-		pthread_mutex_lock(&mutex_ready);
-
-		if (queue_is_empty(colas->cola_ready)){
-			printf("*************COLA VACIA********************");
-		}else {
-
-			for(i=0; i < queue_size(colas->cola_ready) ;i++){
-				aux = queue_pop(colas->cola_ready);
-				printf(" %i  - ",aux->pcb->id);
-				queue_push(colas->cola_ready, aux);
-			}
-		}
-
-		pthread_mutex_unlock(&mutex_ready);
-
+		printf("|PID/PESO= ");
+		imprimir_cola(colas->cola_ready);
 		printf("\n");
+
 		printf("--COLA-BLOCK-------------------------------------------------------\n");
-		printf("|  PID   = ");
-
-		pthread_mutex_lock(&mutex_block);
-
-		if (queue_is_empty(colas->cola_block)){
-			printf("*************COLA VACIA********************");
-		}else {
-
-			for(i=0; i < queue_size(colas->cola_block) ;i++){
-				aux = queue_pop(colas->cola_block);
-				printf(" %i  - ",aux->pcb->id);
-				queue_push(colas->cola_block, aux);
-			}
-		}
-
-		pthread_mutex_unlock(&mutex_block);
-
+		printf("|PID/PESO= ");
+		imprimir_cola(colas->cola_block);
 		printf("\n");
+
 		printf("--COLA-EXEC--------------------------------------------------------\n");
-		printf("|  PID   = ");
-
-		pthread_mutex_lock(&mutex_exec);
-
-		if (queue_is_empty(colas->cola_exec)){
-			printf("*************COLA VACIA********************");
-		}else {
-
-			for(i=0; i < queue_size(colas->cola_exec) ;i++){
-				aux = queue_pop(colas->cola_exec);
-				printf(" %i  - ",aux->pcb->id);
-				queue_push(colas->cola_exec, aux);
-			}
-		}
-
-		pthread_mutex_unlock(&mutex_exec);
-
+		printf("|PID/PESO= ");
+		imprimir_cola(colas->cola_exec);
 		printf("\n");
+
 		printf("--COLA-EXIT--------------------------------------------------------\n");
-		printf("|  PID   = ");
-
-		pthread_mutex_lock(&mutex_exit);
-
-		if (queue_is_empty(colas->cola_exit)){
-			printf("*************COLA VACIA********************");
-		}else {
-
-			for(i=0; i < queue_size(colas->cola_exit) ;i++){
-				aux = queue_pop(colas->cola_exit);
-				printf(" %i  - ",aux->pcb->id);
-				queue_push(colas->cola_exit, aux);
-			}
-		}
-
-		pthread_mutex_unlock(&mutex_exit);
-
+		printf("|PID/PESO= ");
+		imprimir_cola(colas->cola_exit);
 		printf("\n");
 		printf("-------------------------------------------------------------------\n");
 
+		pthread_mutex_unlock(&mutex_new);
+		pthread_mutex_unlock(&mutex_ready);
+		pthread_mutex_unlock(&mutex_block);
+		pthread_mutex_unlock(&mutex_exec);
+		pthread_mutex_unlock(&mutex_exit);
 	}
-
 	return NULL;
 }
 
