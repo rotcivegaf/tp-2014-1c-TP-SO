@@ -207,6 +207,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	if(rec_inst->tipo == R_SOL_BYTES){
 		proxInst = malloc(rec_inst->tam_dato);
 		memcpy(proxInst, rec_inst->dato,rec_inst->tam_dato);
+		string_trim(&proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar:%s\n",proxInst);
 		pcb->program_counter ++;
@@ -545,10 +546,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
-	int i;
-	for(i=0;i<string_length(nombre_etiqueta);i++)// para quitar el maldito \n
-		if (nombre_etiqueta[i] == '\n')
-			nombre_etiqueta[i]='\0';
+	string_trim(&nombre_etiqueta);
 
 	//t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta("inicio", etiquetas, pcb->tam_indice_etiquetas);
 	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(nombre_etiqueta, etiquetas, pcb->tam_indice_etiquetas);
@@ -562,6 +560,7 @@ void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 		printf("ERROR en la busqueda de la etiqueta:%s \n",nombre_etiqueta);
 		finalizarContexto(ERROR);
 	}
+//free(nombre_etiqueta);
 }
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
@@ -701,17 +700,16 @@ void imprimir(t_valor_variable valor_mostrar){
 }
 
 void imprimirTexto(char* texto){
-	char *aux_string = string_duplicate(texto);
-	string_trim(&aux_string);
-	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, aux_string, string_length(aux_string));
+	string_trim(&texto);
+	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto, string_length(texto));
 
 	enviar_men_comun_destruir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
 
 	recibir_resp_kernel(R_IMPRIMIR);
 
 	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
-	printf("Imprimiendo texto: %s\n", aux_string);
-	free(aux_string);
+	printf("Imprimiendo texto: %s\n", texto);
+	//free(texto);
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
