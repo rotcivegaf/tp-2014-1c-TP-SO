@@ -184,16 +184,20 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
 	base = pcb->dir_primer_byte_umv_indice_codigo;
+	printf("Base que esta mandando:%i", base );
 	offset = pcb->program_counter*8;
 	tam = 8;
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	men_base_offset = socket_recv_comun(socketUmv);
-	if((men_base_offset->tam_dato != 8) || (men_base_offset->tipo!=R_SOL_BYTES))//por si la UMV me llega a mandar un tamanio distinto al q pedi o si el tipo de dato es diferente
-		printf("ERROR el tamanio recibido:%i es distinto a 8, o el tipo de dato:%i es distinto a R_SOL_BYTES\n",men_base_offset->tam_dato,men_base_offset->tipo);
 
 	memcpy(&offset, men_base_offset->dato, 4);
 	memcpy(&tam, men_base_offset->dato+4, 4);
+	printf("Tamaño que esta enviando %i", tam);
+	if((men_base_offset->tam_dato != 8) || (men_base_offset->tipo!=R_SOL_BYTES))//por si la UMV me llega a mandar un tamanio distinto al q pedi o si el tipo de dato es diferente
+		printf("ERROR el tamanio recibido:%i es distinto a 8, o el tipo de dato:%i es distinto a R_SOL_BYTES\n",men_base_offset->tam_dato,men_base_offset->tipo);
+
+
 	destruir_men_comun(men_base_offset);
 
 	base = pcb->dir_primer_byte_umv_segmento_codigo;
@@ -387,6 +391,7 @@ void finalizarContexto(int32_t tipo_fin){
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
 	base = pcb->dir_primer_byte_umv_segmento_stack;
+	printf("Base del stack:%i", base);
 	offset= (pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack)+(pcb->cant_var_contexto_actual)*5;
 
 	tam = sizeof(int32_t)+1;
