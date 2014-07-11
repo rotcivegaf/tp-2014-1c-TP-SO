@@ -83,7 +83,6 @@ int main(int argc, char *argv[]){
 			log_error(logger,"Acceso a semaforo inexistente");
 			break;
 		default:
-			sleep(1);
 			printf("%i\n",mensaje_recibido->tipo);
 			printf("El tipo de dato recibido es erroneo\n");
 			log_error(logger,"Se recibio un msj del kernel de tipo erroneo");

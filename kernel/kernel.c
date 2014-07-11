@@ -1,5 +1,6 @@
 #include "kernel.h"
 
+fd_set conj_soc_progs;   // conjunto maestro de sockets del PLP(sockets de progrmas)
 int32_t soc_umv;
 t_colas *colas;  //colas de los cinco estados de los procesos
 t_queue *cola_cpu; //cola donde tengo los cpu conectados
@@ -20,6 +21,7 @@ t_dictionary *diccionario_variables;
 t_dictionary *dicc_sem;
 FILE *plp_log;
 FILE *pcp_log;
+
 
 int main(void){
 	diccionario_variables = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
@@ -83,7 +85,6 @@ void *plp(t_param_plp *param_plp){
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
 
 	int32_t contador_prog = 0;
-	fd_set master;   // conjunto maestro de sockets
 	fd_set read_fds; // conjunto temporal de sockets para select()
 	int32_t fdmax;   // socket con el mayor valor
 
@@ -95,9 +96,9 @@ void *plp(t_param_plp *param_plp){
 	txt_write_in_file(plp_log,"Escuchando conexiones entrantes de programas \n");
     int32_t prog_new_fd;
 
-	FD_ZERO(&master);    // borra los conjuntos maestro y temporal de sockets
+	FD_ZERO(&conj_soc_progs);    // borra los conjuntos maestro y temporal de sockets
 	FD_ZERO(&read_fds);
-	FD_SET(listener_prog, &master);
+	FD_SET(listener_prog, &conj_soc_progs);
 
 	fdmax = listener_prog; // por ahora es éste
 
@@ -105,7 +106,7 @@ void *plp(t_param_plp *param_plp){
 
 	while(quit_sistema){
 
-		read_fds = master; // Copia el conjunto maestro al temporal
+		read_fds = conj_soc_progs; // Copia el conjunto maestro al temporal
 
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			txt_write_in_file(plp_log,"Error en el select \n");
@@ -125,7 +126,7 @@ void *plp(t_param_plp *param_plp){
 					logear_int(plp_log,prog_new_fd);
 					txt_write_in_file(plp_log,"\n");
 
-					FD_SET(prog_new_fd, &master);
+					FD_SET(prog_new_fd, &conj_soc_progs);
 
 					if (prog_new_fd > fdmax) // Actualiza el socket maximo
 						fdmax = prog_new_fd;
@@ -141,7 +142,7 @@ void *plp(t_param_plp *param_plp){
 						txt_write_in_file(plp_log,"\n");
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
-						FD_CLR(i, &master); // Elimina al socket del conjunto maestro
+						FD_CLR(i, &conj_soc_progs); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
 						break;
 					}
@@ -189,7 +190,7 @@ void *plp(t_param_plp *param_plp){
 				}
 			}
 		}
-	sleep(_RETARDO);
+	usleep(_RETARDO*1000);
 	}
 	return NULL;
 }
@@ -283,14 +284,37 @@ void *pcp(t_param_pcp *param_pcp){
 						socket_cerrar(i);
 						FD_CLR(i, &master);
 						break;
+					case SIGUSR1_CPU_DESCONEC:
+						txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
+						logear_int(pcp_log,i);
+						txt_write_in_file(pcp_log,"\n");
+						printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", i);
+						// Agarra el cpu a partir de su n° de socket
+						aux_cpu = get_cpu(i);
+						if (aux_cpu->id_prog_exec != 0){
+							// Actualizacion pcb
+							aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+							t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(i);
+							actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
+							destruir_quantum_pcb(men_quantum_pcb);
+							// Pone el pcb en ready
+							pthread_mutex_lock(&mutex_ready);
+							queue_push(colas->cola_ready,aux_pcb_otros);
+							pthread_mutex_unlock(&mutex_ready);
+							pthread_mutex_unlock(&mutex_ready_vacia);
+						}
+						free(aux_cpu);
+						socket_cerrar(i);
+						FD_CLR(i, &master);
+						break;
 					case FIN_QUANTUM:
 						aux_cpu = get_cpu(i);
 						if (aux_cpu->id_prog_exec != 0){
 							// Actualizacion pcb
 							aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-							t_men_quantum_pcb *men_quenatum_pcb = socket_recv_quantum_pcb(i);
-							t_pcb *pcb_recibido = men_quenatum_pcb->pcb;
-							actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
+							t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(i);
+							actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
+							destruir_quantum_pcb(men_quantum_pcb);
 							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
 							// Pone el pcb en ready
@@ -370,6 +394,7 @@ void *pcp(t_param_pcp *param_pcp){
 							txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
+							//todo sincronizar
 						}else{
 							llamada_erronea(i, VAR_INEX);
 							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
@@ -442,7 +467,7 @@ void *pcp(t_param_pcp *param_pcp){
 				}
 			}
 		}
-	sleep(_RETARDO);
+		usleep(_RETARDO*1000);
 	}
 	return NULL;
 }
@@ -452,8 +477,6 @@ void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
-
-	aux_cpu->id_prog_exec = 0;
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
@@ -502,8 +525,7 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_ready_vacia);
 			i=tamanio_cola_block;
-		}
-		else {
+		}else {
 			queue_push(colas->cola_block,pcb_aux);
 		}
 	}
@@ -718,7 +740,6 @@ t_pcb_otros *get_peso_min(){
 void *manejador_exit(){
 
 	t_pcb_otros *aux_pcb_otros;
-	int32_t soc_prog;
 
 	while(quit_sistema){
 		pthread_mutex_lock(&mutex_exit);
@@ -731,11 +752,13 @@ void *manejador_exit(){
 			aux_pcb_otros = queue_pop(colas->cola_exit);
 			pthread_mutex_unlock(&mutex_exit);
 
-			//if (aux_pcb_otros->tipo_fin_ejecucion == CPU_DESCONEC ||aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION )
+			//si finalizo la ejecucion de un programa normalmente mando a adesalojar cpu
+			if (aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION){
+				desalojar_cpu(aux_pcb_otros->pcb->id);
+			}
 
-			enviar_men_comun_destruir(soc_prog, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
-			soc_prog = aux_pcb_otros->n_socket;
-			socket_cerrar(soc_prog);
+			enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
+			FD_CLR(aux_pcb_otros->n_socket, &conj_soc_progs); // Elimina al socket del conjunto maestro
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
@@ -743,6 +766,25 @@ void *manejador_exit(){
 		}
 	}
 	return NULL;
+}
+
+void desalojar_cpu(int32_t id_prog){
+	int32_t i;
+	t_cpu *cpu;
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	int32_t tam = queue_size(cola_cpu);
+
+	for(i=0 ;i < tam ;i++){
+		cpu = queue_pop(cola_cpu);
+		if (cpu->id_prog_exec == id_prog){
+			cpu->id_prog_exec = 0;
+			queue_push(cola_cpu,cpu);
+			pthread_mutex_unlock(&mutex_uso_cola_cpu);
+			return;
+		}
+		queue_push(cola_cpu, cpu);
+	}
+	printf("ERROR en desalojar_cpu, no se ha podido encontrar el id_prog:%i\n",id_prog);
 }
 
 void *manejador_new_ready(){
@@ -768,7 +810,6 @@ void *manejador_ready_exec(){
 
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
-	int32_t res;
 
 	while(quit_sistema){
 
@@ -781,9 +822,9 @@ void *manejador_ready_exec(){
 		}else{
 
 			pthread_mutex_lock(&mutex_uso_cola_cpu);
-			cpu = get_cpu_libre(&res);
+			cpu = get_cpu_libre();
 
-			if(res == 0){
+			if(cpu == NULL){
 				pthread_mutex_unlock(&mutex_ready);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
 				pthread_mutex_lock(&mutex_cola_cpu_vacia);
@@ -805,7 +846,7 @@ void *manejador_ready_exec(){
 	return NULL;
 }
 
-t_cpu *get_cpu_libre(int32_t *res){
+t_cpu *get_cpu_libre(){
 
 	int32_t i;
 	t_cpu *cpu;
@@ -815,14 +856,12 @@ t_cpu *get_cpu_libre(int32_t *res){
 	for(i=0 ;i < tam ;i++){
 		cpu = queue_pop(cola_cpu);
 
-		if (cpu->id_prog_exec == 0){
-			*res = 1;
+		if (cpu->id_prog_exec == 0)
 			return cpu;
-		}
+
 		queue_push(cola_cpu, cpu);
 	}
-	*res = 0;
-	return cpu;
+	return NULL;
 }
 
 void umv_destrui_pcb(int32_t id_pcb){
@@ -954,7 +993,7 @@ void *manejador_IO(t_IO *io){
 			int32_t i;
 
 			for(i=0; i<proceso->unidades;i++)
-				sleep(io->io_sleep);
+				usleep(io->io_sleep*1000);
 
 			pasar_pcbBlock_ready(proceso->id_prog);
 
@@ -1104,7 +1143,7 @@ void *imp_colas (){
 
 	while(quit_sistema){
 
-		sleep(5);
+		usleep(5000*1000);
 
 		printf("--COLA-NEW---------------------------------------------------------\n");
 		printf("|PID/PESO= ");

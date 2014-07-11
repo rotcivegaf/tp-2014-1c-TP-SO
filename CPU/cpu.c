@@ -73,6 +73,7 @@ int main(){
 		fueFinEjecucion = 0;
 		/*recibe un pcb del kernel*/
 		recibirUnPcb();
+
 		/* le digo a la UMV q cambie el proceso activo */
 		cambio_PA(pcb->id);
 
@@ -121,6 +122,7 @@ void traerIndiceEtiquetas(){
 
 void recibirUnPcb(){
 	t_men_quantum_pcb *m = socket_recv_quantum_pcb(socketKernel);
+
 	pcb = malloc(sizeof(t_pcb));
 	if((m->tipo==CONEC_CERRADA) || (m->tipo!=PCB_Y_QUANTUM)){
 		printf("ERROR se ha perdido la coneccion con el Kernel o el tipo de dato recibido es erroneo\n");
@@ -128,6 +130,7 @@ void recibirUnPcb(){
 		memcpy(pcb, m->pcb, sizeof(t_pcb));
 		memcpy(&quantum_max , &m->quantum, sizeof(int32_t));
 	}
+
 	destruir_quantum_pcb(m);
 }
 
@@ -223,9 +226,13 @@ void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
 	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, string_itoa(pcb->id), sizeof(int32_t));
 
-	t_men_quantum_pcb *p=crear_men_quantum_pcb(FIN_QUANTUM,0, pcb);
-	socket_send_quantum_pcb(socketKernel, p);
-	destruir_quantum_pcb(p);
+	enviar_pcb_destruir();
+}
+
+void enviar_pcb_destruir(){
+	t_men_quantum_pcb *men = crear_men_quantum_pcb(PCB_Y_QUANTUM,0, pcb);
+	socket_send_quantum_pcb(socketKernel, men);
+	destruir_quantum_pcb(men);
 }
 
 void signal_handler(int sig){
@@ -251,9 +258,9 @@ void signal_handler(int sig){
 	cambio_PA(0);
 	destruir_dic_Variables();
 
-	t_men_quantum_pcb *m = crear_men_quantum_pcb(CPU_DESCONEC, 0, pcb);
-	socket_send_quantum_pcb(socketKernel, m);
-	destruir_quantum_pcb(m);
+	enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
+
+	enviar_pcb_destruir();
 
 	txt_write_in_file(cpu_file_log, "Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
 	printf("Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
@@ -302,17 +309,18 @@ void finalizarContexto(int32_t tipo_fin){
 	int32_t i, base, offset;
 
 	if(tipo_fin == SEM_INEX){
-			printf("ERROR,el semaforo es inexistente\n");
-			quantum_actual= quantum_max;
-			fueFinEjecucion=1;
-			return;
-		}
+		printf("ERROR,el semaforo es inexistente\n");
+		quantum_actual= quantum_max;
+		fueFinEjecucion=1;
+		return;
+	}
 
 	if (tipo_fin == SEM_BLOQUEADO){
 		quantum_actual = quantum_max;
 		fueFinEjecucion=1;
-
+		enviar_pcb_destruir();
 	}
+
 	if(tipo_fin == VAR_INEX){
 		printf("ERROR,la variable global es inexistente\n");
 		quantum_actual= quantum_max;
@@ -367,7 +375,9 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_cont_var);
 			destruir_men_comun(men_nombre_var);
 		}
-		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, string_itoa(pcb->id), sizeof(int32_t));
+		char *aux_string = string_itoa(pcb->id);
+		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, sizeof(aux_string));
+		free(aux_string);
 		fueFinEjecucion = 1;
 	}
 	txt_write_in_file(cpu_file_log, "Mandando a Kernel-PCP el pcb de un programa que se termino de ejecutar\n");
@@ -526,6 +536,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 		char *c =  string_itoa(valor);
 		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
 		free(c);
+		//todo sincronizar
 		return valor;
 	}
 	printf("ERROR el kernel me mando:%i y se esperaba otro tipo\n",men_resp->tipo);
@@ -634,9 +645,8 @@ void finalizar(void){
 	}
 
 	//actualizar el pcb
-	pcb->cant_var_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
-	pcb->program_counter=prog_counter;
-	pcb->dir_primer_byte_umv_contexto_actual=dir_context_ant;
+	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
+	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
 	regenerar_dicc_var();
 }
@@ -664,9 +674,8 @@ void retornar(t_valor_variable retorno){
 	}
 
 	//actualizar el pcb
-	pcb->cant_var_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-12)/5;
-	pcb->program_counter=prog_counter;
-	pcb->dir_primer_byte_umv_contexto_actual=dir_context_ant;
+	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-12)/5;
+	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
 	regenerar_dicc_var();
 
@@ -711,9 +720,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	enviar_men_comun_destruir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo));
 	free(aux_tiempo);
 
-	t_men_quantum_pcb *mpcb = crear_men_quantum_pcb(PCB_Y_QUANTUM, 0, pcb);
-	socket_send_quantum_pcb(socketKernel, mpcb);
-	destruir_quantum_pcb(mpcb);
+	enviar_pcb_destruir();
 
 	txt_write_in_file(cpu_file_log, "Saliendo a i/o en dispositivo\n");
 	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
@@ -883,4 +890,10 @@ void regenerar_dicc_var(){
 		*pos = base + offset;
 		dictionary_put(dic_Variables, key, pos );
 	}
+}
+
+void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_byte_umv){
+	pcb->cant_var_contexto_actual = cant_var;
+	pcb->program_counter=program_counter;
+	pcb->dir_primer_byte_umv_contexto_actual=dir_primer_byte_umv;
 }

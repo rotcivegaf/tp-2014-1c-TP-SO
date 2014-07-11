@@ -73,7 +73,7 @@ void *admin_conecciones(){
 		//se recibe un mensaje y se espera
 		new_soc = socket_accept(listen_soc);
 		men_hs = socket_recv_comun(new_soc);
-		sleep(retardo);
+		usleep(retardo*1000);
 		//se clasifica el handshake y se crea el hilo correspondiente
 		switch(men_hs->tipo){
 		case CONEC_CERRADA:
@@ -118,7 +118,7 @@ void *admin_conec_kernel(){
 	while(quit_sistema){
 		//se recibe un mesaje y se aguarda
 		men_seg = socket_recv_seg(soc_kernel);
-		sleep(retardo);
+		usleep(retardo*1000);
 		//se clasifica el tipo de operacion
 		switch(men_seg->tipo){
 		case CONEC_CERRADA:
@@ -279,7 +279,7 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 	while(este_conectada){
 		//se recibe el mensaje y se espera
 		men_bytes = socket_recv_cpu_umv(param->soc);
-		sleep(retardo);
+		usleep(retardo*1000);
 		//se clasifica el mensaje que se recibe
 		switch(men_bytes->tipo){
 		case CONEC_CERRADA:

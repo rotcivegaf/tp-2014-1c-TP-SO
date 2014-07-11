@@ -105,10 +105,11 @@
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	t_cpu *get_cpu(int32_t  soc_cpu);
+	void desalojar_cpu(int32_t id_prog);
 	void enviar_IO(int32_t  soc_cpu, char *id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	void *entrar_IO();
-	t_cpu *get_cpu_libre(int32_t  *res);
+	t_cpu *get_cpu_libre();
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
 	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb,int32_t  quantum);

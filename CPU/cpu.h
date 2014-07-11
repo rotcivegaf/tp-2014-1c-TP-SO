@@ -76,5 +76,7 @@ void enviar_men_cpu_umv_destruir(int32_t tipo, int32_t base, int32_t offset, int
 char *copiar_int_to_buffer(int32_t un_int);
 void regenerar_dicc_var();
 void recibir_resp_kernel(int32_t tipo_men_esperado);
+void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_byte_umv);
+void enviar_pcb_destruir();
 
 #endif /* CPU_H_ */

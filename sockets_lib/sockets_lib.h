@@ -33,6 +33,7 @@
 		VALOR_ASIGNADO =27,
 		SEM_BLOQUEADO = 28,
 		SEM_OK = 29,
+		SIGUSR1_CPU_DESCONEC = 30,
 		//mensajes q envia el kernel a la cpu
 		R_IMPRIMIR = 50,
 		R_OBTENER_VALOR = 52,
