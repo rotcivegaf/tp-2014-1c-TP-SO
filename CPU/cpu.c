@@ -560,7 +560,6 @@ void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 		printf("ERROR en la busqueda de la etiqueta:%s \n",nombre_etiqueta);
 		finalizarContexto(ERROR);
 	}
-//free(nombre_etiqueta);
 }
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
@@ -709,7 +708,6 @@ void imprimirTexto(char* texto){
 
 	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
 	printf("Imprimiendo texto: %s\n", texto);
-	//free(texto);
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
