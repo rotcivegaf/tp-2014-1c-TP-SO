@@ -112,12 +112,11 @@ void traerIndiceEtiquetas(){
 	if(rec_etiq->tipo == R_SOL_BYTES){
 		etiquetas = malloc(rec_etiq->tam_dato);
 		memcpy(etiquetas ,rec_etiq->dato, rec_etiq->tam_dato);
-		return;
 	}
 	if(rec_etiq->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
-		return;
 	}
+	destruir_men_comun(rec_etiq);
 }
 
 void recibirUnPcb(){
@@ -128,7 +127,7 @@ void recibirUnPcb(){
 		printf("ERROR se ha perdido la coneccion con el Kernel o el tipo de dato recibido es erroneo\n");
 	}else{
 		memcpy(pcb, m->pcb, sizeof(t_pcb));
-		memcpy(&quantum_max , &m->quantum, sizeof(int32_t));
+		memcpy(&quantum_max , &(m->quantum), sizeof(int32_t));
 	}
 
 	destruir_quantum_pcb(m);
@@ -155,7 +154,7 @@ void crearDiccionario(){
 				manejarSegmentationFault();
 			}
 			if(rec_var->tipo== R_SOL_BYTES){
-				char *key = malloc(2);
+				char key[2];
 				key[0] = rec_var->dato[0];
 				key[1] = '\0';
 				int32_t *pos = malloc(sizeof(int32_t));
@@ -184,14 +183,14 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
 	base = pcb->dir_primer_byte_umv_indice_codigo;
-	offset = pcb->program_counter*8;
-	tam = 8;
+	offset = pcb->program_counter*(sizeof(int32_t)*2);
+	tam = sizeof(int32_t)*2;
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	men_base_offset = socket_recv_comun(socketUmv);
 
-	memcpy(&offset, men_base_offset->dato, 4);
-	memcpy(&tam, men_base_offset->dato+4, 4);
+	memcpy(&offset, men_base_offset->dato, sizeof(int32_t));
+	memcpy(&tam, men_base_offset->dato+sizeof(int32_t), sizeof(int32_t));
 
 	if((men_base_offset->tam_dato != 8) || (men_base_offset->tipo!=R_SOL_BYTES))//por si la UMV me llega a mandar un tamanio distinto al q pedi o si el tipo de dato es diferente
 		printf("ERROR el tamanio recibido:%i es distinto a 8, o el tipo de dato:%i es distinto a R_SOL_BYTES\n",men_base_offset->tam_dato,men_base_offset->tipo);
@@ -210,12 +209,13 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	if(rec_inst->tipo == R_SOL_BYTES){
 		proxInst = malloc(rec_inst->tam_dato);
 		memcpy(proxInst, rec_inst->dato,rec_inst->tam_dato);
-		string_trim(&proxInst);
+		char *proxInst_sin_blancos = sacar_caracteres_escape(proxInst);
+		free(proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
-		printf("Instruccion que voy a ejecutar:%s\n",proxInst);
+		printf("Instruccion que voy a ejecutar:%s\n",proxInst_sin_blancos);
 		pcb->program_counter ++;
 		destruir_men_comun(rec_inst);
-		return proxInst;
+		return proxInst_sin_blancos;
 	}
 	if(rec_inst->tipo ==SEGMEN_FAULT){
 		manejarSegmentationFault();
@@ -228,9 +228,10 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
-	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, string_itoa(pcb->id), sizeof(int32_t));
-
+	char *aux_string = string_itoa(pcb->id);
+	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, aux_string, string_length(aux_string));
 	enviar_pcb_destruir();
+	free (aux_string);
 }
 
 void enviar_pcb_destruir(){
@@ -338,7 +339,9 @@ void finalizarContexto(int32_t tipo_fin){
 		return;
 	}
 	if (tipo_fin == SEGMEN_FAULT){
-		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, string_itoa(pcb->id), sizeof(int32_t));
+		char *aux_string = string_itoa(pcb->id);
+		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string));
+		free(aux_string);
 		fueFinEjecucion = 1;
 	}
 	if (tipo_fin == OK){
@@ -380,7 +383,7 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_nombre_var);
 		}
 		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, sizeof(aux_string));
+		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, string_length(aux_string));
 		free(aux_string);
 		fueFinEjecucion = 1;
 	}
@@ -398,17 +401,15 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t pos_mem = base + offset;
 
 	printf("Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
-	char *buffer=malloc(tam);
-	buffer[0]=identificador_variable;
+	char string_id_var[2];
+	string_id_var[0]=identificador_variable;
+	string_id_var[1]= '\0';
+	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, string_id_var);
 
-	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
-		char *string_id_var = malloc(2);
-		string_id_var[0] =identificador_variable;
-		string_id_var[1]='\0';
 		int32_t *pos = malloc(sizeof(int32_t));
 		*pos = pos_mem;
 		dictionary_put(dic_Variables, string_id_var, pos);
@@ -470,6 +471,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	if(men_comun->tipo ==SEGMEN_FAULT){
 		manejarSegmentationFault();
 	}
+	destruir_men_comun(men_comun);
 	return valor;
 }
 
@@ -493,6 +495,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	if(r_alm->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
 	}
+	destruir_men_comun(r_alm);
 }
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
@@ -550,20 +553,21 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 
 void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 	// primer instruccion ejecutable de etiqueta y -1 en caso de error
-	string_trim(&nombre_etiqueta);
+	char *etiq_sin_blancos = sacar_caracteres_escape(nombre_etiqueta);
 
 	//t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta("inicio", etiquetas, pcb->tam_indice_etiquetas);
-	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(nombre_etiqueta, etiquetas, pcb->tam_indice_etiquetas);
+	t_puntero_instruccion pos_etiqueta= metadata_buscar_etiqueta(etiq_sin_blancos, etiquetas, pcb->tam_indice_etiquetas);
 
 	if(pos_etiqueta != -1){
 		pcb->program_counter = pos_etiqueta;
 		txt_write_in_file(cpu_file_log, "Yendo al label \n");
-		printf("Yendo al label: %s\n", nombre_etiqueta);
+		printf("Yendo al label: %s\n", etiq_sin_blancos);
 	}else{
 		txt_write_in_file(cpu_file_log, "Hubo un error en la busqueda de la etiqueta\n");
-		printf("ERROR en la busqueda de la etiqueta:%s \n",nombre_etiqueta);
+		printf("ERROR en la busqueda de la etiqueta:%s \n",etiq_sin_blancos);
 		finalizarContexto(ERROR);
 	}
+	free(etiq_sin_blancos);
 }
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
@@ -618,7 +622,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
 }
 
-void finalizar(void){
+void finalizar(){
 	int32_t base, offset, tam;
 
 	//si es el fin de programa, le digo al kernel q finalizo y salgo de la funcion
@@ -703,15 +707,17 @@ void imprimir(t_valor_variable valor_mostrar){
 }
 
 void imprimirTexto(char* texto){
-	string_trim(&texto);
-	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto, string_length(texto));
+	char *texto_sin_blancos = sacar_caracteres_escape(texto);
 
-	enviar_men_comun_destruir(socketKernel, ID_PROG, string_itoa(pcb->id), string_length(string_itoa(pcb->id)));
-
+	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto_sin_blancos, string_length(texto_sin_blancos));
+	char *aux_string = string_itoa(pcb->id);
+	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string));
+	free(aux_string);
 	recibir_resp_kernel(R_IMPRIMIR);
 
 	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
-	printf("Imprimiendo texto: %s\n", texto);
+	printf("Imprimiendo texto: %s\n", texto_sin_blancos);
+	free(texto_sin_blancos);
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
@@ -798,7 +804,7 @@ void handshake_umv(char *puerto, char *ip){
 	//envio a la UMV
 	socketUmv = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destruir(socketUmv, HS_CPU, "", string_length(""));
+	enviar_men_comun_destruir(socketUmv, HS_CPU, NULL, 0);
 
 	//espero coneccion de la UMV
 	t_men_comun *mensaje_inicial = socket_recv_comun(socketUmv);
@@ -816,7 +822,7 @@ void handshake_kernel(char *puerto, char *ip){
 	//envio al kernel
 	socketKernel = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destruir(socketKernel, HS_CPU, "", string_length(""));
+	enviar_men_comun_destruir(socketKernel, HS_CPU, NULL, 0);
 
 	//espero conexion de kernel
 	t_men_comun *mensaje_inicial = socket_recv_comun(socketKernel);
@@ -896,4 +902,10 @@ void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_
 	pcb->cant_var_contexto_actual = cant_var;
 	pcb->program_counter=program_counter;
 	pcb->dir_primer_byte_umv_contexto_actual=dir_primer_byte_umv;
+}
+
+char *sacar_caracteres_escape(char *un_string){
+	char *aux_string = string_duplicate(un_string);
+	string_trim(&aux_string);
+	return aux_string;
 }

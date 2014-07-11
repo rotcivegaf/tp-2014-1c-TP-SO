@@ -78,5 +78,6 @@ void regenerar_dicc_var();
 void recibir_resp_kernel(int32_t tipo_men_esperado);
 void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_byte_umv);
 void enviar_pcb_destruir();
+char *sacar_caracteres_escape(char *un_string);
 
 #endif /* CPU_H_ */
