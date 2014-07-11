@@ -4,11 +4,7 @@ fd_set conj_soc_progs;   // conjunto maestro de sockets del PLP(sockets de progr
 int32_t soc_umv;
 t_colas *colas;  //colas de los cinco estados de los procesos
 t_queue *cola_cpu; //cola donde tengo los cpu conectados
-pthread_mutex_t mutex_new = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_block = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_exec = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_exit = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_colas = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
@@ -175,9 +171,9 @@ void *plp(t_param_plp *param_plp){
 						pcb_otros->pcb = crear_pcb_escribir_seg_UMV(men_cod_prog,resp_sol, contador_prog);
 						pcb_otros->peso = calcular_peso(men_cod_prog);
 						pcb_otros->tipo_fin_ejecucion = -1;
-						pthread_mutex_lock(&mutex_new);
+						pthread_mutex_lock(&mutex_colas);
 						queue_push(colas->cola_new,pcb_otros);
-						pthread_mutex_unlock(&mutex_new);
+						pthread_mutex_unlock(&mutex_colas);
 						pthread_mutex_unlock(&mutex_miltiprog);
 
 						txt_write_in_file(plp_log,"Se creo el pcb para el programa con socket n°:");
@@ -298,9 +294,9 @@ void *pcp(t_param_pcp *param_pcp){
 							actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
 							destruir_quantum_pcb(men_quantum_pcb);
 							// Pone el pcb en ready
-							pthread_mutex_lock(&mutex_ready);
+							pthread_mutex_lock(&mutex_colas);
 							queue_push(colas->cola_ready,aux_pcb_otros);
-							pthread_mutex_unlock(&mutex_ready);
+							pthread_mutex_unlock(&mutex_colas);
 							pthread_mutex_unlock(&mutex_ready_vacia);
 						}
 						free(aux_cpu);
@@ -318,9 +314,9 @@ void *pcp(t_param_pcp *param_pcp){
 							// Setea en la estructura del cpu como que no esta ejecutando nada
 							aux_cpu->id_prog_exec = 0;
 							// Pone el pcb en ready
-							pthread_mutex_lock(&mutex_ready);
+							pthread_mutex_lock(&mutex_colas);
 							queue_push(colas->cola_ready,aux_pcb_otros);
-							pthread_mutex_unlock(&mutex_ready);
+							pthread_mutex_unlock(&mutex_colas);
 							pthread_mutex_unlock(&mutex_ready_vacia);
 							// Pone el cpu devuelta en la cola de cpus
 							pthread_mutex_lock(&mutex_uso_cola_cpu);
@@ -489,7 +485,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 
-	pthread_mutex_lock(&mutex_exec);
+	pthread_mutex_lock(&mutex_colas);
 	int32_t tam = queue_size(colas->cola_exec);
 
 	for(i=0 ;i < tam ;i++){
@@ -500,19 +496,19 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 
 			queue_push(colas->cola_exec, aux_pcb_otros);
 			aux_pcb_otros = queue_peek(colas->cola_exec);
-			pthread_mutex_unlock(&mutex_exec);
+			pthread_mutex_unlock(&mutex_colas);
 			return aux_pcb_otros;
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	pthread_mutex_unlock(&mutex_exec);
+	pthread_mutex_unlock(&mutex_colas);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
 
 void pasar_pcbBlock_ready(int32_t id_pcb){
 	int32_t i = 0;
-	pthread_mutex_lock(&mutex_block);
+	pthread_mutex_lock(&mutex_colas);
 	int32_t tamanio_cola_block = queue_size(colas->cola_block);
 
 	for (i=0; i<tamanio_cola_block; i++){
@@ -520,90 +516,78 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 		pcb_aux =queue_pop(colas->cola_block);
 
 		if (pcb_aux->pcb->id==id_pcb){
-			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, pcb_aux);
-			pthread_mutex_unlock(&mutex_ready);
+			pthread_mutex_unlock(&mutex_colas);
 			pthread_mutex_unlock(&mutex_ready_vacia);
-			i=tamanio_cola_block;
+			return;
 		}else {
 			queue_push(colas->cola_block,pcb_aux);
 		}
 	}
-	pthread_mutex_unlock(&mutex_block);
+	pthread_mutex_unlock(&mutex_colas);
 }
 
 void pasar_pcb_exit(t_pcb_otros *pcb){
-	pthread_mutex_lock(&mutex_exit);
+	pthread_mutex_lock(&mutex_colas);
 	queue_push(colas->cola_exit,pcb);
 	sem_incre(&cont_exit);
-	pthread_mutex_unlock(&mutex_exit);
+	pthread_mutex_unlock(&mutex_colas);
 
 	sem_decre(&buff_multiprog);
 	sem_incre(&libre_multiprog);
 }
 
-//Para buscar un pcb por su socket, xq no se sabe en que cola esta(cuando se cae la conexion), lo encuentra y lo pasa a exit
-int32_t mover_pcb_exit(int32_t soc_prog){
-
+t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog){
 	int32_t i;
+	t_pcb_otros *ret;
+
+	for(i=0; i < queue_size(cola) ;i++){
+		ret = queue_pop(cola);
+
+		if (ret->n_socket == soc_prog)
+			return ret;
+
+		queue_push(cola, ret);
+	}
+	return NULL;
+}
+
+//Para buscar un pcb por su socket, xq no se sabe en que cola esta(cuando se cae la conexion), lo encuentra y lo pasa a exit
+void mover_pcb_exit(int32_t soc_prog){
 	t_pcb_otros *aux;
 
-	pthread_mutex_lock(&mutex_new);
+	pthread_mutex_lock(&mutex_colas);
 
-	for(i=0; i < queue_size(colas->cola_new) ;i++){
-		aux = queue_pop(colas->cola_new);
+	aux = buscar_pcb(colas->cola_new, soc_prog);
 
-		if (aux->n_socket == soc_prog){
-			pasar_pcb_exit(aux);
-			pthread_mutex_unlock(&mutex_new);
-			return 0;
-		}
-		queue_push(colas->cola_new, aux);
+	if (aux!=NULL){
+		pasar_pcb_exit(aux);
+		return;
 	}
-	pthread_mutex_unlock(&mutex_new);
 
-	pthread_mutex_lock(&mutex_ready);
+	aux = buscar_pcb(colas->cola_ready, soc_prog);
 
-	for(i=0; i < queue_size(colas->cola_ready) ;i++){
-		aux = queue_pop(colas->cola_ready);
-
-		if (aux->n_socket == soc_prog){
-			pasar_pcb_exit(aux);
-			pthread_mutex_unlock(&mutex_ready);
-			return 0;
-		}
-		queue_push(colas->cola_ready, aux);
+	if (aux!=NULL){
+		pasar_pcb_exit(aux);
+		return;
 	}
-	pthread_mutex_unlock(&mutex_ready);
 
-	pthread_mutex_lock(&mutex_block);
+	aux = buscar_pcb(colas->cola_block, soc_prog);
 
-	for(i=0; i < queue_size(colas->cola_block) ;i++){
-		aux = queue_pop(colas->cola_block);
-
-		if (aux->n_socket == soc_prog){
-			pasar_pcb_exit(aux);
-			pthread_mutex_unlock(&mutex_block);
-			return 0;
-		}
-		queue_push(colas->cola_block, aux);
+	if (aux!=NULL){
+		pasar_pcb_exit(aux);
+		return;
 	}
-	pthread_mutex_unlock(&mutex_block);
 
-	pthread_mutex_lock(&mutex_exec);
+	aux = buscar_pcb(colas->cola_exec, soc_prog);
 
-	for(i=0; i < queue_size(colas->cola_exec) ;i++){
-		aux = queue_pop(colas->cola_exec);
-
-		if (aux->n_socket == soc_prog){
-			pasar_pcb_exit(aux);
-			pthread_mutex_unlock(&mutex_exec);
-			return 0;
-		}
-		queue_push(colas->cola_exec, aux);
+	if (aux!=NULL){
+		pasar_pcb_exit(aux);
+		return;
 	}
-	pthread_mutex_unlock(&mutex_exec);
-	return -1;
+
+	pthread_mutex_unlock(&mutex_colas);
+	printf("ERROR mover_pcb_exit(): no se encontro el pcb con el socket nº:%i\n",soc_prog);
 }
 
 void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
@@ -634,9 +618,9 @@ t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 
-	pthread_mutex_lock(&mutex_block);
+	pthread_mutex_lock(&mutex_colas);
 	queue_push(colas->cola_block,aux_pcb_otros);
-	pthread_mutex_unlock(&mutex_block);
+	pthread_mutex_unlock(&mutex_colas);
 
 	return aux_pcb_otros;
 }
@@ -667,19 +651,19 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 
-	pthread_mutex_lock(&mutex_exec);
+	pthread_mutex_lock(&mutex_colas);
 	int32_t tam = queue_size(colas->cola_exec);
 
 	for(i=0 ;i < tam ;i++){
 		aux_pcb_otros = queue_pop(colas->cola_exec);
 
 		if (id_proc == aux_pcb_otros->pcb->id){
-			pthread_mutex_unlock(&mutex_exec);
+			pthread_mutex_unlock(&mutex_colas);
 			return aux_pcb_otros;
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	pthread_mutex_unlock(&mutex_exec);
+	pthread_mutex_unlock(&mutex_colas);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
@@ -742,15 +726,15 @@ void *manejador_exit(){
 	t_pcb_otros *aux_pcb_otros;
 
 	while(quit_sistema){
-		pthread_mutex_lock(&mutex_exit);
+		pthread_mutex_lock(&mutex_colas);
 
 		if (queue_is_empty(colas->cola_exit)){
-			pthread_mutex_unlock(&mutex_exit);
+			pthread_mutex_unlock(&mutex_colas);
 			sem_decre(&cont_exit);
 		}else{
 
 			aux_pcb_otros = queue_pop(colas->cola_exit);
-			pthread_mutex_unlock(&mutex_exit);
+			pthread_mutex_unlock(&mutex_colas);
 
 			//si finalizo la ejecucion de un programa normalmente mando a adesalojar cpu
 			if (aux_pcb_otros->tipo_fin_ejecucion == FIN_EJECUCION){
@@ -789,16 +773,17 @@ void desalojar_cpu(int32_t id_prog){
 
 void *manejador_new_ready(){
 	while(quit_sistema){
-		pthread_mutex_lock(&mutex_new);
+		pthread_mutex_lock(&mutex_colas);
 		if (queue_is_empty(colas->cola_new)){
-			pthread_mutex_unlock(&mutex_new);
+			pthread_mutex_unlock(&mutex_colas);
 			pthread_mutex_lock(&mutex_miltiprog);
 		}else{
+			pthread_mutex_unlock(&mutex_colas);
 			sem_decre(&libre_multiprog);
-			pthread_mutex_lock(&mutex_ready);
+
+			pthread_mutex_lock(&mutex_colas);
 			queue_push(colas->cola_ready, get_peso_min());
-			pthread_mutex_unlock(&mutex_new);
-			pthread_mutex_unlock(&mutex_ready);
+			pthread_mutex_unlock(&mutex_colas);
 			pthread_mutex_unlock(&mutex_ready_vacia);
 			sem_incre(&buff_multiprog);
 		}
@@ -807,16 +792,15 @@ void *manejador_new_ready(){
 }
 
 void *manejador_ready_exec(){//todo creo q aca puede q haya una desincronizacion, creo q el semaforo mutex_ready_vacia y el mutex_cola_cpu_vacia tienen q ser contadores y no mutex
-
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
 
 	while(quit_sistema){
 
-		pthread_mutex_lock(&mutex_ready);
+		pthread_mutex_lock(&mutex_colas);
 
 		if (queue_is_empty(colas->cola_ready)){
-			pthread_mutex_unlock(&mutex_ready);
+			pthread_mutex_unlock(&mutex_colas);
 			pthread_mutex_lock(&mutex_ready_vacia);
 
 		}else{
@@ -825,21 +809,21 @@ void *manejador_ready_exec(){//todo creo q aca puede q haya una desincronizacion
 			cpu = get_cpu_libre();
 
 			if(cpu == NULL){
-				pthread_mutex_unlock(&mutex_ready);
+				pthread_mutex_unlock(&mutex_colas);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
 				pthread_mutex_lock(&mutex_cola_cpu_vacia);
 
 			}else{
 				aux_pcb_otros = queue_pop(colas->cola_ready);
-				pthread_mutex_unlock(&mutex_ready);
+				pthread_mutex_unlock(&mutex_colas);
 
 				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
 				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 				queue_push(cola_cpu, cpu);
 				pthread_mutex_unlock(&mutex_uso_cola_cpu);
-				pthread_mutex_lock(&mutex_exec);
+				pthread_mutex_lock(&mutex_colas);
 				queue_push(colas->cola_exec, aux_pcb_otros);
-				pthread_mutex_unlock(&mutex_exec);
+				pthread_mutex_unlock(&mutex_colas);
 			}
 		}
 	}
@@ -1160,11 +1144,7 @@ void *imp_colas (){
 			scanf("%c", &opcion);
 		} while (opcion != 'i');
 
-		pthread_mutex_lock(&mutex_new);
-		pthread_mutex_lock(&mutex_ready);
-		pthread_mutex_lock(&mutex_block);
-		pthread_mutex_lock(&mutex_exec);
-		pthread_mutex_lock(&mutex_exit);
+		pthread_mutex_lock(&mutex_colas);
 
 		printf("--COLA-NEW---------------------------------------------------------\n");
 		printf("|PID/PESO= ");
@@ -1192,11 +1172,7 @@ void *imp_colas (){
 		printf("\n");
 		printf("-------------------------------------------------------------------\n");
 
-		pthread_mutex_unlock(&mutex_new);
-		pthread_mutex_unlock(&mutex_ready);
-		pthread_mutex_unlock(&mutex_block);
-		pthread_mutex_unlock(&mutex_exec);
-		pthread_mutex_unlock(&mutex_exit);
+		pthread_mutex_unlock(&mutex_colas);;
 	}
 	return NULL;
 }
@@ -1226,23 +1202,19 @@ void sem_incre(sem_t *sem){
 }
 
 t_param_plp *ini_pram_plp(t_datos_config *diccionario_config){
-
 	t_param_plp *aux = malloc(sizeof(t_param_plp));
 
 	aux->puerto_prog = diccionario_config->puerto_prog;
 	aux->ip_umv = diccionario_config->ip_umv;
 	aux->puerto_umv = diccionario_config->puerto_umv;
-	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->tam_stack = diccionario_config->tam_stack;
 
 	return aux;
 }
 
 t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
-
 	t_param_pcp *aux = malloc(sizeof(t_param_pcp));
 
-	aux->max_multiprogramacion = diccionario_config->multiprogramacion;
 	aux->puerto_cpu = diccionario_config->puerto_cpu;
 
 	return aux;

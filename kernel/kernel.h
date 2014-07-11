@@ -46,12 +46,10 @@
 		char *puerto_prog;
 		char *ip_umv;
 		char *puerto_umv;
-		int32_t max_multiprogramacion;
 		int32_t tam_stack;
 	} t_param_plp;
 	typedef struct{
 		char *puerto_cpu;
-		int32_t max_multiprogramacion;
 		t_queue *cola_IO;
 	} t_param_pcp;
 	typedef struct{
@@ -101,7 +99,7 @@
 	void *manejador_exit();
 	void *manejador_IO(t_IO *io);
 	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
-	int32_t  mover_pcb_exit(int32_t  soc_prog);
+	void  mover_pcb_exit(int32_t  soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	t_cpu *get_cpu(int32_t  soc_cpu);
