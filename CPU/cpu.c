@@ -506,7 +506,7 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
 	t_valor_variable valor;
 
-	if((respuesta->tipo != VAR_INEX) || (respuesta->tipo != R_OBTENER_VALOR))
+	if((respuesta->tipo != VAR_INEX) && (respuesta->tipo != R_OBTENER_VALOR))
 		printf("ERROR se ha recibido un tipo de dato erroneo\n");
 
 	if(respuesta->tipo == VAR_INEX){
@@ -519,7 +519,7 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 
 		txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
 		txt_write_in_file(cpu_file_log, "el valor \n");
-		printf("Obteniendo el valor de compartida %s que es %c", variable, valor);
+		printf("Obteniendo el valor de compartida %s que es %c \n", variable, valor);
 	}
 	destruir_men_comun(respuesta);
 
