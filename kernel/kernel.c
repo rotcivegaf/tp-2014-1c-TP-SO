@@ -806,7 +806,7 @@ void *manejador_new_ready(){
 	return NULL;
 }
 
-void *manejador_ready_exec(){
+void *manejador_ready_exec(){//todo creo q aca puede q haya una desincronizacion, creo q el semaforo mutex_ready_vacia y el mutex_cola_cpu_vacia tienen q ser contadores y no mutex
 
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
