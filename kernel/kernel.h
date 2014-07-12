@@ -75,6 +75,7 @@
 		t_dir_mem dir_primer_byte_umv_segmento_stack;
 		t_dir_mem dir_primer_byte_umv_indice_codigo;
 		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
+		int32_t memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
 		int32_t valor;
@@ -99,10 +100,10 @@
 	void *manejador_IO(t_IO *io);
 	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
 	void  mover_pcb_exit(int32_t  soc_prog);
+	t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	t_cpu *get_cpu(int32_t  soc_cpu);
-	void desalojar_cpu(int32_t id_prog);
 	void enviar_IO(int32_t  soc_cpu, char *id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	void *entrar_IO();
