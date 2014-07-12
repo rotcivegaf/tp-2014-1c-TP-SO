@@ -6,6 +6,7 @@ char alg_actual;
 int32_t soc_kernel;
 t_list *list_seg;
 t_config *ptrConfig;
+int32_t tam_mem_total;
 pthread_mutex_t mutex_mem_prin = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_list_seg = PTHREAD_MUTEX_INITIALIZER;
 
@@ -19,10 +20,11 @@ int32_t main(){
 	txt_write_in_file(umv_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("./UMV/umv_config.txt");
-	encabezado(config_get_int_value(ptrConfig,"tamanio"),config_get_string_value(ptrConfig,"modo"));
+	tam_mem_total = config_get_int_value(ptrConfig,"tamanio");
+	encabezado(tam_mem_total,config_get_string_value(ptrConfig,"modo"));
 
 	txt_write_in_file(umv_file_log,"Creo la memoria principal\n");
-	mem_prin = malloc(config_get_int_value(ptrConfig,"tamanio"));
+	mem_prin = malloc(tam_mem_total);
 
 	txt_write_in_file(umv_file_log,"Creo la lista de segmentos\n");
 	list_seg = list_create();
@@ -111,9 +113,7 @@ void *admin_conecciones(){
 void *admin_conec_kernel(){
 	t_men_seg *men_seg;
 	//se envia el handshake al kernel
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
-	socket_send_comun(soc_kernel,men_hs);
-	destruir_men_comun(men_hs);
+	enviar_men_comun_destruir(soc_kernel, HS_UMV ,NULL, 0);
 
 	while(quit_sistema){
 		//se recibe un mesaje y se aguarda
@@ -127,9 +127,7 @@ void *admin_conec_kernel(){
 			break;
 		case DESTR_SEGS:
 			destruirSegmentos(men_seg->id_prog);
-			t_men_comun *aux_men= crear_men_comun(SINCRO_OK,NULL,0);
-			socket_send_comun(soc_kernel,aux_men);
-			destruir_men_comun(aux_men);
+			enviar_men_comun_destruir(soc_kernel, SINCRO_OK ,NULL, 0);
 			break;
 		case PED_MEM_SEG_COD:
 			gestionar_ped_seg(men_seg, RESP_MEM_SEG_COD);
@@ -171,9 +169,7 @@ void gestionar_alm_seg(int32_t id_proc){
 
 	destruir_men_comun(aux_men);
 
-	aux_men = crear_men_comun(MEN_ALM_OK,NULL,0);
-	socket_send_comun(soc_kernel,aux_men);
-	destruir_men_comun(aux_men);
+	enviar_men_comun_destruir(soc_kernel, MEN_ALM_OK ,NULL, 0);
 }
 
 void almacenar_segmento(t_men_comun *aux_men, int32_t id_proc){
@@ -193,8 +189,7 @@ t_seg *buscar_segmento_tipo_seg(int32_t id_proc ,int32_t tipo_seg){
 		return (seg->tipo_seg == tipo_seg)&&(seg->id_proc == id_proc);
 	}
 	//se busca el segmento que conincida en id y tipo
-	t_seg *ret;
-	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
+	t_seg *ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
 
 	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
 	logear_int(umv_file_log,id_proc);
@@ -219,23 +214,13 @@ t_seg *buscar_segmento_dir_logica(int32_t id_proc, int32_t dir_logica){
 		return (seg->dir_logica == dir_logica)&&(seg->id_proc == id_proc);
 	}
 	//se busca el segmento que coincida con id y direccion logica
-	t_seg *ret;
-	ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
+	t_seg *ret = list_find(list_seg, (void*)_es_el_proc_y_el_tipo_seg);
 
 	txt_write_in_file(umv_file_log,"	Busco en la lista de segmentos, el segmento del proceso nº");
 	logear_int(umv_file_log,id_proc);
 	txt_write_in_file(umv_file_log,", con direccion logica: ");
 	logear_int(umv_file_log,dir_logica);
 	txt_write_in_file(umv_file_log,"\n");
-
-	if(ret == NULL){
-		printf("ERROR no se a encontrado el segmento con direccion logica: %i del proceso %i\n", dir_logica, id_proc);
-		txt_write_in_file(umv_file_log,"	No se a encontrado el segmento del proceso nº");
-		logear_int(umv_file_log,id_proc);
-		txt_write_in_file(umv_file_log,", con direccion logica: ");
-		logear_int(umv_file_log, dir_logica);
-		txt_write_in_file(umv_file_log,"\n");
-	}
 
 	return ret;
 }
@@ -248,7 +233,6 @@ void destruir_lista_segmento(t_list *lista_seg){
 }
 
 void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
-	t_men_comun *aux_men;
 	//se crea un segmento
 	int resp_dir_mem = crearSegmento(men_seg);
 	char *aux_string;
@@ -257,24 +241,19 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 	kernel la direccion logica asignada a ese segmento*/
 	if (resp_dir_mem == -1){
 		destruirSegmentos(men_seg->id_prog);
-		aux_men= crear_men_comun(MEM_OVERLOAD,NULL,0);
-		socket_send_comun(soc_kernel,aux_men);
+		enviar_men_comun_destruir(soc_kernel, MEM_OVERLOAD ,NULL, 0);
 	}else{
 		aux_string = string_itoa(resp_dir_mem);
-		aux_men = crear_men_comun(tipo_resp, aux_string, string_length(aux_string));
-		socket_send_comun(soc_kernel,aux_men);
+		enviar_men_comun_destruir(soc_kernel, tipo_resp ,aux_string, string_length(aux_string));
 		free(aux_string);
 	}
-	destruir_men_comun(aux_men);
 }
 
 void *admin_conec_cpu(t_param_conec_cpu *param){
 	t_men_cpu_umv *men_bytes;
 	int32_t proc_activo = 0, este_conectada = 1;
 	//se envia al CPU el handshake inicial
-	t_men_comun *men_hs= crear_men_comun(HS_UMV,NULL,0);
-	socket_send_comun(param->soc,men_hs);
-	destruir_men_comun(men_hs);
+	enviar_men_comun_destruir(param->soc, HS_UMV ,NULL, 0);
 
 	while(este_conectada){
 		//se recibe el mensaje y se espera
@@ -317,8 +296,6 @@ void *admin_conec_cpu(t_param_conec_cpu *param){
 }
 
 void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t proc_activo){
-	t_men_comun *aux_men;
-	char *bytes;
 
 	txt_write_in_file(umv_file_log,"Solicitud de bytes por el CPU nº");
 	logear_int(umv_file_log,soc_cpu);
@@ -333,60 +310,67 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	txt_write_in_file(umv_file_log,", Tipo:");
 	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,"\n");
+
+	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
+		printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		return;
+	}
 	//se leen de memoria los bytes
-	bytes = solicitar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+	char *bytes = solicitar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
 
 	//se envia a la CPU un mensaje con los bytes o con segmentatio fault si se inteto acceder a una posicion fuera del rango
 	if (bytes == NULL){
-		aux_men = crear_men_comun(SEGMEN_FAULT,NULL,0);
-		socket_send_comun(soc_cpu, aux_men);
-	}else{
-		aux_men = crear_men_comun(R_SOL_BYTES,bytes,men_bytes->tam);
-		socket_send_comun(soc_cpu, aux_men);
-	}
+		enviar_men_comun_destruir(soc_cpu, SEGMEN_FAULT ,NULL, 0);
+	}else
+		enviar_men_comun_destruir(soc_cpu, R_SOL_BYTES ,bytes, men_bytes->tam);
 
 	free(bytes);
-	destruir_men_comun(aux_men);
 }
 
 char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam){
-	char *ret = malloc(tam);
 	int32_t i;
-
+	char *ret = malloc(tam);
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
+
+	if(aux_seg == NULL){
+		printf("ERROR no se a encontrado el segmento con direccion logica: %i del proceso %i\n", base, id_proc);
+		txt_write_in_file(umv_file_log,"	No se a encontrado el segmento del proceso nº");
+		logear_int(umv_file_log,id_proc);
+		txt_write_in_file(umv_file_log,", con direccion logica: ");
+		logear_int(umv_file_log, base);
+		txt_write_in_file(umv_file_log,"\n");
+		pthread_mutex_unlock(&mutex_list_seg);
+		return ret;
+	}
+
 	int32_t pos = aux_seg->dir_fisica + offset;
 
-	/*txt_write_in_file(umv_file_log,"Solicitar bytes del proceso nº");todo creo q va en el archivo de consola
-	logear_int(umv_file_log, id_proc);
-	txt_write_in_file(umv_file_log," de base: ");
-	logear_int(umv_file_log, base);
-	txt_write_in_file(umv_file_log,", offset: ");
-	traducir_tipo_de_seg_y_logear(offset);
-	txt_write_in_file(umv_file_log,", tamanio: ");
-	traducir_tipo_de_seg_y_logear(tam);
-	txt_write_in_file(umv_file_log,"\n");*/
-	/*se controla que donde se quiere acceder no supere el limite del segmento
-	si no hay problema se lee de memoria y se devuelven los bytes*/
 	if (aux_seg->tam_seg<(offset+tam)){
 		pthread_mutex_unlock(&mutex_list_seg);
-		ret = NULL;
-		txt_write_in_file(umv_file_log,"	Segmentation Fault\n");
-	}else{
-		pthread_mutex_lock(&mutex_mem_prin);
-		memcpy(ret, &mem_prin[pos],tam);
-		pthread_mutex_unlock(&mutex_mem_prin);
-		pthread_mutex_unlock(&mutex_list_seg);
-		txt_write_in_file(umv_file_log,"	");
-		for(i=0;i < tam;i++)
-			logear_char(umv_file_log, ret[i]);
+		txt_write_in_file(umv_file_log,"	Segmentation Fault, con id_proc:");
+		logear_int(umv_file_log,id_proc);
+		txt_write_in_file(umv_file_log," ,base:");
+		logear_int(umv_file_log,base);
+		txt_write_in_file(umv_file_log,", offset:");
+		logear_int(umv_file_log,offset);
+		txt_write_in_file(umv_file_log,", tamanio:");
+		logear_int(umv_file_log,tam);
 		txt_write_in_file(umv_file_log,"\n");
+		return ret;
 	}
+	pthread_mutex_lock(&mutex_mem_prin);
+	memcpy(ret, &mem_prin[pos],tam);
+	pthread_mutex_unlock(&mutex_mem_prin);
+	pthread_mutex_unlock(&mutex_list_seg);
+	txt_write_in_file(umv_file_log,"	");
+	for(i=0;i < tam;i++)
+		logear_char(umv_file_log, ret[i]);
+	txt_write_in_file(umv_file_log,"\n");
 	return ret;
 }
 
 void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, int32_t proc_activo){
-	t_men_comun *aux_men;
 	int32_t resp, i;
 
 	txt_write_in_file(umv_file_log,"Almacenar bytes por el CPU nº");
@@ -406,17 +390,17 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 		logear_char(umv_file_log,men_bytes->buffer[i]);
 	txt_write_in_file(umv_file_log,"\n");
 
+	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
+		printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		return;
+	}
+
 	resp = almacenar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam, men_bytes->buffer);
 
 	if (resp==SEGMEN_FAULT){
-		aux_men = crear_men_comun(resp,NULL,0);
-		socket_send_comun(soc_cpu, aux_men);
-	}else{
-		aux_men = crear_men_comun(resp, NULL , 0);
-		socket_send_comun(soc_cpu, aux_men);
-	}
-
-	destruir_men_comun(aux_men);
+			enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
+		}else
+			enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
 }
 
 int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam, char *buffer){
@@ -510,7 +494,6 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio){//puede q se pisen pero es 1 en
 int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 	int32_t ind_mem=0,j;
 	int32_t tam_seg = 0;
-	int32_t mem_total = config_get_int_value(ptrConfig,"tamanio");
 	t_seg *aux_seg;
 
 	ordenar_lista_seg_por_dir_fisica();
@@ -523,7 +506,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 					return ind_mem-tam_seg;
 			ind_mem = ind_mem + aux_seg->tam_seg;
 		}
-		tam_seg = mem_total-ind_mem;
+		tam_seg = tam_mem_total-ind_mem;
 		if (tam_a_reservar <= tam_seg)
 			return ind_mem;
 		return -1;
@@ -539,7 +522,7 @@ int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar){
 				}
 			ind_mem = ind_mem + aux_seg->tam_seg;
 		}
-		tam_seg = mem_total-ind_mem;
+		tam_seg = tam_mem_total-ind_mem;
 		if (tam_seg > tam_seg_max){
 			tam_seg_max = tam_seg;
 			pos_seg_max = ind_mem;
@@ -922,7 +905,7 @@ void imp_mem_prin(){
 		for(i=0;i < aux_seg->tam_seg;i++,ind_mem++)
 			txt_write_in_file(consola_file_log,"█");
 	}
-	for(;ind_mem < config_get_int_value(ptrConfig,"tamanio");ind_mem++)
+	for(;ind_mem < tam_mem_total;ind_mem++)
 		if (anterior){
 			txt_write_in_file(consola_file_log,"▄");
 			anterior = 0;
@@ -946,7 +929,7 @@ void imp_cont_mem_prin(){
 	txt_write_in_file(consola_file_log,", Cantidad de bytes:");
 	logear_int(consola_file_log,tam);
 	txt_write_in_file(consola_file_log,"\n");
-	if (tam + offset > config_get_int_value(ptrConfig,"tamanio")){
+	if (tam + offset > tam_mem_total){
 		txt_write_in_file(consola_file_log,"	Segmentation Fault\n");
 	}else{
 		pthread_mutex_lock(&mutex_mem_prin);
