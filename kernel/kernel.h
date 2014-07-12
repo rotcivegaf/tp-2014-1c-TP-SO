@@ -75,7 +75,6 @@
 		t_dir_mem dir_primer_byte_umv_segmento_stack;
 		t_dir_mem dir_primer_byte_umv_indice_codigo;
 		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
-		int32_t  memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
 		int32_t valor;
