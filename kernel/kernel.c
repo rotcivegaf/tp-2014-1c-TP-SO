@@ -138,6 +138,7 @@ void *plp(t_param_plp *param_plp){
 						txt_write_in_file(plp_log,"\n");
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						mover_pcb_exit(i);
+						//todo si estaba ejecuntandolo una cpu creo q hay q dar de baja esa cpu
 						FD_CLR(i, &conj_soc_progs); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
 						break;
@@ -589,7 +590,7 @@ void mover_pcb_exit(int32_t soc_prog){
 	}
 
 	pthread_mutex_unlock(&mutex_colas);
-	printf("ERROR mover_pcb_exit(): no se encontro el pcb con el socket nº:%i\n",soc_prog);
+	//printf("ERROR mover_pcb_exit(): no se encontro el pcb con el socket nº:%i\n",soc_prog);
 }
 
 void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
@@ -743,8 +744,9 @@ void *manejador_exit(){
 				desalojar_cpu(aux_pcb_otros->pcb->id);
 			} todo esto lo saco porque tiraba error, dejemoslo como estaba*/
 
-			enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
 			FD_CLR(aux_pcb_otros->n_socket, &conj_soc_progs); // Elimina al socket del conjunto maestro
+			enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
+
 			umv_destrui_pcb(aux_pcb_otros->pcb->id);
 			free(aux_pcb_otros->pcb);
 			free(aux_pcb_otros);
