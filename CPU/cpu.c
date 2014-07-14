@@ -394,7 +394,7 @@ void finalizarContexto(int32_t tipo_fin){
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
 	base = pcb->dir_primer_byte_umv_segmento_stack;
-	printf("Base del stack:%i", base);
+
 	offset= (pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack)+(pcb->cant_var_contexto_actual)*5;
 
 	tam = sizeof(int32_t)+1;
