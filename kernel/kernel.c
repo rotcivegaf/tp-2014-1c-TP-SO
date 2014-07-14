@@ -14,7 +14,7 @@ pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
-sem_t buff_multiprog, libre_multiprog, cont_exit;
+sem_t cant_multiprog, cant_new,cont_exit;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
 t_dictionary *dispositivos_IO;
 t_dictionary *diccionario_variables;
@@ -39,8 +39,8 @@ int main(void){
 
 	//Inicializacion semaforos
 	crear_cont(&cont_exit , 0);
-	crear_cont(&buff_multiprog , 0); //cantidad de procesos entre ready y exec
-	crear_cont(&libre_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
+	crear_cont(&cant_new , 0); //cantidad de procesos entre ready y exec
+	crear_cont(&cant_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
 
 	//Creacion de colas
 	cola_cpu = queue_create();
@@ -178,6 +178,7 @@ void *plp(t_param_plp *param_plp){
 						pcb_otros->tipo_fin_ejecucion = -1;
 						pthread_mutex_lock(&mutex_new);
 						queue_push(colas->cola_new,pcb_otros);
+						sem_incre(&cant_new);
 						pthread_mutex_unlock(&mutex_new);
 						pthread_mutex_unlock(&mutex_miltiprog);
 
@@ -542,8 +543,7 @@ void pasar_pcb_exit(t_pcb_otros *pcb){
 	sem_incre(&cont_exit);
 	pthread_mutex_unlock(&mutex_exit);
 
-	sem_decre(&buff_multiprog);
-	sem_incre(&libre_multiprog);
+	sem_incre(&cant_multiprog);
 }
 
 //Para buscar un pcb por su socket, xq no se sabe en que cola esta(cuando se cae la conexion), lo encuentra y lo pasa a exit
@@ -711,30 +711,6 @@ void enviar_IO(int32_t soc_cpu, char *id_IO){
 	destruir_men_comun(men);
 }
 
-t_pcb_otros *get_peso_min(){
-
-	int32_t i, peso_min = -1;
-	t_pcb_otros *aux;
-
-	int32_t tam_cola = queue_size(colas->cola_new);
-
-	for (i=0;i < tam_cola;i++){
-
-		aux = queue_pop(colas->cola_new);
-		if(peso_min < aux->peso)
-			peso_min = aux->peso;
-		queue_push(colas->cola_new,aux);
-	}
-	for (i=0;i < tam_cola;i++){
-		aux = queue_pop(colas->cola_new);
-
-		if (peso_min == aux->peso)
-			return aux;
-		queue_push(colas->cola_new,aux);
-	}
-	return NULL;
-}
-
 void *manejador_exit(){
 
 	t_pcb_otros *aux_pcb_otros;
@@ -762,20 +738,44 @@ void *manejador_exit(){
 }
 
 void *manejador_new_ready(){
+
 	while(quit_sistema){
+		sem_decre(&cant_new);// Se fija que haya algun programa en la cola de New
+		sem_decre(&cant_multiprog); // Se fija que no se supere el grado de multiprogramación
+
 		pthread_mutex_lock(&mutex_new);
-		if (queue_is_empty(colas->cola_new)){
-			pthread_mutex_unlock(&mutex_new);
-			pthread_mutex_lock(&mutex_miltiprog);
-		}else{
-			sem_decre(&libre_multiprog);
-			pthread_mutex_lock(&mutex_ready);
-			queue_push(colas->cola_ready, get_peso_min());
-			pthread_mutex_unlock(&mutex_new);
-			pthread_mutex_unlock(&mutex_ready);
-			pthread_mutex_unlock(&mutex_ready_vacia);
-			sem_incre(&buff_multiprog);
-		}
+		pthread_mutex_lock(&mutex_ready);
+
+		queue_push(colas->cola_ready, get_peso_min());
+
+		pthread_mutex_unlock(&mutex_new);
+		pthread_mutex_unlock(&mutex_ready);
+
+		pthread_mutex_unlock(&mutex_ready_vacia);//todo sem_incre(&cant_ready);
+	}
+	return NULL;
+}
+
+t_pcb_otros *get_peso_min(){
+
+	int32_t i, peso_min = -1;
+	t_pcb_otros *aux;
+
+	int32_t tam_cola = queue_size(colas->cola_new);
+
+	for (i=0;i < tam_cola;i++){
+
+		aux = queue_pop(colas->cola_new);
+		if(peso_min < aux->peso)
+			peso_min = aux->peso;
+		queue_push(colas->cola_new,aux);
+	}
+	for (i=0;i < tam_cola;i++){
+		aux = queue_pop(colas->cola_new);
+
+		if (peso_min == aux->peso)
+			return aux;
+		queue_push(colas->cola_new,aux);
 	}
 	return NULL;
 }
