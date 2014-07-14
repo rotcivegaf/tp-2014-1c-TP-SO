@@ -81,7 +81,7 @@ int main(){
 		/*se crea un diccionario para guardar las variables del contexto*/
 		crearDiccionario();
 
-		for (quantum_actual = 0;(quantum_actual<=quantum_max) && (!fueFinEjecucion); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
 			char* proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 			free(proxInstrucc);
