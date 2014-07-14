@@ -534,12 +534,13 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 			queue_push(colas->cola_ready, pcb_aux);
 			sem_incre(&cant_ready);
 			pthread_mutex_unlock(&mutex_ready);
-			//i=tamanio_cola_block;
+			pthread_mutex_unlock(&mutex_block);
 			return; //todo este return sale del for o de la funcion? si sale de la funcion hay que desbloquear antes la cola de block
 		}else {
 			queue_push(colas->cola_block,pcb_aux);
 		}
 	}
+	printf("ERROR: No se ha encontrado el pcb del proc IDº%i en la cola block\n",id_pcb);
 	pthread_mutex_unlock(&mutex_block);
 }
 
