@@ -9,12 +9,12 @@ pthread_mutex_t mutex_ready = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exit = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_miltiprog = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_ready_vacia= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_cola_cpu_vacia= PTHREAD_MUTEX_INITIALIZER;
+
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
-sem_t cant_multiprog, cant_new,cont_exit;
+
+sem_t cant_new, cant_ready, cont_exit;
+sem_t cant_multiprog, cant_cpu_libres;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
 t_dictionary *dispositivos_IO;
 t_dictionary *diccionario_variables;
@@ -38,8 +38,11 @@ int main(void){
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
 
 	//Inicializacion semaforos
+	crear_cont(&cant_new , 0);
+	crear_cont(&cant_ready , 0);
 	crear_cont(&cont_exit , 0);
-	crear_cont(&cant_new , 0); //cantidad de procesos entre ready y exec
+
+	crear_cont(&cant_cpu_libres , 0);
 	crear_cont(&cant_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
 
 	//Creacion de colas
@@ -180,7 +183,6 @@ void *plp(t_param_plp *param_plp){
 						queue_push(colas->cola_new,pcb_otros);
 						sem_incre(&cant_new);
 						pthread_mutex_unlock(&mutex_new);
-						pthread_mutex_unlock(&mutex_miltiprog);
 
 						txt_write_in_file(plp_log,"Se creo el pcb para el programa con socket n°:");
 						logear_int(plp_log,i);
@@ -255,8 +257,9 @@ void *pcp(t_param_pcp *param_pcp){
 					// Pone la estructura en la cola de cpus (cola con cpus libres)
 					pthread_mutex_lock(&mutex_uso_cola_cpu);
 					queue_push(cola_cpu, cpu);
+					sem_incre(&cant_cpu_libres);
 					pthread_mutex_unlock(&mutex_uso_cola_cpu);
-					pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
 					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
 					FD_SET(cpu_new_fd, &master);
 
@@ -302,8 +305,8 @@ void *pcp(t_param_pcp *param_pcp){
 							// Pone el pcb en ready
 							pthread_mutex_lock(&mutex_ready);
 							queue_push(colas->cola_ready,aux_pcb_otros);
+							sem_incre(&cant_ready);
 							pthread_mutex_unlock(&mutex_ready);
-							pthread_mutex_unlock(&mutex_ready_vacia);
 						}
 						free(aux_cpu);
 						socket_cerrar(i);
@@ -322,13 +325,15 @@ void *pcp(t_param_pcp *param_pcp){
 							// Pone el pcb en ready
 							pthread_mutex_lock(&mutex_ready);
 							queue_push(colas->cola_ready,aux_pcb_otros);
+							sem_incre(&cant_ready);
 							pthread_mutex_unlock(&mutex_ready);
-							pthread_mutex_unlock(&mutex_ready_vacia);
+
 							// Pone el cpu devuelta en la cola de cpus
 							pthread_mutex_lock(&mutex_uso_cola_cpu);
 							queue_push(cola_cpu,aux_cpu);
+							sem_incre(&cant_cpu_libres);
 							pthread_mutex_unlock(&mutex_uso_cola_cpu);
-							pthread_mutex_unlock(&mutex_cola_cpu_vacia);
+
 
 							txt_write_in_file(pcp_log,"Termino un quantum del programa:");
 							logear_int(pcp_log,aux_pcb_otros->pcb->id);
@@ -484,8 +489,8 @@ void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
+	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 }
 
 t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
@@ -526,8 +531,8 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 		if (pcb_aux->pcb->id==id_pcb){
 			pthread_mutex_lock(&mutex_ready);
 			queue_push(colas->cola_ready, pcb_aux);
+			sem_incre(&cant_ready);
 			pthread_mutex_unlock(&mutex_ready);
-			pthread_mutex_unlock(&mutex_ready_vacia);
 			//i=tamanio_cola_block;
 			return; //todo este return sale del for o de la funcion? si sale de la funcion hay que desbloquear antes la cola de block
 		}else {
@@ -616,8 +621,8 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
+	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 }
 
 t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
@@ -629,8 +634,8 @@ t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,cpu);
+	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-	pthread_mutex_unlock(&mutex_cola_cpu_vacia);
 
 	pthread_mutex_lock(&mutex_block);
 	queue_push(colas->cola_block,aux_pcb_otros);
@@ -751,7 +756,7 @@ void *manejador_new_ready(){
 		pthread_mutex_unlock(&mutex_new);
 		pthread_mutex_unlock(&mutex_ready);
 
-		pthread_mutex_unlock(&mutex_ready_vacia);//todo sem_incre(&cant_ready);
+		sem_incre(&cant_ready);
 	}
 	return NULL;
 }
@@ -781,41 +786,29 @@ t_pcb_otros *get_peso_min(){
 }
 
 void *manejador_ready_exec(){//todo creo q aca puede q haya una desincronizacion, creo q el semaforo mutex_ready_vacia y el mutex_cola_cpu_vacia tienen q ser contadores y no mutex
-
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
 
 	while(quit_sistema){
 
+		sem_decre(&cant_ready);
+		sem_decre(&cant_cpu_libres);
+
 		pthread_mutex_lock(&mutex_ready);
+		pthread_mutex_lock(&mutex_uso_cola_cpu);
 
-		if (queue_is_empty(colas->cola_ready)){
-			pthread_mutex_unlock(&mutex_ready);
-			pthread_mutex_lock(&mutex_ready_vacia);
+		cpu = get_cpu_libre();
 
-		}else{
+		aux_pcb_otros = queue_pop(colas->cola_ready);
 
-			pthread_mutex_lock(&mutex_uso_cola_cpu);
-			cpu = get_cpu_libre();
+		enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
+		cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 
-			if(cpu == NULL){
-				pthread_mutex_unlock(&mutex_ready);
-				pthread_mutex_unlock(&mutex_uso_cola_cpu);
-				pthread_mutex_lock(&mutex_cola_cpu_vacia);
+		queue_push(cola_cpu, cpu);
+		queue_push(colas->cola_exec, aux_pcb_otros);
 
-			}else{
-				aux_pcb_otros = queue_pop(colas->cola_ready);
-				pthread_mutex_unlock(&mutex_ready);
-
-				enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
-				cpu->id_prog_exec = aux_pcb_otros->pcb->id;
-				queue_push(cola_cpu, cpu);
-				pthread_mutex_unlock(&mutex_uso_cola_cpu);
-				pthread_mutex_lock(&mutex_exec);
-				queue_push(colas->cola_exec, aux_pcb_otros);
-				pthread_mutex_unlock(&mutex_exec);
-			}
-		}
+		pthread_mutex_unlock(&mutex_ready);
+		pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	}
 	return NULL;
 }
