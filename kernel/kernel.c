@@ -395,7 +395,7 @@ void *pcp(t_param_pcp *param_pcp){
 							txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
-							//todo sincronizar
+
 						}else{
 							llamada_erronea(i, VAR_INEX);
 							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
@@ -1052,8 +1052,8 @@ t_datos_config *levantar_config(){
 	void _imp_disp(char *key, t_IO *io){
 		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
-	void _imp_var_glob(char* key, int32_t valor){
-		printf("	ID:%s ,Valor:%i\n", key, valor);
+	void _imp_var_glob(char* key, int32_t *valor){
+		printf("	ID:%s ,Valor:%i\n", key, *valor);
 	}
 	void _imp_sem(char* key, t_semaforo *un_sem){
 		printf("	ID:%s ,Valor:%i\n", key, un_sem->valor);
@@ -1102,8 +1102,11 @@ t_datos_config *levantar_config(){
 	ret->tam_stack = config_get_int_value( diccionario_config, "TAMANIO_STACK");
 	char **aux_var_glob = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
 
-	for (i=0; aux_var_glob[i] != '\0'; i++)
-		dictionary_put(diccionario_variables, aux_var_glob[i],0);
+	for (i=0; aux_var_glob[i] != '\0'; i++){
+		int32_t *valor_ini = malloc(sizeof(int32_t));
+		*valor_ini = 0;
+		dictionary_put(diccionario_variables, aux_var_glob[i],valor_ini);
+	}
 
 	free(aux_var_glob);
 
