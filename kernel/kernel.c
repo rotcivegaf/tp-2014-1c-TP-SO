@@ -521,6 +521,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 
 void pasar_pcbBlock_ready(int32_t id_pcb){
 	int32_t i = 0;
+
 	pthread_mutex_lock(&mutex_block);
 	int32_t tamanio_cola_block = queue_size(colas->cola_block);
 
@@ -1004,23 +1005,21 @@ int32_t calcular_peso(t_men_comun *men_cod_prog){
 }
 
 void *manejador_IO(t_IO *io){
+	int32_t i;
+	t_IO_espera *proceso;
 
 	while(quit_sistema){
 
-		if(queue_size(io->procesos)==0)
-			sem_decre(&(io->cont_cant_proc));
-		else{
+		sem_decre(&(io->cont_cant_proc));
 
-			t_IO_espera *proceso = queue_pop(io->procesos);
-			int32_t i;
+		proceso = queue_pop(io->procesos);
 
-			for(i=0; i<proceso->unidades;i++)
-				usleep(io->io_sleep*1000);
 
-			pasar_pcbBlock_ready(proceso->id_prog);
+		for(i=0; i<proceso->unidades;i++)
+			usleep(io->io_sleep*1000);
 
-			sem_decre(&(io->cont_cant_proc));
-		}
+		pasar_pcbBlock_ready(proceso->id_prog);
+
 	}
 	return NULL;
 }
