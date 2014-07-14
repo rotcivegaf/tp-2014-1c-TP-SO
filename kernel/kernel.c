@@ -13,7 +13,7 @@ pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 
-sem_t cant_new, cant_ready, cont_exit;
+sem_t cant_new, cant_ready, cant_exit;
 sem_t cant_multiprog, cant_cpu_libres;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
 t_dictionary *dispositivos_IO;
@@ -40,7 +40,7 @@ int main(void){
 	//Inicializacion semaforos
 	crear_cont(&cant_new , 0);
 	crear_cont(&cant_ready , 0);
-	crear_cont(&cont_exit , 0);
+	crear_cont(&cant_exit , 0);
 
 	crear_cont(&cant_cpu_libres , 0);
 	crear_cont(&cant_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
@@ -545,9 +545,8 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 void pasar_pcb_exit(t_pcb_otros *pcb){
 	pthread_mutex_lock(&mutex_exit);
 	queue_push(colas->cola_exit,pcb);
-	sem_incre(&cont_exit);
+	sem_incre(&cant_exit);
 	pthread_mutex_unlock(&mutex_exit);
-
 	sem_incre(&cant_multiprog);
 }
 
@@ -721,23 +720,19 @@ void *manejador_exit(){
 	t_pcb_otros *aux_pcb_otros;
 
 	while(quit_sistema){
+
+		sem_decre(&cant_exit);
 		pthread_mutex_lock(&mutex_exit);
 
-		if (queue_is_empty(colas->cola_exit)){
-			pthread_mutex_unlock(&mutex_exit);
-			sem_decre(&cont_exit);
-		}else{
+		aux_pcb_otros = queue_pop(colas->cola_exit);
+		FD_CLR(aux_pcb_otros->n_socket, &conj_soc_progs); // Elimina al socket del conjunto maestro
 
-			aux_pcb_otros = queue_pop(colas->cola_exit);
-			pthread_mutex_unlock(&mutex_exit);
+		pthread_mutex_unlock(&mutex_exit);
 
-			FD_CLR(aux_pcb_otros->n_socket, &conj_soc_progs); // Elimina al socket del conjunto maestro
-			enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
-			umv_destrui_pcb(aux_pcb_otros->pcb->id);
-			free(aux_pcb_otros->pcb);
-			free(aux_pcb_otros);
-			sem_decre(&cont_exit);
-		}
+		enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
+		umv_destrui_pcb(aux_pcb_otros->pcb->id);
+		free(aux_pcb_otros->pcb);
+		free(aux_pcb_otros);
 	}
 	return NULL;
 }
@@ -785,7 +780,7 @@ t_pcb_otros *get_peso_min(){
 	return NULL;
 }
 
-void *manejador_ready_exec(){//todo creo q aca puede q haya una desincronizacion, creo q el semaforo mutex_ready_vacia y el mutex_cola_cpu_vacia tienen q ser contadores y no mutex
+void *manejador_ready_exec(){
 	t_pcb_otros *aux_pcb_otros;
 	t_cpu *cpu;
 
