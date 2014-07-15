@@ -31,7 +31,7 @@ int32_t socketKernel, socketUmv;
 int32_t quantum_actual;
 int32_t quantum_max;
 char* etiquetas;
-int32_t fueFinEjecucion = 0;
+int32_t fueFinEjecucion = 0, entre_io = 0;
 FILE *cpu_file_log;
 int32_t pid_cpu;
 
@@ -82,7 +82,7 @@ int main(){
 		/*se crea un diccionario para guardar las variables del contexto*/
 		crearDiccionario();
 
-		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion) && (!entre_io); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
 			char* proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 		}
@@ -744,8 +744,10 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 
 	enviar_pcb_destruir();
 
-	txt_write_in_file(cpu_file_log, "Saliendo a i/o en dispositivo\n");
-	printf("	Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
+	entre_io =1;
+
+	txt_write_in_file(cpu_file_log, "Saliendo a IO en dispositivo\n");
+	printf("	Saliendo a IO ID:%s, cant. unidades:%d\n", dispositivo, tiempo);
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){

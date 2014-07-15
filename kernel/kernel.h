@@ -106,7 +106,6 @@
 	t_cpu *get_cpu(int32_t  soc_cpu);
 	void enviar_IO(int32_t  soc_cpu, char *id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
-	void *entrar_IO();
 	t_cpu *get_cpu_libre();
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
@@ -118,6 +117,7 @@
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
 	//funciones del pcp
+	void enviar_IO(int32_t soc_cpu, char *id_IO);
 	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
 	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);
 	void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto);

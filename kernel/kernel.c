@@ -10,24 +10,25 @@ pthread_mutex_t mutex_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exit = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_io= PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 
 sem_t cant_new, cant_ready, cant_exit;
 sem_t cant_multiprog, cant_cpu_libres;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO;
-t_dictionary *dispositivos_IO;
-t_dictionary *diccionario_variables;
+t_dictionary *dicc_disp_io;
+t_dictionary *dicc_var;
 t_dictionary *dicc_sem;
 FILE *plp_log;
 FILE *pcp_log;
 
 
 int main(void){
-	diccionario_variables = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
+	dicc_var = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
 	dicc_sem = dictionary_create();
 	//diccionario dispositivos
-	dispositivos_IO = dictionary_create();
+	dicc_disp_io = dictionary_create();
 
 	t_datos_config *diccionario_config = levantar_config();
 
@@ -268,6 +269,7 @@ void *pcp(t_param_pcp *param_pcp){
 					t_men_comun *men_cpu = socket_recv_comun(i);
 					switch(men_cpu->tipo){
 					case CONEC_CERRADA:
+						printf("ACA\n\n");
 						txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
@@ -411,6 +413,35 @@ void *pcp(t_param_pcp *param_pcp){
 	return NULL;
 }
 
+void enviar_IO(int32_t soc_cpu, char *id_IO){
+	t_men_comun *men;
+	t_IO *aux_IO;
+
+	t_cpu *aux_cpu = get_cpu(soc_cpu);
+
+	men = socket_recv_comun(soc_cpu);
+	int32_t cant_unidades = atoi(men->dato);
+
+	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
+	t_IO_espera *espera = malloc(sizeof(t_IO_espera));
+	espera->id_prog = (aux_cpu->id_prog_exec);
+	espera->unidades = cant_unidades;
+	printf("ACAAA3\n");
+	pthread_mutex_lock(&mutex_io);
+
+	aux_IO = dictionary_get(dicc_disp_io, id_IO);
+	queue_push(aux_IO->procesos, espera);
+	dictionary_put(dicc_disp_io, id_IO, aux_IO);
+
+	pthread_mutex_unlock(&mutex_io);
+	printf("ACAAA4\n");
+	sem_incre(&(aux_IO->cont_cant_proc));
+	printf("ACAAA5\n");
+	actualizar_pcb_y_bloq(aux_cpu);
+
+	destruir_men_comun(men);
+}
+
 void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum){
 	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	t_pcb_otros *aux_pcb_otros;
@@ -449,10 +480,9 @@ void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
 	char *string_valor;
 	char *key = men_obt_valor->dato;
 
-	if (dictionary_has_key(diccionario_variables, key)){
-		valor = dictionary_get(diccionario_variables, key);
-		string_valor = string_itoa(valor);//todo aca quede
-		//free(valor);
+	if (dictionary_has_key(dicc_var, key)){
+		valor = dictionary_get(dicc_var, key);
+		string_valor = string_itoa(valor);
 		enviar_men_comun_destruir(soc_cpu ,R_OBTENER_VALOR,string_valor,string_length(string_valor)+1);
 		txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
@@ -471,7 +501,7 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 	char *key = men_gra_valor->dato;
 	t_men_comun *men_valor;
 
-	if (dictionary_has_key(diccionario_variables, key)){
+	if (dictionary_has_key(dicc_var, key)){
 
 		enviar_men_comun_destruir(soc_cpu,R_GRABAR_VALOR,NULL,0);
 		men_valor = socket_recv_comun(soc_cpu);
@@ -479,9 +509,9 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 		if((men_valor->tipo) != VALOR_ASIGNADO)
 			printf("ERROR: esperaba recibir VALOR_ASIGNADO y recibi: %i",men_valor->tipo);
 
-		dictionary_remove(diccionario_variables,key);
+		dictionary_remove(dicc_var,key);
 		valor = atoi(men_valor->dato);
-		dictionary_put(diccionario_variables,key, valor);
+		dictionary_put(dicc_var,key, valor);
 		txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
@@ -569,7 +599,12 @@ void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 
 void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	t_cpu *aux_cpu = get_cpu(socket_cpu);
+
+
 	t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
+
+	printf("llego\n");
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
 
@@ -755,35 +790,6 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 	pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
-}
-
-void enviar_IO(int32_t soc_cpu, char *id_IO){
-
-	t_men_comun *men;
-	t_IO *aux_IO;
-	t_cpu *aux_cpu;
-	aux_cpu = get_cpu(soc_cpu);
-
-	//Busca el dispositivo de IO en la lista y lo guarda en aux_IO
-	aux_IO = dictionary_get(dispositivos_IO, id_IO);
-
-	men = socket_recv_comun(soc_cpu);
-
-	if (men->tipo != IO_CANT_UNIDADES)
-		printf("ERROR: La CPU mando el tipo %i y se esperaba %i\n",men->tipo,IO_CANT_UNIDADES);
-
-	int32_t cant_unidades = atoi(men->dato);
-
-	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
-	t_IO_espera *espera = malloc(sizeof(t_IO_espera));
-	espera->id_prog = (aux_cpu->id_prog_exec);
-	espera->unidades = cant_unidades;
-	queue_push(aux_IO->procesos,espera);
-	sem_incre(&(aux_IO->cont_cant_proc));
-
-	actualizar_pcb_y_bloq(aux_cpu);
-
-	destruir_men_comun(men);
 }
 
 void *manejador_exit(){
@@ -1081,7 +1087,7 @@ void *manejador_IO(t_IO *io){
 	while(quit_sistema){
 
 		sem_decre(&(io->cont_cant_proc));
-
+		printf("ACAAA111\n");
 		proceso = queue_pop(io->procesos);
 
 		for(i=0; i<proceso->unidades;i++)
@@ -1161,7 +1167,7 @@ t_datos_config *levantar_config(){
 
 	int32_t valor_ini = 0;
 	for (i=0; aux_var_glob[i] != '\0'; i++)
-		dictionary_put(diccionario_variables, aux_var_glob[i],valor_ini);
+		dictionary_put(dicc_var, aux_var_glob[i],valor_ini);
 	free(aux_var_glob);
 
 	printf("\n\n--------------------Archivo Config--------------------------------\n");
@@ -1172,7 +1178,7 @@ t_datos_config *levantar_config(){
 	printf("	Puerto = %s\n", ret->puerto_umv);
 	printf("Entrada/Salida\n");
 
-	dictionary_iterator(dispositivos_IO, (void *)_imp_disp);
+	dictionary_iterator(dicc_disp_io, (void *)_imp_disp);
 
 	printf("\nSemaforos\n");
 	dictionary_iterator(dicc_sem, (void *)_imp_sem);
@@ -1182,7 +1188,7 @@ t_datos_config *levantar_config(){
 	printf("	Retardo =  %i\n", _RETARDO);
 	printf("	Tamanio Stack = %i\n", ret->tam_stack);
 	printf("Variables Globales\n");
-	dictionary_iterator(diccionario_variables, (void *)_imp_var_glob);
+	dictionary_iterator(dicc_var, (void *)_imp_var_glob);
 	printf("------------------------------------------------------------------\n\n");
 	return ret;
 }
