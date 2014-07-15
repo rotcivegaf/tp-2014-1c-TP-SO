@@ -28,6 +28,7 @@ enum tipo_fin {
 t_dictionary *dic_Variables;
 t_pcb *pcb;
 int32_t socketKernel, socketUmv;
+int32_t sem_block = 0;//todo no implementado
 int32_t quantum_actual;
 int32_t quantum_max;
 char* etiquetas;
@@ -37,6 +38,7 @@ int32_t pid_cpu;
 
 int main(){
 	got_usr1 = 0;
+	char *proxInstrucc = malloc(255);
 
 	dic_Variables = dictionary_create();
 
@@ -71,10 +73,8 @@ int main(){
 	}
 
 	while(!got_usr1){
-		fueFinEjecucion = 0;
 		/*recibe un pcb del kernel*/
 		recibirUnPcb();
-
 		/* le digo a la UMV q cambie el proceso activo */
 		cambio_PA(pcb->id);
 
@@ -82,17 +82,20 @@ int main(){
 		/*se crea un diccionario para guardar las variables del contexto*/
 		crearDiccionario();
 
-		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion) && (!entre_io); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
-			char* proxInstrucc = solicitarProxSentenciaAUmv();
+		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+			proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 		}
 		if(!fueFinEjecucion){
 			salirPorQuantum();
 		}
+		dictionary_clean(dic_Variables);
 		free(etiquetas);
 		free(pcb);
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
-
+		fueFinEjecucion = 0;
+		entre_io = 0;
+		sem_block = 0;
 	}
 
 	destruir_dic_Variables();
@@ -130,7 +133,6 @@ void recibirUnPcb(){
 		memcpy(pcb, m->pcb, sizeof(t_pcb));
 		memcpy(&quantum_max , &(m->quantum), sizeof(int32_t));
 	}
-	printf("dirstack_pcb:%i,%i\n",pcb->dir_primer_byte_umv_segmento_stack,pcb->dir_primer_byte_umv_contexto_actual);
 
 	destruir_quantum_pcb(m);
 }
@@ -138,6 +140,7 @@ void recibirUnPcb(){
 void crearDiccionario(){
 	int32_t base, offset, pos, i;
 	char *key;
+	char aux_char;
 	//si se trata de un programa con un  stack que ya tiene variables
 	int32_t tam_contexto = pcb->cant_var_contexto_actual;
 	base = pcb->dir_primer_byte_umv_segmento_stack;
@@ -151,11 +154,9 @@ void crearDiccionario(){
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
 
 			if(rec_var->tipo== R_SOL_BYTES){
-				//aux_char = es_numero_pasar_char(rec_var->dato[0]);
-				//char *key = string_substring_until(&aux_char, 1);
-				//int32_t *pos = malloc(sizeof(int32_t));
-				//*pos = base + offset;
-				key = string_substring_until(rec_var->dato, 1);
+				pos = base + offset;
+				aux_char = es_numero_pasar_char(rec_var->dato[0]);
+				key = string_substring_until(&aux_char, 1);
 				pos = base + offset;
 				dictionary_put(dic_Variables, key, pos );
 			}
@@ -207,7 +208,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	if(rec_inst->tipo == R_SOL_BYTES){
 		memcpy(proxInst, rec_inst->dato, tam);
-		proxInst[tam] = '\0';
+		proxInst[tam] = '\0';//todo
 		char *proxInst_sin_blancos = sacar_caracteres_escape(proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar:%s\n",proxInst_sin_blancos);
@@ -334,6 +335,7 @@ void finalizarContexto(int32_t tipo_fin){
 		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
+		return;
 	}
 	if (tipo_fin == OK){
 		printf("	Imprmiendo variables y finalizando proceso\n");
@@ -394,6 +396,7 @@ char es_numero_pasar_char(char un_char){
 //Primitivas ANSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
+	char aux_char;
 
 	base = pcb->dir_primer_byte_umv_segmento_stack;
 	offset= pcb->dir_primer_byte_umv_contexto_actual - base + (pcb->cant_var_contexto_actual*5);
@@ -404,34 +407,30 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	printf("	Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
 	identificador_variable = es_numero_pasar_char(identificador_variable);
 
-	char *key = string_substring_until(&identificador_variable, 1);
+	aux_char = es_numero_pasar_char(identificador_variable);
+	char *key = string_substring_until(&aux_char, 1);
 
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, key);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
-		//int32_t *pos = malloc(sizeof(int32_t));
-		//*pos = pos_mem;
+
 		dictionary_put(dic_Variables, key, pos_mem);
 		(pcb->cant_var_contexto_actual) ++;
 		txt_write_in_file(cpu_file_log, "Definiar la variable \n");
 		txt_write_in_file(cpu_file_log, "en la posicion \n");
 		destruir_men_comun(r_alm);
 		return pos_mem;
-	}
-	if(r_alm->tipo == SEGMEN_FAULT){
+	}else{
 		manejarSegmentationFault();
 		destruir_men_comun(r_alm);
-		return 0;
+		return -1;
 	}
-	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
-	destruir_men_comun(r_alm);
-	return -1;
 }
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
-	int32_t *e;
+	int32_t e;
 
 	/*Se fija en el diccionario de variables la posicion la posicion va a ser el data del elemento*/
 	identificador_variable = es_numero_pasar_char(identificador_variable);
@@ -896,7 +895,7 @@ void recibir_resp_kernel(int32_t tipo_esperado){
 
 void regenerar_dicc_var(){
 	int32_t base, offset,i, pos;
-
+	char aux_char;
 
 	dictionary_clean(dic_Variables);
 
@@ -912,7 +911,8 @@ void regenerar_dicc_var(){
 		//key[1] = '\0';
 		//int32_t *pos = malloc(sizeof(int32_t));
 		//*pos = base + offset;
-		char *key = string_substring_until(men_var->dato, 1);
+		aux_char = es_numero_pasar_char(men_var->dato[0]);
+		char *key = string_substring_until(&aux_char, 1);
 		pos = base + offset;
 		dictionary_put(dic_Variables, key, pos );
 	}
