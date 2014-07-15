@@ -84,7 +84,6 @@ int main(){
 		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
 			char* proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
-			free(proxInstrucc);
 		}
 		if(!fueFinEjecucion){
 			salirPorQuantum();
@@ -178,13 +177,13 @@ void manejarSegmentationFault(){
 
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
 	int32_t base, offset, tam;
-	char *proxInst;
 	t_men_comun *men_base_offset;
 
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
 	base = pcb->dir_primer_byte_umv_indice_codigo;
-	offset = pcb->program_counter*(sizeof(int32_t)*2);
-	tam = sizeof(int32_t)*2;
+	offset = pcb->program_counter * sizeof(t_intructions);
+	tam = sizeof(t_intructions);
+
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	men_base_offset = socket_recv_comun(socketUmv);
@@ -194,7 +193,6 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	if((men_base_offset->tam_dato != 8) || (men_base_offset->tipo!=R_SOL_BYTES))//por si la UMV me llega a mandar un tamanio distinto al q pedi o si el tipo de dato es diferente
 		printf("ERROR el tamanio recibido:%i es distinto a 8, o el tipo de dato:%i es distinto a R_SOL_BYTES\n",men_base_offset->tam_dato,men_base_offset->tipo);
-
 
 	destruir_men_comun(men_base_offset);
 
@@ -206,21 +204,15 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	//recibir la instruccion a ejecutar
 	t_men_comun *rec_inst = socket_recv_comun(socketUmv);
 
+	char proxInst[tam];
 	if(rec_inst->tipo == R_SOL_BYTES){
-		proxInst = malloc(rec_inst->tam_dato);
-		memcpy(proxInst, rec_inst->dato,rec_inst->tam_dato);
+		memcpy(proxInst, rec_inst->dato, tam);
 		char *proxInst_sin_blancos = sacar_caracteres_escape(proxInst);
-		free(proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar:%s\n",proxInst_sin_blancos);
 		pcb->program_counter ++;
 		destruir_men_comun(rec_inst);
 		return proxInst_sin_blancos;
-	}
-	if(rec_inst->tipo ==SEGMEN_FAULT){
-		manejarSegmentationFault();
-		destruir_men_comun(rec_inst);
-		return NULL;
 	}
 	printf("ERROR tipo de dato:%i, recibido es erroneo\n", rec_inst->tipo);
 	return NULL;
