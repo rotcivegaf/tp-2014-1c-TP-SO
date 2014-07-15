@@ -145,10 +145,9 @@ void *plp(t_param_plp *param_plp){
 						logear_int(plp_log,i);
 						txt_write_in_file(plp_log,"\n");
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
-						//mover_pcb_exit(i); todo si llamara a esta funcion se da un interbloqueo,de todas formas no te van a cerrar un programa
-						//a proposito, y cuando termina de ejecutarse (por la razon que sea)el pcp es el que lo manda a exit
 						FD_CLR(i, &conj_soc_progs); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
+						socket_cerrar(i);
 						break;
 					}
 
@@ -169,7 +168,7 @@ void *plp(t_param_plp *param_plp){
 
 						//Avisa al programa que no hay memoria
 						char *aux_sring = string_itoa(contador_prog);
-						enviar_men_comun_destruir(i,MEM_OVERLOAD,aux_sring,string_length(aux_sring));
+						enviar_men_comun_destruir(i,MEM_OVERLOAD,aux_sring,string_length(aux_sring)+1);
 						free(aux_sring);
 						free(resp_sol);
 					}else{
@@ -269,7 +268,6 @@ void *pcp(t_param_pcp *param_pcp){
 					t_men_comun *men_cpu = socket_recv_comun(i);
 					switch(men_cpu->tipo){
 					case CONEC_CERRADA:
-						printf("ACA\n\n");
 						txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
 						logear_int(pcp_log,i);
 						txt_write_in_file(pcp_log,"\n");
@@ -313,20 +311,15 @@ void *pcp(t_param_pcp *param_pcp){
 						destruir_men_comun(men_cpu);
 						break;
 					case FIN_QUANTUM:
-						fin_quantum(i,men_cpu);
+						fin_quantum(i);
+						destruir_men_comun(men_cpu);
 						break;
 					case FIN_EJECUCION:
 						fin_ejecucion(FIN_EJECUCION,i);
-						txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
-						logear_int(pcp_log,aux_pcb_otros->pcb->id);
-						txt_write_in_file(pcp_log,"\n");
 						destruir_men_comun(men_cpu);
 						break;
 					case SEGMEN_FAULT:
 						fin_ejecucion(SEGMEN_FAULT,i);
-						txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
-						logear_int(pcp_log,aux_pcb_otros->pcb->id);
-						txt_write_in_file(pcp_log,"\n");
 						destruir_men_comun(men_cpu);
 						break;
 					case IMPRIMIR_TEXTO:
@@ -424,9 +417,9 @@ void enviar_IO(int32_t soc_cpu, char *id_IO){
 
 	//Crea la estructura que tiene el id del programa y la cantidad de unidades que quiere usar para ponerlo en la cola del dispositivo
 	t_IO_espera *espera = malloc(sizeof(t_IO_espera));
-	espera->id_prog = (aux_cpu->id_prog_exec);
+	espera->id_prog = aux_cpu->id_prog_exec;
 	espera->unidades = cant_unidades;
-	printf("ACAAA3\n");
+
 	pthread_mutex_lock(&mutex_io);
 
 	aux_IO = dictionary_get(dicc_disp_io, id_IO);
@@ -434,21 +427,22 @@ void enviar_IO(int32_t soc_cpu, char *id_IO){
 	dictionary_put(dicc_disp_io, id_IO, aux_IO);
 
 	pthread_mutex_unlock(&mutex_io);
-	printf("ACAAA4\n");
+
 	sem_incre(&(aux_IO->cont_cant_proc));
-	printf("ACAAA5\n");
+
 	actualizar_pcb_y_bloq(aux_cpu);
 
 	destruir_men_comun(men);
 }
 
-void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum){
+void fin_quantum(int32_t soc_cpu){
 	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	t_pcb_otros *aux_pcb_otros;
 
 	// Actualizacion pcb
 	aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
 	t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(soc_cpu);
+
 	actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
 	destruir_quantum_pcb(men_quantum_pcb);
 
@@ -456,6 +450,18 @@ void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum){
 	aux_cpu->id_prog_exec = 0;
 
 	// Pone el pcb en ready
+
+	pthread_mutex_lock(&mutex_ready);
+	queue_push(colas->cola_ready,aux_pcb_otros);
+	sem_incre(&cant_ready);
+	pthread_mutex_unlock(&mutex_ready);
+
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	sem_incre(&cant_cpu_libres);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
+
+	/*
 	pthread_mutex_lock(&mutex_ready);
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 
@@ -467,12 +473,10 @@ void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum){
 
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_ready);
-
+*/
 	txt_write_in_file(pcp_log,"Termino un quantum del programa:");
 	logear_int(pcp_log,aux_pcb_otros->pcb->id);
 	txt_write_in_file(pcp_log,"\n");
-
-	destruir_men_comun(men_fin_quantum);
 }
 
 void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
@@ -548,8 +552,6 @@ void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor){
 	t_men_comun *men_id_prog;
 	int32_t aux_i;
 
-	printf("%s",men_imp_valor->dato);
-
 	men_id_prog = socket_recv_comun(soc);
 
 	if (men_id_prog->tipo != ID_PROG)
@@ -575,7 +577,7 @@ void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 	t_pcb_otros *aux_pcb_otros;
 	t_men_comun *men_id_prog;
 	int32_t aux_i;
-	printf("%s",men_imp_texto->dato);
+
 	men_id_prog = socket_recv_comun(soc);
 
 	if (men_id_prog->tipo != ID_PROG)
@@ -600,16 +602,19 @@ void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	t_cpu *aux_cpu = get_cpu(socket_cpu);
 
-
 	t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
+	txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
+	logear_int(pcp_log,aux_pcb_otros->pcb->id);
+	txt_write_in_file(pcp_log,"\n");
 
-	printf("llego\n");
+	txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
+	logear_int(pcp_log,aux_pcb_otros->pcb->id);
+
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
 
 	aux_cpu->id_prog_exec = 0;
-
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	sem_incre(&cant_cpu_libres);
@@ -655,7 +660,7 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 			sem_incre(&cant_ready);
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_block);
-			return; //todo este return sale del for o de la funcion? si sale de la funcion hay que desbloquear antes la cola de block
+			return;
 		}else {
 			queue_push(colas->cola_block,pcb_aux);
 		}
@@ -671,7 +676,7 @@ void pasar_pcb_exit(t_pcb_otros *pcb){
 	pthread_mutex_unlock(&mutex_exit);
 	sem_incre(&cant_multiprog);
 }
-
+/*
 //Para buscar un pcb por su socket, xq no se sabe en que cola esta(cuando se cae la conexion), lo encuentra y lo pasa a exit
 void mover_pcb_exit(int32_t soc_prog){
 
@@ -728,7 +733,7 @@ t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog){
 		queue_push(cola, ret);
 	}
 	return NULL;
-}
+}*/
 
 t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(cpu->id_prog_exec);
@@ -802,7 +807,6 @@ void *manejador_exit(){
 		pthread_mutex_lock(&mutex_exit);
 
 		aux_pcb_otros = queue_pop(colas->cola_exit);
-		FD_CLR(aux_pcb_otros->n_socket, &conj_soc_progs); // Elimina al socket del conjunto maestro
 
 		pthread_mutex_unlock(&mutex_exit);
 
@@ -868,7 +872,7 @@ void *manejador_ready_exec(){
 
 		pthread_mutex_lock(&mutex_ready);
 		pthread_mutex_lock(&mutex_uso_cola_cpu);
-
+		//todo
 		cpu = get_cpu_libre();
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
@@ -900,6 +904,7 @@ t_cpu *get_cpu_libre(){
 
 		queue_push(cola_cpu, cpu);
 	}
+	printf("No hay cpu libre\n");
 	return NULL;
 }
 
@@ -909,6 +914,7 @@ void umv_destrui_pcb(int32_t id_pcb){
 	t_men_comun *men_resp = socket_recv_comun(soc_umv);
 	if (men_resp->tipo != SINCRO_OK)
 		printf("ERROR se esperaba, de la UMV, un tipo de mensaje SINCRO_OK y se recibio:%i\n",men_resp->tipo);
+	printf("Segmentos del programa:%i destruidos\n", id_pcb);
 	destruir_men_comun(men_resp);
 }
 
@@ -1087,7 +1093,7 @@ void *manejador_IO(t_IO *io){
 	while(quit_sistema){
 
 		sem_decre(&(io->cont_cant_proc));
-		printf("ACAAA111\n");
+
 		proceso = queue_pop(io->procesos);
 
 		for(i=0; i<proceso->unidades;i++)
@@ -1139,7 +1145,7 @@ t_datos_config *levantar_config(){
 		new_IO->io_sleep = atoi(io_sleeps[i]);
 		new_IO->procesos = queue_create();
 
-		dictionary_put(dicc_sem, id_ios[i],new_IO);
+		dictionary_put(dicc_disp_io, id_ios[i],new_IO);
 		pthread_create(&(new_IO->hilo), NULL, (void *)manejador_IO, (void*)new_IO);
 	}
 
@@ -1181,7 +1187,9 @@ t_datos_config *levantar_config(){
 	dictionary_iterator(dicc_disp_io, (void *)_imp_disp);
 
 	printf("\nSemaforos\n");
+
 	dictionary_iterator(dicc_sem, (void *)_imp_sem);
+
 	printf("Varias\n");
 	printf("	Multiprogramacion = %i\n", ret->multiprogramacion);
 	printf("	Quantum = %i\n", _QUANTUM_MAX);
