@@ -393,11 +393,11 @@ void finalizarContexto(int32_t tipo_fin){
 //Primitivas ANSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
+
 	base = pcb->dir_primer_byte_umv_segmento_stack;
+	offset= pcb->dir_primer_byte_umv_contexto_actual - base +(pcb->cant_var_contexto_actual*5);
+	tam = 5;
 
-	offset= (pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack)+(pcb->cant_var_contexto_actual)*5;
-
-	tam = sizeof(int32_t)+1;
 	int32_t pos_mem = base + offset;
 
 	printf("Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
@@ -405,7 +405,6 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	string_id_var[0]=identificador_variable;
 	string_id_var[1]= '\0';
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, string_id_var);
-
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
@@ -421,8 +420,6 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
-		base=0;
-		offset=0;
 		destruir_men_comun(r_alm);
 		return 0;
 	}
