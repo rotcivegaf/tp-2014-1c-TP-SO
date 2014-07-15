@@ -38,7 +38,7 @@ int32_t pid_cpu;
 int main(){
 	got_usr1 = 0;
 
-
+	dic_Variables = dictionary_create();
 
 	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
 	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
@@ -92,9 +92,10 @@ int main(){
 		free(etiquetas);
 		free(pcb);
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
-		destruir_dic_Variables();
+
 	}
 
+	destruir_dic_Variables();
 	socket_cerrar(socketKernel);
 	socket_cerrar(socketUmv);
 	return 0;
@@ -134,11 +135,11 @@ void recibirUnPcb(){
 }
 
 void crearDiccionario(){
-	dic_Variables = dictionary_create();
 	int32_t base, offset, tam;
 	//si se trata de un programa con un  stack que ya tiene variables
 	int32_t tam_contexto = pcb->cant_var_contexto_actual;
 	int32_t i;
+	char aux_char;
 
 	if (tam_contexto > 0){//regenerar diccionario
 		base = pcb->dir_primer_byte_umv_segmento_stack;
@@ -150,13 +151,9 @@ void crearDiccionario(){
 
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
 
-			if(rec_var->tipo == SEGMEN_FAULT){
-				manejarSegmentationFault();
-			}
 			if(rec_var->tipo== R_SOL_BYTES){
-				char key[2];
-				key[0] = rec_var->dato[0];
-				key[1] = '\0';
+				aux_char = es_numero_pasar_char(rec_var->dato[0]);
+				char *key = string_substring_until(&aux_char, 1);
 				int32_t *pos = malloc(sizeof(int32_t));
 				*pos = base + offset;
 				dictionary_put(dic_Variables, key, pos );
@@ -385,6 +382,16 @@ void finalizarContexto(int32_t tipo_fin){
 	txt_write_in_file(cpu_file_log, "Mandando a Kernel-PCP el pcb de un programa que se termino de ejecutar\n");
 }
 
+char es_numero_pasar_char(char un_char){
+	switch(un_char){
+	case 0: case 1:	case 2:	case 3:	case 4:	case 5:	case 6:	case 7:	case 8:	case 9:
+		un_char = un_char + '0';
+		return un_char;
+	default:
+		return un_char;
+	}
+}
+
 //Primitivas ANSISOP
 t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
@@ -396,17 +403,18 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t pos_mem = base + offset;
 
 	printf("Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
-	char string_id_var[2];
-	string_id_var[0]=identificador_variable;
-	string_id_var[1]= '\0';
-	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, string_id_var);
+	identificador_variable = es_numero_pasar_char(identificador_variable);
+
+	char *key = string_substring_until(&identificador_variable, 1);
+
+	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, key);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
 		int32_t *pos = malloc(sizeof(int32_t));
 		*pos = pos_mem;
-		dictionary_put(dic_Variables, string_id_var, pos);
+		dictionary_put(dic_Variables, key, pos);
 		(pcb->cant_var_contexto_actual) ++;
 		txt_write_in_file(cpu_file_log, "Definiar la variable \n");
 		txt_write_in_file(cpu_file_log, "en la posicion \n");
@@ -425,9 +433,8 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	/*Se fija en el diccionario de variables la posicion la posicion va a ser el data del elemento*/
-	char key[2];
-	key[0] = identificador_variable;
-	key[1] = '\0';
+	identificador_variable = es_numero_pasar_char(identificador_variable);
+	char *key = string_substring_until(&identificador_variable, 1);
 
 	int32_t *e = dictionary_get(dic_Variables,key);
 
@@ -569,8 +576,7 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	//actualizo las estructuras
 	pcb->cant_var_contexto_actual = 0;
 	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+8;
-	destruir_dic_Variables();
-	crearDiccionario();
+	dictionary_clean(dic_Variables);
 
 	txt_write_in_file(cpu_file_log, "Llamando sin retorno a etiqueta\n");
 	printf("Llamando sin retorno a etiqueta %s\n", etiqueta);
@@ -584,7 +590,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	//aca le digo a la umv q me guarde en el stack la dir de la variable a la q tengo q asignarle el valor retornado por la "funcion"
 
 	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset = (pcb->dir_primer_byte_umv_contexto_actual - pcb->dir_primer_byte_umv_segmento_stack) + (pcb->cant_var_contexto_actual*5)+8;
+	offset = (pcb->dir_primer_byte_umv_contexto_actual - base) + (pcb->cant_var_contexto_actual*5)+8;
 	tam = sizeof(int32_t);
 
 	char *buffer = copiar_int_to_buffer(donde_retornar);
@@ -599,8 +605,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 		//actualizo las estructuras
 		pcb->cant_var_contexto_actual = 0;
 		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+offset+4;
-		destruir_dic_Variables();
-		crearDiccionario();
+		dictionary_clean(dic_Variables);
 		irAlLabel(etiqueta);
 
 		txt_write_in_file(cpu_file_log, "Llamando con retorno a la etiqueta\n");
@@ -639,10 +644,12 @@ void finalizar(){
 		memcpy(&dir_context_ant, rec_ret->dato,sizeof(int32_t));
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
 	}else{
-		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
+		manejarSegmentationFault();
+		return;
 	}
 
 	//actualizar el pcb
+	printf("aca es el error:%i\n",pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8);
 	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
 	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
@@ -659,7 +666,6 @@ void retornar(t_valor_variable retorno){
 	tam= 12;
 	base= pcb->dir_primer_byte_umv_segmento_stack;
 	offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack- 12;
-
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
@@ -668,7 +674,8 @@ void retornar(t_valor_variable retorno){
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
 		memcpy(&dir_retorno, rec_ret->dato+8,sizeof(int32_t));
 	}else{
-		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
+		manejarSegmentationFault();
+		return;
 	}
 
 	//actualizar el pcb
@@ -680,7 +687,9 @@ void retornar(t_valor_variable retorno){
 	//almaceno la variable retorno en el contexto anterior
 	char *buffer = copiar_int_to_buffer(retorno);
 
-	enviar_men_cpu_umv_destruir(ALM_BYTES, dir_retorno, 1, sizeof(int32_t), buffer);
+	offset = (dir_retorno - base + 1);
+
+	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, sizeof(int32_t), buffer);
 
 	free(buffer);
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
@@ -881,8 +890,7 @@ void recibir_resp_kernel(int32_t tipo_esperado){
 void regenerar_dicc_var(){
 	int32_t base, offset,i;
 
-	destruir_dic_Variables();
-	dic_Variables = dictionary_create();
+	dictionary_clean(dic_Variables);
 
 	base= pcb->dir_primer_byte_umv_segmento_stack;
 	for(i=0;i<pcb->cant_var_contexto_actual;i++){

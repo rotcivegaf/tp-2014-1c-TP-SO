@@ -312,7 +312,8 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	txt_write_in_file(umv_file_log,"\n");
 
 	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
-		printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		//printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		enviar_men_comun_destruir(soc_cpu, SEGMEN_FAULT ,NULL, 0);
 		return;
 	}
 	//se leen de memoria los bytes
@@ -391,7 +392,8 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 	txt_write_in_file(umv_file_log,"\n");
 
 	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
-		printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		//printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
+		enviar_men_comun_destruir(soc_cpu, SEGMEN_FAULT ,NULL, 0);
 		return;
 	}
 

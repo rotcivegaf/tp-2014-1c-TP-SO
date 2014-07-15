@@ -64,10 +64,15 @@ int main(int argc, char *argv[]){
 			log_info(logger,"Finalizo la ejecucion del script correctamente");
 			fin_ejecucion = 1;
 			break;
+		case SEGMEN_FAULT:
+			fin_ejecucion = 1;
+			printf("Segmentation Fault\n");
+			log_error(logger,"Segmentation Fault");
+			break;
 		case MEM_OVERLOAD:
 			fin_ejecucion = 1;
 			printf("Memory Overload\n");
-			log_error(logger,"No hay memoria suficiente para ejecutar el programa");
+			log_error(logger,"Memory Overload");
 			break;
 		case VAR_INEX:
 			fin_ejecucion = 1;
