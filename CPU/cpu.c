@@ -331,7 +331,7 @@ void finalizarContexto(int32_t tipo_fin){
 	}
 	if (tipo_fin == SEGMEN_FAULT){
 		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string));
+		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
 	}
@@ -374,7 +374,7 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_nombre_var);
 		}
 		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, string_length(aux_string));
+		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
 	}
@@ -500,7 +500,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable)+1);
+	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable)+BARRA_CERO);
 
 	//recibo el valor
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
@@ -530,7 +530,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
 
-	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable)+1);
+	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable)+BARRA_CERO);
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
 	if(men_resp->tipo == VAR_INEX){
@@ -543,7 +543,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	if(men_resp->tipo == R_GRABAR_VALOR){
 		destruir_men_comun(men_resp);
 		char *c =  string_itoa(valor);
-		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c)+1);
+		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c)+BARRA_CERO);
 		free(c);
 		men_resp = socket_recv_comun(socketKernel);
 		destruir_men_comun(men_resp);
@@ -751,7 +751,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destruir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
+	enviar_men_comun_destruir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
 	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
 	printf("	Haciendo wait a semaforo %s\n", identificador_semaforo);
 
@@ -785,7 +785,7 @@ void wait(t_nombre_semaforo identificador_semaforo){
 }
 
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destruir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
+	enviar_men_comun_destruir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
 
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
 	printf("	Haciendo signal a semaforo %s\n", identificador_semaforo);
