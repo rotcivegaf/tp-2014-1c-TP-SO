@@ -125,37 +125,38 @@ void recibirUnPcb(){
 
 	pcb = malloc(sizeof(t_pcb));
 	if((m->tipo==CONEC_CERRADA) || (m->tipo!=PCB_Y_QUANTUM)){
-		printf("ERROR se ha perdido la coneccion con el Kernel o el tipo de dato recibido es erroneo\n");
+		printf("	ERROR se ha perdido la coneccion con el Kernel o el tipo de dato recibido es erroneo\n");
 	}else{
 		memcpy(pcb, m->pcb, sizeof(t_pcb));
 		memcpy(&quantum_max , &(m->quantum), sizeof(int32_t));
 	}
+	printf("dirstack_pcb:%i,%i\n",pcb->dir_primer_byte_umv_segmento_stack,pcb->dir_primer_byte_umv_contexto_actual);
 
 	destruir_quantum_pcb(m);
 }
 
 void crearDiccionario(){
-	int32_t base, offset, tam;
+	int32_t base, offset, pos, i;
+	char *key;
 	//si se trata de un programa con un  stack que ya tiene variables
 	int32_t tam_contexto = pcb->cant_var_contexto_actual;
-	int32_t i;
-	char aux_char;
+	base = pcb->dir_primer_byte_umv_segmento_stack;
 
 	if (tam_contexto > 0){//regenerar diccionario
-		base = pcb->dir_primer_byte_umv_segmento_stack;
 		for(i=0;i<tam_contexto;i++){
-			offset= (i)*5;
-			tam=1;
+			offset= i*5;
 
-			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
+			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
 
 			t_men_comun *rec_var = socket_recv_comun(socketUmv);
 
 			if(rec_var->tipo== R_SOL_BYTES){
-				aux_char = es_numero_pasar_char(rec_var->dato[0]);
-				char *key = string_substring_until(&aux_char, 1);
-				int32_t *pos = malloc(sizeof(int32_t));
-				*pos = base + offset;
+				//aux_char = es_numero_pasar_char(rec_var->dato[0]);
+				//char *key = string_substring_until(&aux_char, 1);
+				//int32_t *pos = malloc(sizeof(int32_t));
+				//*pos = base + offset;
+				key = string_substring_until(rec_var->dato, 1);
+				pos = base + offset;
 				dictionary_put(dic_Variables, key, pos );
 			}
 			destruir_men_comun(rec_var);
@@ -220,10 +221,8 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
-	char *aux_string = string_itoa(pcb->id);
-	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, aux_string, string_length(aux_string));
+	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, NULL, 0);
 	enviar_pcb_destruir();
-	free (aux_string);
 }
 
 void enviar_pcb_destruir(){
@@ -266,7 +265,7 @@ void signal_handler(int sig){
 void preservarContexto(){
 	int32_t base, offset, tam;
 	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset = pcb->dir_primer_byte_umv_contexto_actual - pcb->dir_primer_byte_umv_segmento_stack + (pcb->cant_var_contexto_actual*5);	// la posicion siguiente al ultimo valor de la ultima varaible
+	offset = pcb->dir_primer_byte_umv_contexto_actual - base + (pcb->cant_var_contexto_actual*5);	// la posicion siguiente al ultimo valor de la ultima varaible
 	tam = sizeof(int32_t);
 
 	char *buffer = copiar_int_to_buffer(pcb->dir_primer_byte_umv_contexto_actual);
@@ -284,7 +283,7 @@ void preservarContexto(){
 		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
 		if(r_proxins->tipo == R_ALM_BYTES){
 			txt_write_in_file(cpu_file_log, "Se almaceno correctamente el contexto\n");
-			printf("Se almaceno correctamente el contexto\n");
+			printf("	Se almaceno correctamente el contexto\n");
 			destruir_men_comun(r_proxins);
 			return;
 		}
@@ -299,14 +298,14 @@ void preservarContexto(){
 		manejarSegmentationFault();
 		return;
 	}
-	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_con->tipo);
+	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_con->tipo);
 }
 
 void finalizarContexto(int32_t tipo_fin){
 	int32_t i, base, offset;
 
 	if(tipo_fin == SEM_INEX){
-		printf("ERROR,el semaforo es inexistente\n");
+		printf("	ERROR,el semaforo es inexistente\n");
 		quantum_actual= quantum_max;
 		fueFinEjecucion=1;
 		return;
@@ -319,14 +318,14 @@ void finalizarContexto(int32_t tipo_fin){
 	}
 
 	if(tipo_fin == VAR_INEX){
-		printf("ERROR,la variable global es inexistente\n");
+		printf("	ERROR,la variable global es inexistente\n");
 		quantum_actual= quantum_max;
 		fueFinEjecucion=1;
 		return;
 	}
 
 	if (tipo_fin == ERROR){
-		printf("ERROR, la etiqueta no se ha encontrado pero creo q esta fuera del alcanse del tp\n");
+		printf("	ERROR, la etiqueta no se ha encontrado pero creo q esta fuera del alcanse del tp\n");
 		fueFinEjecucion = 1;
 		return;
 	}
@@ -337,7 +336,7 @@ void finalizarContexto(int32_t tipo_fin){
 		fueFinEjecucion = 1;
 	}
 	if (tipo_fin == OK){
-		printf("Imprmiendo variables y finalizando proceso\n");
+		printf("	Imprmiendo variables y finalizando proceso\n");
 		char *string = "\n----------Imprimo el estado final de las variable----------\n";
 
 		imprimirTexto(string);
@@ -397,12 +396,12 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	int32_t base, offset, tam;
 
 	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset= pcb->dir_primer_byte_umv_contexto_actual - base +(pcb->cant_var_contexto_actual*5);
+	offset= pcb->dir_primer_byte_umv_contexto_actual - base + (pcb->cant_var_contexto_actual*5);
 	tam = 5;
 
 	int32_t pos_mem = base + offset;
 
-	printf("Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
+	printf("	Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
 	identificador_variable = es_numero_pasar_char(identificador_variable);
 
 	char *key = string_substring_until(&identificador_variable, 1);
@@ -412,9 +411,9 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
-		int32_t *pos = malloc(sizeof(int32_t));
-		*pos = pos_mem;
-		dictionary_put(dic_Variables, key, pos);
+		//int32_t *pos = malloc(sizeof(int32_t));
+		//*pos = pos_mem;
+		dictionary_put(dic_Variables, key, pos_mem);
 		(pcb->cant_var_contexto_actual) ++;
 		txt_write_in_file(cpu_file_log, "Definiar la variable \n");
 		txt_write_in_file(cpu_file_log, "en la posicion \n");
@@ -426,26 +425,28 @@ t_puntero definirVariable(t_nombre_variable identificador_variable){
 		destruir_men_comun(r_alm);
 		return 0;
 	}
-	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
+	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
 	destruir_men_comun(r_alm);
 	return -1;
 }
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
+	int32_t *e;
+
 	/*Se fija en el diccionario de variables la posicion la posicion va a ser el data del elemento*/
 	identificador_variable = es_numero_pasar_char(identificador_variable);
 	char *key = string_substring_until(&identificador_variable, 1);
 
-	int32_t *e = dictionary_get(dic_Variables,key);
+	e = dictionary_get(dic_Variables,key);
 
 	if (e == NULL)
-		printf("ERROR no se ha podido encontrar la key:%s\n",key);
+		printf("	ERROR no se ha podido encontrar la key:%s\n",key);
 
 	txt_write_in_file(cpu_file_log, "La posicion de la variable\n");
 	txt_write_in_file(cpu_file_log, "es\n");
-	printf("La posicion de la variable: %s, es %i\n", key, *e);
+	printf("	La posicion de la variable: %s, es %i\n", key, e);
 
-	return *e;
+	return e;
 }
 
 t_valor_variable dereferenciar(t_puntero direccion_variable){
@@ -465,7 +466,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 		memcpy(&valor, men_comun->dato,men_comun->tam_dato);
 		txt_write_in_file(cpu_file_log, "Dereferenciar \n");
 		txt_write_in_file(cpu_file_log, "y su valor es \n");
-		printf("Dereferenciar %d, offset:%i y su valor es: %d\n",direccion_variable, offset,valor);
+		printf("	Dereferenciar %d, offset:%i y su valor es: %d\n",direccion_variable, offset,valor);
 	}
 	if(men_comun->tipo ==SEGMEN_FAULT){
 		manejarSegmentationFault();
@@ -489,7 +490,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	if(r_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Asignando en la direccion \n");
 		txt_write_in_file(cpu_file_log, "el valor \n");
-		printf("Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
+		printf("	Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
@@ -499,26 +500,26 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable));
+	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable)+1);
 
 	//recibo el valor
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
 	t_valor_variable valor;
 
 	if((respuesta->tipo != VAR_INEX) && (respuesta->tipo != R_OBTENER_VALOR))
-		printf("ERROR se ha recibido un tipo de dato erroneo\n");
+		printf("	ERROR se ha recibido un tipo de dato erroneo\n");
 
 	if(respuesta->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
-		printf("Error en acceso a la variable %s, no existe", variable);
+		printf("	Error en acceso a la variable %s, no existe", variable);
 		valor = 0;//todo asigno 0 si la variable no existe
 		finalizarContexto(VAR_INEX);//todo romper
 	}else{
-		memcpy(&valor, respuesta->dato,respuesta->tam_dato);
+		valor = atoi(respuesta->dato);
 
 		txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
 		txt_write_in_file(cpu_file_log, "el valor \n");
-		printf("Obteniendo el valor de compartida %s que es %c \n", variable, valor);
+		printf("	Obteniendo el valor de compartida %s que es %i \n", variable, valor);
 	}
 	destruir_men_comun(respuesta);
 
@@ -529,24 +530,26 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
 
-	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable));
+	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable)+1);
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
 	if(men_resp->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
-		printf("Error en acceso a la variable %s, no existe", variable);
+		printf("	Error en acceso a la variable %s, no existe", variable);
 		finalizarContexto(VAR_INEX);
 		destruir_men_comun(men_resp);
 		return -1;
 	}
 	if(men_resp->tipo == R_GRABAR_VALOR){
+		destruir_men_comun(men_resp);
 		char *c =  string_itoa(valor);
-		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c));
+		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c)+1);
 		free(c);
-		//todo sincronizar
+		men_resp = socket_recv_comun(socketKernel);
+		destruir_men_comun(men_resp);
 		return valor;
 	}
-	printf("ERROR el kernel me mando:%i y se esperaba otro tipo\n",men_resp->tipo);
+	printf("	ERROR el kernel me mando:%i y se esperaba otro tipo\n",men_resp->tipo);
 	return -1;
 }
 
@@ -560,31 +563,33 @@ void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 	if(pos_etiqueta != -1){
 		pcb->program_counter = pos_etiqueta;
 		txt_write_in_file(cpu_file_log, "Yendo al label \n");
-		printf("Yendo al label: %s\n", etiq_sin_blancos);
+		printf("	Yendo al label con pos: %i, con nombre: %s, \n",pos_etiqueta, etiq_sin_blancos);
 	}else{
 		txt_write_in_file(cpu_file_log, "Hubo un error en la busqueda de la etiqueta\n");
-		printf("ERROR en la busqueda de la etiqueta:%s \n",etiq_sin_blancos);
+		printf("	ERROR en la busqueda de la etiqueta:%s \n",etiq_sin_blancos);
 		finalizarContexto(ERROR);
 	}
 	free(etiq_sin_blancos);
 }
 
 void llamarSinRetorno(t_nombre_etiqueta etiqueta){
+	int32_t pos_retorno;
 	/*Preserva el contexto de ejecución actual para poder retornar luego al mismo.*/
 	preservarContexto();
 
 	//actualizo las estructuras
+	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+(5*pcb->cant_var_contexto_actual)+8;
 	pcb->cant_var_contexto_actual = 0;
-	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+5*(pcb->cant_var_contexto_actual)+8;
 	dictionary_clean(dic_Variables);
+	pos_retorno = metadata_buscar_etiqueta(etiqueta, etiquetas, pcb->tam_indice_etiquetas);
+	pcb->program_counter = pos_retorno;
 
 	txt_write_in_file(cpu_file_log, "Llamando sin retorno a etiqueta\n");
-	printf("Llamando sin retorno a etiqueta %s\n", etiqueta);
-	irAlLabel(etiqueta);
+	printf("	Llamando sin retorno a etiqueta:%s, con pos_PC:%i\n", etiqueta, pos_retorno);
 }
 
 void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
-	int32_t base, offset, tam;
+	int32_t base, offset, tam, pos_retorno;
 	//preservar el contexto, agrega al segmento stack la dir de memoria del contexto anterior y la cantidad de variables del contex anterior
 	preservarContexto();
 	//aca le digo a la umv q me guarde en el stack la dir de la variable a la q tengo q asignarle el valor retornado por la "funcion"
@@ -600,23 +605,24 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 	if(r_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Se almaceno la direccion de retorno \n");
-		printf("Se almaceno la direccion de retorno\n");
+		printf("	Se almaceno la direccion de retorno\n");
 
 		//actualizo las estructuras
-		pcb->cant_var_contexto_actual = 0;
 		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+offset+4;
+		pcb->cant_var_contexto_actual = 0;
 		dictionary_clean(dic_Variables);
-		irAlLabel(etiqueta);
+		pos_retorno = metadata_buscar_etiqueta(etiqueta, etiquetas, pcb->tam_indice_etiquetas);
+		pcb->program_counter = pos_retorno;
 
 		txt_write_in_file(cpu_file_log, "Llamando con retorno a la etiqueta\n");
-		printf("Llamando con retorno a etiqueta %s y retorna en %i\n", etiqueta, donde_retornar);
+		printf("	Llamando con retorno a etiqueta %s, pos_PC:%i\n", etiqueta, pos_retorno);
 		return;
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
 		manejarSegmentationFault();
 		return;
 	}
-	printf("ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
+	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
 }
 
 void finalizar(){
@@ -626,7 +632,7 @@ void finalizar(){
 	if(pcb->dir_primer_byte_umv_contexto_actual == pcb->dir_primer_byte_umv_segmento_stack){
 		finalizarContexto(OK);
 		txt_write_in_file(cpu_file_log, "Finalizando el programa actual\n");
-		printf("Finalizando el programa actual\n");
+		printf("	Finalizando el programa actual\n");
 		return;
 	}
 
@@ -649,7 +655,6 @@ void finalizar(){
 	}
 
 	//actualizar el pcb
-	printf("aca es el error:%i\n",pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8);
 	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
 	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
@@ -695,9 +700,9 @@ void retornar(t_valor_variable retorno){
 	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
 	if(rec_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");
-		printf("Retornando valor de variable:%d en la direccion %d\n", retorno, dir_retorno);
+		printf("	Retornando valor de variable:%d en la direccion %d\n", retorno, dir_retorno);
 	}else{
-		printf("ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
+		printf("	ERROR se esperaba un tipo de dato R_SOL_BYTES y recibo un:%i\n", rec_ret->tipo);
 	}
 }
 
@@ -740,37 +745,37 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	enviar_pcb_destruir();
 
 	txt_write_in_file(cpu_file_log, "Saliendo a i/o en dispositivo\n");
-	printf("Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
+	printf("	Saliendo a entrada/salida en dispositivo %s por esta cantidad de tiempo%d\n", dispositivo, tiempo);
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
 	enviar_men_comun_destruir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo));
 	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
-	printf("Haciendo wait a semaforo %s\n", identificador_semaforo);
+	printf("	Haciendo wait a semaforo %s\n", identificador_semaforo);
 
 	t_men_comun *men_resp = socket_recv_comun(socketKernel);
 
 	switch(men_resp->tipo){
 		case SEM_OK:
 			//El semaforo esta disponible, seguir procesando o lo que sea
-			printf("Se recibio el mensaje SEM_OK, se continuara con la ejecucion\n");
+			printf("	Se recibio el mensaje SEM_OK, se continuara con la ejecucion\n");
 			txt_write_in_file(cpu_file_log, "El semaforo esta disponible, se continua con la ejecucion.");
 			//No hago nada, continua con la ejecucion normalmente
 			break;
 		case SEM_BLOQUEADO:
 			finalizarContexto(SEM_BLOQUEADO); // para que no busque la proxima instruccion, y se quede bloqueado
 			// no hace falta mandar nada al kernel, ya que al avisar que lo bloquea lo manda a bloqueado por get_cpu
-			printf("Se recibio el mensaje SEM_BLOQUEADO del semaforo,se bloquea el programa n° %i\n", pcb->id);
+			printf("	Se recibio el mensaje SEM_BLOQUEADO del semaforo,se bloquea el programa n° %i\n", pcb->id);
 			txt_write_in_file(cpu_file_log, "Se bloqueo el programa por un semaforo, se desaloja de la cpu.");
 			//El semaforo esta bloqueado, desalojar(suponiendo que tiene que cambiar de proceso, si es asi, mandar el pcb)
 			break;
 		case SEM_INEX:
-			printf("Acceso a semaforo %s inexistente \n",identificador_semaforo);
+			printf("	Acceso a semaforo %s inexistente \n",identificador_semaforo);
 			txt_write_in_file(cpu_file_log,"Acceso a semaforo inexistente");
 			finalizarContexto(SEM_INEX);
 			break;
 		default:
-			printf("El tipo de dato recibido: %i es erroneo\n",men_resp->tipo);
+			printf("	El tipo de dato recibido: %i es erroneo\n",men_resp->tipo);
 			txt_write_in_file(cpu_file_log,"Se recibio un msj del kernel de tipo erroneo");
 			break;
 	}
@@ -781,13 +786,13 @@ void mi_signal(t_nombre_semaforo identificador_semaforo){
 	enviar_men_comun_destruir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo));
 
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
-	printf("Haciendo signal a semaforo %s\n", identificador_semaforo);
+	printf("	Haciendo signal a semaforo %s\n", identificador_semaforo);
 
 	t_men_comun *respuesta = socket_recv_comun(socketKernel);
 
 	if(respuesta->tipo == SEM_INEX){
 		txt_write_in_file(cpu_file_log,"Signal a semaforo inexistente\n");
-		printf("Signal a semaforo %s inexistente \n", identificador_semaforo);
+		printf("	Signal a semaforo %s inexistente \n", identificador_semaforo);
 		finalizarContexto(SEM_INEX);
 		}
 	destruir_men_comun(respuesta);
@@ -883,12 +888,13 @@ void enviar_men_cpu_umv_destruir(int32_t tipo, int32_t base, int32_t offset, int
 void recibir_resp_kernel(int32_t tipo_esperado){
 	t_men_comun *men_sincro_ok = socket_recv_comun(socketKernel);
 	if(men_sincro_ok->tipo != tipo_esperado)
-		printf("ERROR el kernel me mando:%i y se esperaba %i\n",men_sincro_ok->tipo,tipo_esperado);
+		printf("	ERROR el kernel me mando:%i y se esperaba %i\n",men_sincro_ok->tipo,tipo_esperado);
 	destruir_men_comun(men_sincro_ok);
 }
 
 void regenerar_dicc_var(){
-	int32_t base, offset,i;
+	int32_t base, offset,i, pos;
+
 
 	dictionary_clean(dic_Variables);
 
@@ -899,11 +905,13 @@ void regenerar_dicc_var(){
 		enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
 
 		t_men_comun *men_var = socket_recv_comun(socketUmv);
-		char *key = malloc(2);
-		key[0] = men_var->dato[0];
-		key[1] = '\0';
-		int32_t *pos = malloc(sizeof(int32_t));
-		*pos = base + offset;
+		//char *key = malloc(2);
+		//key[0] = men_var->dato[0];
+		//key[1] = '\0';
+		//int32_t *pos = malloc(sizeof(int32_t));
+		//*pos = base + offset;
+		char *key = string_substring_until(men_var->dato, 1);
+		pos = base + offset;
 		dictionary_put(dic_Variables, key, pos );
 	}
 }

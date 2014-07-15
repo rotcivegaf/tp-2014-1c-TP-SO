@@ -204,10 +204,7 @@ void *pcp(t_param_pcp *param_pcp){
 	fd_set master, read_fds;
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
-	t_men_comun *men_grab_valor;
 	t_semaforo *semaforo;
-	int32_t *valor;
-	char *string_valor;
 
 	// Crea el hilo que pasa los pcb de ready a exec
 	pthread_t hilo_ready_exec;
@@ -287,6 +284,7 @@ void *pcp(t_param_pcp *param_pcp){
 						free(aux_cpu);
 						socket_cerrar(i);
 						FD_CLR(i, &master);
+						destruir_men_comun(men_cpu);
 						break;
 					case SIGUSR1_CPU_DESCONEC:
 						txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
@@ -310,47 +308,24 @@ void *pcp(t_param_pcp *param_pcp){
 						free(aux_cpu);
 						socket_cerrar(i);
 						FD_CLR(i, &master);
+						destruir_men_comun(men_cpu);
 						break;
 					case FIN_QUANTUM:
-						aux_cpu = get_cpu(i);
-						if (aux_cpu->id_prog_exec != 0){
-							// Actualizacion pcb
-							aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-							t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(i);
-							actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
-							destruir_quantum_pcb(men_quantum_pcb);
-							// Setea en la estructura del cpu como que no esta ejecutando nada
-							aux_cpu->id_prog_exec = 0;
-							// Pone el pcb en ready
-							pthread_mutex_lock(&mutex_ready);
-							queue_push(colas->cola_ready,aux_pcb_otros);
-							sem_incre(&cant_ready);
-							pthread_mutex_unlock(&mutex_ready);
-
-							// Pone el cpu devuelta en la cola de cpus
-							pthread_mutex_lock(&mutex_uso_cola_cpu);
-							queue_push(cola_cpu,aux_cpu);
-							sem_incre(&cant_cpu_libres);
-							pthread_mutex_unlock(&mutex_uso_cola_cpu);
-
-
-							txt_write_in_file(pcp_log,"Termino un quantum del programa:");
-							logear_int(pcp_log,aux_pcb_otros->pcb->id);
-							txt_write_in_file(pcp_log,"\n");
-						}else
-							printf("ERROR ningun cpu esta procesando el proceso con socket nº%i\n",i);
+						fin_quantum(i,men_cpu);
 						break;
 					case FIN_EJECUCION:
 						fin_ejecucion(FIN_EJECUCION,i);
 						txt_write_in_file(pcp_log,"Termino la ejecucion del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
+						destruir_men_comun(men_cpu);
 						break;
 					case SEGMEN_FAULT:
 						fin_ejecucion(SEGMEN_FAULT,i);
 						txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
 						logear_int(pcp_log,aux_pcb_otros->pcb->id);
 						txt_write_in_file(pcp_log,"\n");
+						destruir_men_comun(men_cpu);
 						break;
 					case IMPRIMIR_TEXTO:
 						imprimir_texto(i, men_cpu);
@@ -359,43 +334,10 @@ void *pcp(t_param_pcp *param_pcp){
 						imprimir_valor(i, men_cpu);
 						break;
 					case OBTENER_VALOR:
-						if (dictionary_has_key(diccionario_variables, men_cpu->dato)){
-							valor = dictionary_get(diccionario_variables,men_cpu->dato);
-							string_valor = string_itoa(*valor);
-							enviar_men_comun_destruir(i,R_OBTENER_VALOR,string_valor,string_length(string_valor));
-							txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-						}else{
-							llamada_erronea(i, VAR_INEX);
-							txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-						}
+						obtener_valor_compartida(i, men_cpu);
 						break;
 					case GRABAR_VALOR:
-						if (dictionary_has_key(diccionario_variables, men_cpu->dato)){
-							enviar_men_comun_destruir(i,R_GRABAR_VALOR,NULL,0);
-							men_grab_valor = socket_recv_comun(i);
-							if((men_grab_valor->tipo) != VALOR_ASIGNADO)
-								printf("ERROR: esperaba recibir VALOR_ASIGNADO y recibi: %i",men_grab_valor->tipo);
-
-							dictionary_remove(diccionario_variables,men_cpu->dato);//todo free???
-							int32_t *aux_i = malloc(sizeof(int32_t));
-							*aux_i= atoi(men_grab_valor->dato);
-							dictionary_put(diccionario_variables,men_cpu->dato,aux_i);
-
-							destruir_men_comun(men_grab_valor);
-							txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-
-						}else{
-							llamada_erronea(i, VAR_INEX);
-							txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-						}
+						grabar_valor_compartida(i, men_cpu);
 						break;
 					case WAIT:
 						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
@@ -426,6 +368,7 @@ void *pcp(t_param_pcp *param_pcp){
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
 						}
+						destruir_men_comun(men_cpu);
 						break;
 					case SIGNAL:
 						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
@@ -450,21 +393,124 @@ void *pcp(t_param_pcp *param_pcp){
 							logear_int(pcp_log,i);
 							txt_write_in_file(pcp_log,"\n");
 						}
+						destruir_men_comun(men_cpu);
 						break;
 					case IO_ID:
 						enviar_IO(i, men_cpu->dato);
+						destruir_men_comun(men_cpu);
 						break;
 					default:
 						printf("ERROR se esperaba al recibir el tipo de dato:%i\n", men_cpu->tipo);
 						break;
 					}
-					destruir_men_comun(men_cpu);
 				}
 			}
 		}
 		usleep(_RETARDO*1000);
 	}
 	return NULL;
+}
+
+void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum){
+	t_cpu *aux_cpu = get_cpu(soc_cpu);
+	t_pcb_otros *aux_pcb_otros;
+
+	// Actualizacion pcb
+	aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+	t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(soc_cpu);
+	actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
+	destruir_quantum_pcb(men_quantum_pcb);
+
+	// Setea en la estructura del cpu como que no esta ejecutando nada
+	aux_cpu->id_prog_exec = 0;
+
+	// Pone el pcb en ready
+	pthread_mutex_lock(&mutex_ready);
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+
+	queue_push(colas->cola_ready,aux_pcb_otros);
+	queue_push(cola_cpu,aux_cpu);
+
+	sem_incre(&cant_ready);
+	sem_incre(&cant_cpu_libres);
+
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	pthread_mutex_unlock(&mutex_ready);
+
+	txt_write_in_file(pcp_log,"Termino un quantum del programa:");
+	logear_int(pcp_log,aux_pcb_otros->pcb->id);
+	txt_write_in_file(pcp_log,"\n");
+
+	destruir_men_comun(men_fin_quantum);
+}
+
+void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
+	int32_t *valor;
+	char *string_valor;
+	char *key = men_obt_valor->dato;
+
+	if (dictionary_has_key(diccionario_variables, key)){
+		valor = dictionary_get(diccionario_variables, key);
+		string_valor = string_itoa(valor);//todo aca quede
+		//free(valor);
+		enviar_men_comun_destruir(soc_cpu ,R_OBTENER_VALOR,string_valor,string_length(string_valor)+1);
+		txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}else{
+		llamada_erronea(soc_cpu, VAR_INEX);
+		txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}
+	destruir_men_comun(men_obt_valor);
+}
+
+void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
+	int32_t valor;
+	char *key = men_gra_valor->dato;
+	t_men_comun *men_valor;
+
+	if (dictionary_has_key(diccionario_variables, key)){
+
+		enviar_men_comun_destruir(soc_cpu,R_GRABAR_VALOR,NULL,0);
+		men_valor = socket_recv_comun(soc_cpu);
+
+		if((men_valor->tipo) != VALOR_ASIGNADO)
+			printf("ERROR: esperaba recibir VALOR_ASIGNADO y recibi: %i",men_valor->tipo);
+
+		dictionary_remove(diccionario_variables,key);
+		valor = atoi(men_valor->dato);
+		dictionary_put(diccionario_variables,key, valor);
+		txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+		destruir_men_comun(men_valor);
+
+		enviar_men_comun_destruir(soc_cpu,R_GRABAR_VALOR,NULL,0);
+	}else{
+		llamada_erronea(soc_cpu, VAR_INEX);
+		txt_write_in_file(pcp_log,"Error en GRABAR VALOR (var inexistente) por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}
+	destruir_men_comun(men_gra_valor);
+}
+
+void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
+	t_cpu *aux_cpu = get_cpu(soc_cpu);
+	t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
+
+	aux_cpu->id_prog_exec = 0;
+
+	aux_pcb->tipo_fin_ejecucion=tipo_error;
+	pasar_pcb_exit(aux_pcb);
+	enviar_men_comun_destruir(soc_cpu,tipo_error,NULL,0);
+
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	sem_incre(&cant_cpu_libres);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 }
 
 void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor){
@@ -647,22 +693,6 @@ t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog){
 		queue_push(cola, ret);
 	}
 	return NULL;
-}
-
-void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
-	t_cpu *aux_cpu = get_cpu(soc_cpu);
-	t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
-
-	aux_cpu->id_prog_exec = 0;
-
-	aux_pcb->tipo_fin_ejecucion=tipo_error;
-	pasar_pcb_exit(aux_pcb);
-	enviar_men_comun_destruir(soc_cpu,tipo_error,NULL,0);
-
-	pthread_mutex_lock(&mutex_uso_cola_cpu);
-	queue_push(cola_cpu,aux_cpu);
-	sem_incre(&cant_cpu_libres);
-	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 }
 
 t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
@@ -1054,7 +1084,6 @@ void *manejador_IO(t_IO *io){
 
 		proceso = queue_pop(io->procesos);
 
-
 		for(i=0; i<proceso->unidades;i++)
 			usleep(io->io_sleep*1000);
 
@@ -1072,6 +1101,7 @@ void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
 
 void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
 	pcb->cant_var_contexto_actual = pcb_actualizado->cant_var_contexto_actual;
+	pcb->dir_primer_byte_umv_contexto_actual = pcb_actualizado->dir_primer_byte_umv_contexto_actual;
 	pcb->program_counter = pcb_actualizado->program_counter;
 }
 
@@ -1079,8 +1109,8 @@ t_datos_config *levantar_config(){
 	void _imp_disp(char *key, t_IO *io){
 		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
-	void _imp_var_glob(char* key, int32_t *valor){
-		printf("	ID:%s ,Valor:%i\n", key, *valor);
+	void _imp_var_glob(char* key, int32_t valor){
+		printf("	ID:%s ,Valor:%i\n", key, valor);
 	}
 	void _imp_sem(char* key, t_semaforo *un_sem){
 		printf("	ID:%s ,Valor:%i\n", key, un_sem->valor);
@@ -1129,12 +1159,9 @@ t_datos_config *levantar_config(){
 	ret->tam_stack = config_get_int_value( diccionario_config, "TAMANIO_STACK");
 	char **aux_var_glob = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
 
-	for (i=0; aux_var_glob[i] != '\0'; i++){
-		int32_t *valor_ini = malloc(sizeof(int32_t));
-		*valor_ini = 0;
+	int32_t valor_ini = 0;
+	for (i=0; aux_var_glob[i] != '\0'; i++)
 		dictionary_put(diccionario_variables, aux_var_glob[i],valor_ini);
-	}
-
 	free(aux_var_glob);
 
 	printf("\n\n--------------------Archivo Config--------------------------------\n");

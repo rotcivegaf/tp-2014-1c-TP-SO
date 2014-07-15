@@ -121,6 +121,9 @@
 	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
 	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);
 	void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto);
+	void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor);
+	void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor);
+	void fin_quantum(int32_t soc_cpu, t_men_comun *men_fin_quantum);
 
 	void logear_int(FILE* destino,int32_t un_int);
 
