@@ -32,10 +32,10 @@ int main(void){
 	t_datos_config *diccionario_config = levantar_config();
 
 	plp_log = txt_open_for_append("./kernel/logs/plp.log");
-	txt_write_in_file(plp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(plp_log,"---------------------Nueva ejecucion------------------------------\n");
 
 	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
-	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion------------------------------\n");
 
 	//Inicializacion semaforos
 	crear_cont(&cant_new , 0);
@@ -204,7 +204,6 @@ void *pcp(t_param_pcp *param_pcp){
 	fd_set master, read_fds;
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
-	t_men_comun *men_id_prog;
 	t_men_comun *men_grab_valor;
 	t_semaforo *semaforo;
 	int32_t *valor;
@@ -354,21 +353,10 @@ void *pcp(t_param_pcp *param_pcp){
 						txt_write_in_file(pcp_log,"\n");
 						break;
 					case IMPRIMIR_TEXTO:
+						imprimir_texto(i, men_cpu);
+						break;
 					case IMPRIMIR_VALOR:
-						men_id_prog = socket_recv_comun(i);
-
-						if (men_id_prog->tipo != ID_PROG)
-							printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
-						int32_t aux_i = atoi(men_id_prog->dato);
-						aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
-
-						socket_send_comun(aux_pcb_otros->n_socket, men_cpu);
-						destruir_men_comun(men_id_prog);
-
-						txt_write_in_file(pcp_log,"IMPRIMIR por cpu con socket n°");
-						logear_int(pcp_log,i);
-						txt_write_in_file(pcp_log,"\n");
-						enviar_men_comun_destruir(i, R_IMPRIMIR,NULL,0);
+						imprimir_valor(i, men_cpu);
 						break;
 					case OBTENER_VALOR:
 						if (dictionary_has_key(diccionario_variables, men_cpu->dato)){
@@ -479,6 +467,60 @@ void *pcp(t_param_pcp *param_pcp){
 	return NULL;
 }
 
+void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor){
+	t_pcb_otros *aux_pcb_otros;
+	t_men_comun *men_id_prog;
+	int32_t aux_i;
+
+	printf("%s",men_imp_valor->dato);
+
+	men_id_prog = socket_recv_comun(soc);
+
+	if (men_id_prog->tipo != ID_PROG)
+		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
+
+	aux_i = atoi(men_id_prog->dato);
+
+	pthread_mutex_lock(&mutex_exec);
+	aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
+	pthread_mutex_unlock(&mutex_exec);
+
+	socket_send_comun(aux_pcb_otros->n_socket, men_imp_valor);
+	destruir_men_comun(men_id_prog);
+
+	txt_write_in_file(pcp_log,"IMPRIMIR_VALOR por cpu con socket n°");
+	logear_int(pcp_log,soc);
+	txt_write_in_file(pcp_log,"\n");
+
+	enviar_men_comun_destruir(soc, R_IMPRIMIR,NULL,0);
+}
+
+void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
+	t_pcb_otros *aux_pcb_otros;
+	t_men_comun *men_id_prog;
+	int32_t aux_i;
+	printf("%s",men_imp_texto->dato);
+	men_id_prog = socket_recv_comun(soc);
+
+	if (men_id_prog->tipo != ID_PROG)
+		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
+
+	aux_i = atoi(men_id_prog->dato);
+
+	pthread_mutex_lock(&mutex_exec);
+	aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
+	pthread_mutex_unlock(&mutex_exec);
+
+	socket_send_comun(aux_pcb_otros->n_socket, men_imp_texto);
+	destruir_men_comun(men_id_prog);
+
+	txt_write_in_file(pcp_log,"IMPRIMIR_TEXTO por cpu con socket n°");
+	logear_int(pcp_log,soc);
+	txt_write_in_file(pcp_log,"\n");
+
+	enviar_men_comun_destruir(soc, R_IMPRIMIR,NULL,0);
+}
+
 void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	t_cpu *aux_cpu = get_cpu(socket_cpu);
 	t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
@@ -498,7 +540,6 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
 
-	pthread_mutex_lock(&mutex_exec);
 	int32_t tam = queue_size(colas->cola_exec);
 
 	for(i=0 ;i < tam ;i++){
@@ -509,12 +550,10 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 
 			queue_push(colas->cola_exec, aux_pcb_otros);
 			aux_pcb_otros = queue_peek(colas->cola_exec);
-			pthread_mutex_unlock(&mutex_exec);
 			return aux_pcb_otros;
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	pthread_mutex_unlock(&mutex_exec);
 	printf("ERROR EN get_pcb_otros_exec\n");
 	return NULL;
 }
@@ -1098,7 +1137,7 @@ t_datos_config *levantar_config(){
 
 	free(aux_var_glob);
 
-	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
+	printf("\n\n--------------------Archivo Config--------------------------------\n");
 	printf("Puerto Proc-Prog = %s\n", ret->puerto_prog);
 	printf("Puerto CPU = %s\n", ret->puerto_cpu);
 	printf("UMV\n");
@@ -1117,8 +1156,7 @@ t_datos_config *levantar_config(){
 	printf("	Tamanio Stack = %i\n", ret->tam_stack);
 	printf("Variables Globales\n");
 	dictionary_iterator(diccionario_variables, (void *)_imp_var_glob);
-
-	printf("------------------------------------------------------------------------------------\n\n");
+	printf("------------------------------------------------------------------\n\n");
 	return ret;
 }
 

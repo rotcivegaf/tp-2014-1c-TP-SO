@@ -119,7 +119,8 @@
 
 	//funciones del pcp
 	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
-
+	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);
+	void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto);
 
 	void logear_int(FILE* destino,int32_t un_int);
 

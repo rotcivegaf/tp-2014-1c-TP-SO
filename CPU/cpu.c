@@ -19,9 +19,10 @@ AnSISOP_kernel kernel_functions = {
 		.AnSISOP_wait 	= wait,
 		.AnSISOP_signal = mi_signal};
 
-enum ShapeType {
-	ERROR,
-	OK
+enum {	BARRA_CERO = 1 };
+enum tipo_fin {
+	ERROR = -1,
+	OK = 0
 };
 
 t_dictionary *dic_Variables;
@@ -44,7 +45,7 @@ int main(){
 	sigemptyset(&sa.sa_mask); // conjunto de señales a bloquear durante la ejecucion del signal-catching function
 
 	cpu_file_log = txt_open_for_append("./CPU/logs/cpu.log");
-	txt_write_in_file(cpu_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(cpu_file_log,"---------------------Nueva ejecucion------------------------------\n");
 
 	txt_write_in_file(cpu_file_log, "Cargo la configuracion desde el archivo\n");
 
@@ -204,9 +205,11 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	//recibir la instruccion a ejecutar
 	t_men_comun *rec_inst = socket_recv_comun(socketUmv);
 
-	char proxInst[tam];
+	char proxInst[tam+BARRA_CERO];
+
 	if(rec_inst->tipo == R_SOL_BYTES){
 		memcpy(proxInst, rec_inst->dato, tam);
+		proxInst[tam] = '\0';
 		char *proxInst_sin_blancos = sacar_caracteres_escape(proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar:%s\n",proxInst_sin_blancos);
@@ -690,29 +693,39 @@ void retornar(t_valor_variable retorno){
 }
 
 void imprimir(t_valor_variable valor_mostrar){
-	char *aux = string_itoa(valor_mostrar);
-	imprimirTexto(aux);
-	free(aux);
-}
+	char *string_int = string_itoa(valor_mostrar);
 
-void imprimirTexto(char* texto){
-	char *texto_sin_blancos = sacar_caracteres_escape(texto);
-
-	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto_sin_blancos, string_length(texto_sin_blancos));
+	enviar_men_comun_destruir(socketKernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
 	char *aux_string = string_itoa(pcb->id);
-	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string));
+	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
 	free(aux_string);
 	recibir_resp_kernel(R_IMPRIMIR);
 
-	txt_write_in_file(cpu_file_log, "Imprimiendo texto\n");
-	printf("Imprimiendo texto: %s\n", texto_sin_blancos);
-	free(texto_sin_blancos);
+	txt_write_in_file(cpu_file_log, "	Imprimiendo valor\n");
+	printf("	Imprimiendo valor: %s\n", string_int);
+	free(string_int);
+}
+
+void imprimirTexto(char* texto){
+	char *texto_sin_esc = sacar_caracteres_escape(texto);
+
+	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto_sin_esc, string_length(texto_sin_esc)+BARRA_CERO);
+
+	char *aux_string = string_itoa(pcb->id);
+	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+	free(aux_string);
+
+	recibir_resp_kernel(R_IMPRIMIR);
+
+	txt_write_in_file(cpu_file_log, "	Imprimiendo texto\n");
+	printf("	Imprimiendo texto: %s\n", texto_sin_esc);
+	free(texto_sin_esc);
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	enviar_men_comun_destruir(socketKernel, IO_ID, dispositivo, string_length(dispositivo));
+	enviar_men_comun_destruir(socketKernel, IO_ID, dispositivo, string_length(dispositivo)+BARRA_CERO);
 	char *aux_tiempo = string_itoa(tiempo);
-	enviar_men_comun_destruir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo));
+	enviar_men_comun_destruir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo)+BARRA_CERO);
 	free(aux_tiempo);
 
 	enviar_pcb_destruir();
@@ -826,12 +839,12 @@ void handshake_kernel(char *puerto, char *ip){
 }
 
 void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *ipUmv){
-	printf("\n\n------------------------------Archivo Config----------------------------------------\n");
+	printf("\n\n------------------------------Archivo Config----------------------\n");
 	printf("	Puerto Kernel	= %s\n", puertoKernel);
 	printf("	IP Kernel	= %s\n", ipKernel);
 	printf("	Puerto UMV	= %s\n", puertoUmv);
 	printf("	IP UMV		= %s\n", ipUmv);
-	printf("------------------------------------------------------------------------------------\n\n");
+	printf("------------------------------------------------------------------\n\n");
 }
 
 void destruir_dic_Variables(){
@@ -896,5 +909,6 @@ void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_
 char *sacar_caracteres_escape(char *un_string){
 	char *aux_string = string_duplicate(un_string);
 	string_trim(&aux_string);
+
 	return aux_string;
 }
