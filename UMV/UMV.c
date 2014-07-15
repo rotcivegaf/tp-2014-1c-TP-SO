@@ -311,11 +311,6 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 	traducir_tipo_men_bytes_y_logear(men_bytes->tipo);
 	txt_write_in_file(umv_file_log,"\n");
 
-	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
-		//printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
-		enviar_men_comun_destruir(soc_cpu, SEGMEN_FAULT ,NULL, 0);
-		return;
-	}
 	//se leen de memoria los bytes
 	char *bytes = solicitar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
 
@@ -330,6 +325,10 @@ void gestionar_solicitud_bytes(int32_t soc_cpu,t_men_cpu_umv *men_bytes, int32_t
 
 char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam){
 	int32_t i;
+
+	if ((offset < 0) || (base < 0) || (offset > tam_mem_total) || (tam > tam_mem_total))
+		return NULL;
+
 	char *ret = malloc(tam);
 	pthread_mutex_lock(&mutex_list_seg);
 	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
@@ -391,21 +390,19 @@ void gestionar_almacenamiento_bytes(int32_t soc_cpu, t_men_cpu_umv *men_bytes, i
 		logear_char(umv_file_log,men_bytes->buffer[i]);
 	txt_write_in_file(umv_file_log,"\n");
 
-	if ((men_bytes->offset < 0) || (men_bytes->offset > tam_mem_total)){
-		//printf("ERROR La cpu me ha mandado algo erroneo, id_proc:%i, base:%i, offset:%i, tam:%i\n",proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam);
-		enviar_men_comun_destruir(soc_cpu, SEGMEN_FAULT ,NULL, 0);
-		return;
-	}
-
 	resp = almacenar_bytes(proc_activo, men_bytes->base, men_bytes->offset, men_bytes->tam, men_bytes->buffer);
 
 	if (resp==SEGMEN_FAULT){
-			enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
-		}else
-			enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
+		enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
+	}else
+		enviar_men_comun_destruir(soc_cpu, resp ,NULL, 0);
 }
 
 int32_t almacenar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam, char *buffer){
+
+	if ((offset < 0) || (base < 0) || (offset > tam_mem_total) || (tam > tam_mem_total))
+		return SEGMEN_FAULT;
+
 	pthread_mutex_lock(&mutex_list_seg);
 	//se busca el segmento donde coincida la direccion logica con la base
 	t_seg *aux_seg = buscar_segmento_dir_logica(id_proc, base);
