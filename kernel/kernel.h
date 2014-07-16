@@ -117,6 +117,8 @@
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
 	//funciones del pcp
+	void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu);
+	void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu);
 	void enviar_IO(int32_t soc_cpu, char *id_IO);
 	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
 	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);

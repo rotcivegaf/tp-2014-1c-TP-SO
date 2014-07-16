@@ -1,6 +1,7 @@
 #include "kernel.h"
 
 fd_set conj_soc_progs;   // conjunto maestro de sockets del PLP(sockets de progrmas)
+fd_set conj_soc_cpus;    // conjunto maestro de sockets del PCP(sockets de cpus)
 int32_t soc_umv;
 t_colas *colas;  //colas de los cinco estados de los procesos
 t_queue *cola_cpu; //cola donde tengo los cpu conectados
@@ -149,6 +150,8 @@ void *plp(t_param_plp *param_plp){
 						destruir_men_comun(men_cod_prog);
 
 						t_cpu *aux_cpu=get_cpu_soc_prog(i);
+						if (aux_cpu==NULL)
+							break;
 						socket_cerrar(i);
 						aux_cpu->id_prog_exec = 0;
 
@@ -212,7 +215,7 @@ void *plp(t_param_plp *param_plp){
 
 void *pcp(t_param_pcp *param_pcp){
 	int32_t i, fdmax, cpu_new_fd;
-	fd_set master, read_fds;
+	fd_set read_fds;
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
 	t_semaforo *semaforo;
@@ -228,14 +231,14 @@ void *pcp(t_param_pcp *param_pcp){
 	int32_t listener_cpu = socket_crear_server(param_pcp->puerto_cpu);
 	txt_write_in_file(pcp_log,"Escuchando conexiones entrantes de cpus \n");
 
-	FD_ZERO(&master);
+	FD_ZERO(&conj_soc_cpus);
 	FD_ZERO(&read_fds);
-	FD_SET(listener_cpu, &master);
+	FD_SET(listener_cpu, &conj_soc_cpus);
 	fdmax = listener_cpu;
 
 	while(quit_sistema){
 
-		read_fds = master;
+		read_fds = conj_soc_cpus;
 
 		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			txt_write_in_file(pcp_log,"Error en el select \n");
@@ -268,7 +271,7 @@ void *pcp(t_param_pcp *param_pcp){
 					pthread_mutex_unlock(&mutex_uso_cola_cpu);
 
 					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
-					FD_SET(cpu_new_fd, &master);
+					FD_SET(cpu_new_fd, &conj_soc_cpus);
 
 					if (cpu_new_fd > fdmax)
 						fdmax = cpu_new_fd;
@@ -279,47 +282,10 @@ void *pcp(t_param_pcp *param_pcp){
 					t_men_comun *men_cpu = socket_recv_comun(i);
 					switch(men_cpu->tipo){
 					case CONEC_CERRADA:
-						txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
-						logear_int(pcp_log,i);
-						txt_write_in_file(pcp_log,"\n");
-						printf("PCP-select: CPU desconectada n°socket %i\n", i);
-						// Agarra el cpu a partir de su n° de socket
-						aux_cpu = get_cpu(i);
-						if (aux_cpu->id_prog_exec != 0){
-							// Saca el pcb que corresponde de la cola de ejec a partir del id
-							aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
-							aux_pcb_otros->tipo_fin_ejecucion= CPU_DESCONEC;
-							// Pone el pcb en exit
-							pasar_pcb_exit(aux_pcb_otros);
-						}
-						free(aux_cpu);
-						socket_cerrar(i);
-						FD_CLR(i, &master);
-						destruir_men_comun(men_cpu);
+						conec_cerrada_cpu(i, men_cpu);
 						break;
 					case SIGUSR1_CPU_DESCONEC:
-						txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
-						logear_int(pcp_log,i);
-						txt_write_in_file(pcp_log,"\n");
-						printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", i);
-						// Agarra el cpu a partir de su n° de socket
-						aux_cpu = get_cpu(i);
-						if (aux_cpu->id_prog_exec != 0){
-							// Actualizacion pcb
-							aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-							t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(i);
-							actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
-							destruir_quantum_pcb(men_quantum_pcb);
-							// Pone el pcb en ready
-							pthread_mutex_lock(&mutex_ready);
-							queue_push(colas->cola_ready,aux_pcb_otros);
-							sem_incre(&cant_ready);
-							pthread_mutex_unlock(&mutex_ready);
-						}
-						free(aux_cpu);
-						socket_cerrar(i);
-						FD_CLR(i, &master);
-						destruir_men_comun(men_cpu);
+						manejador_sigusr1(i, men_cpu);
 						break;
 					case FIN_QUANTUM:
 						fin_quantum(i);
@@ -415,6 +381,58 @@ void *pcp(t_param_pcp *param_pcp){
 		usleep(_RETARDO*1000);
 	}
 	return NULL;
+}
+
+void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
+	t_cpu *aux_cpu;
+	t_pcb_otros *aux_pcb_otros;
+
+	txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
+	logear_int(pcp_log,soc_cpu);
+	txt_write_in_file(pcp_log,"\n");
+	printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", soc_cpu);
+	// Agarra el cpu a partir de su n° de socket
+	aux_cpu = get_cpu(soc_cpu);
+	if (aux_cpu->id_prog_exec != 0){
+		// Actualizacion pcb
+		aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
+		t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(soc_cpu);
+		actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
+		destruir_quantum_pcb(men_quantum_pcb);
+		// Pone el pcb en ready
+		pthread_mutex_lock(&mutex_ready);
+		queue_push(colas->cola_ready,aux_pcb_otros);
+		sem_incre(&cant_ready);
+		pthread_mutex_unlock(&mutex_ready);
+	}
+	free(aux_cpu);
+	socket_cerrar(soc_cpu);
+	FD_CLR(soc_cpu, &conj_soc_cpus);
+	destruir_men_comun(men_cpu);
+}
+
+void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
+	t_cpu *aux_cpu;
+	t_pcb_otros *aux_pcb_otros;
+
+	txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
+	logear_int(pcp_log,soc_cpu);
+	txt_write_in_file(pcp_log,"\n");
+	printf("PCP-select: CPU desconectada n°socket %i\n", soc_cpu);
+
+	// Agarra el cpu a partir de su n° de socket
+	aux_cpu = get_cpu(soc_cpu);
+	if (aux_cpu->id_prog_exec != 0){
+		// Saca el pcb que corresponde de la cola de ejec a partir del id
+		aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+		aux_pcb_otros->tipo_fin_ejecucion= CPU_DESCONEC;
+		// Pone el pcb en exit
+		pasar_pcb_exit(aux_pcb_otros);
+	}
+	free(aux_cpu);
+	FD_CLR(soc_cpu, &conj_soc_cpus);
+	socket_cerrar(soc_cpu);
+	destruir_men_comun(men_cpu);
 }
 
 void enviar_IO(int32_t soc_cpu, char *id_IO){
@@ -773,7 +791,7 @@ t_cpu *get_cpu_soc_prog(int32_t soc_prog){
 		queue_push(cola_cpu, cpu);
 	}
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-	printf("ERROR EN GET_CPU_ID_PROC\n");
+
 	return NULL;
 }
 
@@ -906,8 +924,10 @@ void *manejador_ready_exec(){
 
 		pthread_mutex_lock(&mutex_ready);
 		pthread_mutex_lock(&mutex_uso_cola_cpu);
-		//todo
+
 		cpu = get_cpu_libre();
+		if (cpu == NULL)
+			continue;
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
 
@@ -939,7 +959,7 @@ t_cpu *get_cpu_libre(){
 
 		queue_push(cola_cpu, cpu);
 	}
-	printf("No hay cpu libre\n");
+	printf("	No hay cpu libre\n");
 	return NULL;
 }
 
