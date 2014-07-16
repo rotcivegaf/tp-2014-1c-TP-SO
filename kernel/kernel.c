@@ -689,10 +689,12 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 }
 
 void pasar_pcb_exit(t_pcb_otros *pcb){
+	pthread_mutex_unlock(&mutex_exec);
 	pthread_mutex_lock(&mutex_exit);
 	queue_push(colas->cola_exit,pcb);
 	sem_incre(&cant_exit);
 	pthread_mutex_unlock(&mutex_exit);
+	pthread_mutex_unlock(&mutex_exec);
 	sem_incre(&cant_multiprog);
 }
 /*
