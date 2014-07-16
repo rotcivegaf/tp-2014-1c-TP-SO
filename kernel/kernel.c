@@ -169,7 +169,7 @@ void *plp(t_param_plp *param_plp){
 					//Pide mem para el prog
 					t_resp_sol_mem *resp_sol = solicitar_mem(men_cod_prog, param_plp->tam_stack,contador_prog);
 
-					if (resp_sol->memoria_insuficiente == MEM_OVERLOAD){
+					if (resp_sol == NULL){
 						txt_write_in_file(plp_log,"Memoria insuficiente para el programa con socket n°:");
 						logear_int(plp_log,i);
 						txt_write_in_file(plp_log,"\n");
@@ -177,6 +177,8 @@ void *plp(t_param_plp *param_plp){
 						//Avisa al programa que no hay memoria
 						char *aux_sring = string_itoa(contador_prog);
 						enviar_men_comun_destruir(i,MEM_OVERLOAD,aux_sring,string_length(aux_sring)+1);
+						FD_CLR(i, &conj_soc_progs);
+						socket_cerrar(i);
 						free(aux_sring);
 						free(resp_sol);
 					}else{
@@ -185,6 +187,7 @@ void *plp(t_param_plp *param_plp){
 						t_pcb_otros *pcb_otros = malloc(sizeof(t_pcb_otros));
 						pcb_otros->n_socket = i;
 						pcb_otros->pcb = crear_pcb_escribir_seg_UMV(men_cod_prog,resp_sol, contador_prog);
+						free(resp_sol);
 						pcb_otros->peso = calcular_peso(men_cod_prog);
 						pcb_otros->tipo_fin_ejecucion = -1;
 						pthread_mutex_lock(&mutex_new);
@@ -992,88 +995,56 @@ int32_t recibir_umv_dir_mem(int32_t tipo_men){
 	return -1;
 }
 
-t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int32_t id_prog){
+int32_t gestionar_resp_sol_mem(){
+	int32_t ret = -1;
+	t_men_comun *resp_men_cod = socket_recv_comun(soc_umv);
+	if (resp_men_cod->tipo == MEM_OVERLOAD){
+		destruir_men_comun(resp_men_cod);
+		return ret;
+	}
+	if((resp_men_cod->tipo != RESP_MEM_SEG_COD)&&(resp_men_cod->tipo != RESP_MEM_IND_ETI)&&(resp_men_cod->tipo != RESP_MEM_IND_COD)&&(resp_men_cod->tipo != RESP_MEM_SEG_STACK))
+		printf("ERROR: se esperaba una respuesta de pedido de memoria y obtube un %i\n",resp_men_cod->tipo);
+	ret = atoi(resp_men_cod->dato);
+	destruir_men_comun(resp_men_cod);
+	return ret;
+}
 
+t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int32_t id_prog){
 	t_resp_sol_mem *resp_sol = malloc(sizeof(t_resp_sol_mem));
-	resp_sol->memoria_insuficiente = 0;
-	t_men_comun *resp_mem;
-	t_men_seg *ped_mem;
-	int32_t tam = 0;
+	int32_t tam = 0, resp;
 
 	//pido mem para el codigo del script
-	ped_mem = crear_men_seg(PED_MEM_SEG_COD,id_prog,men_cod_prog->tam_dato);
-	socket_send_seg(soc_umv, ped_mem);
-	t_men_comun *resp_men_cod = socket_recv_comun(soc_umv);
-
-	if (resp_men_cod->tipo == MEM_OVERLOAD){
-		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		destruir_men_comun(resp_men_cod);
-		destruir_men_seg(ped_mem);
-		return resp_sol;
-	}
-
-	if( resp_men_cod->tipo != RESP_MEM_SEG_COD)
-		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_COD,resp_men_cod->tipo);
-
-	t_dir_mem dir_mem_cod = atoi(resp_men_cod->dato);
-	resp_sol->dir_seg_codigo = dir_mem_cod;
+	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_COD,id_prog,men_cod_prog->tam_dato);
+	resp = gestionar_resp_sol_mem();
+	if(resp == -1)
+		return NULL;
+	resp_sol->dir_seg_codigo = resp;
 
 	//pido mem para el indice de etiquetas y funciones
 	t_metadata_program* metadata_program = metadata_desde_literal(men_cod_prog->dato);
 	tam = (metadata_program->etiquetas_size);
-	ped_mem = crear_men_seg( PED_MEM_IND_ETI , id_prog, tam);
-	socket_send_seg(soc_umv, ped_mem);
-	resp_mem = socket_recv_comun(soc_umv);
-
-	if (resp_mem->tipo == MEM_OVERLOAD){
-		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		destruir_men_comun(resp_mem);
-		destruir_men_seg(ped_mem);
-		return resp_sol;
-	}
-
-	if( resp_mem->tipo != RESP_MEM_IND_ETI)
-		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_IND_ETI,resp_mem->tipo);
-
-	resp_sol->dir_indice_etiquetas= atoi(resp_mem->dato);
+	enviar_umv_mem_seg_destruir(soc_umv ,  PED_MEM_IND_ETI , id_prog, tam);
+	resp = gestionar_resp_sol_mem();
+	if(resp == -1)
+		return NULL;
+	resp_sol->dir_indice_etiquetas= resp;
 
 	//pido mem para el indice de codigo
 	tam = (metadata_program->instrucciones_size*8);
-	ped_mem = crear_men_seg( PED_MEM_IND_COD , id_prog, tam);
-	socket_send_seg(soc_umv, ped_mem);
-	resp_mem = socket_recv_comun(soc_umv);
-
-	if (resp_mem->tipo == MEM_OVERLOAD){
-		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		destruir_men_comun(resp_mem);
-		destruir_men_seg(ped_mem);
-		return resp_sol;
-	}
-
-	if( resp_mem->tipo != RESP_MEM_IND_COD)
-		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_IND_COD,resp_mem->tipo);
-
-	resp_sol->dir_indice_codigo = atoi(resp_mem->dato);
+	enviar_umv_mem_seg_destruir(soc_umv ,  PED_MEM_IND_COD , id_prog, tam);
+	resp = gestionar_resp_sol_mem();
+	if(resp == -1)
+		return NULL;
+	resp_sol->dir_indice_codigo = resp;
 
 	//pido mem para el stack
-	ped_mem = crear_men_seg( PED_MEM_SEG_STACK , id_prog, tam_stack);
-	socket_send_seg(soc_umv, ped_mem);
-	resp_mem = socket_recv_comun(soc_umv);
+	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_STACK , id_prog, tam_stack);
 
-	if (resp_mem->tipo == MEM_OVERLOAD){
-		resp_sol->memoria_insuficiente = MEM_OVERLOAD;
-		destruir_men_comun(resp_mem);
-		destruir_men_seg(ped_mem);
-		return resp_sol;
-	}
+	resp = gestionar_resp_sol_mem();
+	if(resp == -1)
+		return NULL;
+	resp_sol->dir_seg_stack = resp;
 
-	if( resp_mem->tipo != RESP_MEM_SEG_STACK)
-		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_STACK,resp_mem->tipo);
-
-	t_dir_mem dir_mem_stack = atoi(resp_mem->dato);
-	resp_sol->dir_seg_stack = dir_mem_stack;
-	destruir_men_comun(resp_mem);
-	destruir_men_seg(ped_mem);
 	return resp_sol;
 }
 
