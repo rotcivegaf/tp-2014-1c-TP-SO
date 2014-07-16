@@ -36,10 +36,8 @@ void handshake_umv(char *puerto, char *ip);
 void handshake_kernel(char *puerto, char *ip);
 void recv_pcb_del_kernel(t_men_quantum_pcb *msj);
 void cambio_PA(int32_t id_proc);
-void manejarSegmentationFault();
 void signal_handler(int sig);
 
-void crearDiccionario();
 void salirPorQuantum();
 void parsearUnaInstruccion(char* unaIns);
 
@@ -81,5 +79,6 @@ void enviar_pcb_destruir();
 char *sacar_caracteres_escape(char *un_string);
 
 char es_numero_pasar_char(char un_char);
+void limpiar_destruir_dic_var();
 
 #endif /* CPU_H_ */

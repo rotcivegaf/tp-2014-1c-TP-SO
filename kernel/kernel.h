@@ -27,6 +27,7 @@
 
 	typedef struct {
 		int32_t soc_cpu;
+		int32_t soc_prog;
 		int32_t id_prog_exec;
 	}t_cpu;
 	typedef struct{
@@ -71,10 +72,10 @@
 		int32_t unidades;
 	}t_IO_espera;
 	typedef struct{
-		t_dir_mem dir_primer_byte_umv_segmento_codigo;
-		t_dir_mem dir_primer_byte_umv_segmento_stack;
-		t_dir_mem dir_primer_byte_umv_indice_codigo;
-		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
+		t_dir_mem dir_seg_codigo;
+		t_dir_mem dir_seg_stack;
+		t_dir_mem dir_indice_codigo;
+		t_dir_mem dir_indice_etiquetas;
 		int32_t memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
@@ -128,5 +129,6 @@
 	void logear_int(FILE* destino,int32_t un_int);
 
 	void enviar_resp_cpu(int32_t soc_cpu, int32_t tipo_mensaje);
+	t_cpu *get_cpu_soc_prog(int32_t soc_prog);
 
 #endif /* KERNEL_H_ */

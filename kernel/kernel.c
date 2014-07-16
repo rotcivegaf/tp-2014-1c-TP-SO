@@ -147,7 +147,15 @@ void *plp(t_param_plp *param_plp){
 						printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						FD_CLR(i, &conj_soc_progs); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
+
+						t_cpu *aux_cpu=get_cpu_soc_prog(i);
 						socket_cerrar(i);
+						aux_cpu->id_prog_exec = 0;
+
+						pthread_mutex_lock(&mutex_uso_cola_cpu);
+						queue_push(cola_cpu,aux_cpu);
+						sem_incre(&cant_cpu_libres);
+						pthread_mutex_unlock(&mutex_uso_cola_cpu);
 						break;
 					}
 
@@ -452,17 +460,6 @@ void fin_quantum(int32_t soc_cpu){
 	// Pone el pcb en ready
 
 	pthread_mutex_lock(&mutex_ready);
-	queue_push(colas->cola_ready,aux_pcb_otros);
-	sem_incre(&cant_ready);
-	pthread_mutex_unlock(&mutex_ready);
-
-	pthread_mutex_lock(&mutex_uso_cola_cpu);
-	queue_push(cola_cpu,aux_cpu);
-	sem_incre(&cant_cpu_libres);
-	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-
-	/*
-	pthread_mutex_lock(&mutex_ready);
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 
 	queue_push(colas->cola_ready,aux_pcb_otros);
@@ -473,7 +470,7 @@ void fin_quantum(int32_t soc_cpu){
 
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 	pthread_mutex_unlock(&mutex_ready);
-*/
+
 	txt_write_in_file(pcp_log,"Termino un quantum del programa:");
 	logear_int(pcp_log,aux_pcb_otros->pcb->id);
 	txt_write_in_file(pcp_log,"\n");
@@ -536,6 +533,7 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 	t_pcb_otros *aux_pcb= get_pcb_otros_exec(aux_cpu->id_prog_exec);
 
 	aux_cpu->id_prog_exec = 0;
+	aux_cpu->soc_prog = 0;
 
 	aux_pcb->tipo_fin_ejecucion=tipo_error;
 	pasar_pcb_exit(aux_pcb);
@@ -614,10 +612,8 @@ void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
 
-	aux_cpu->id_prog_exec = 0;
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
-	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 }
 
@@ -754,6 +750,27 @@ t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 	return aux_pcb_otros;
 }
 
+t_cpu *get_cpu_soc_prog(int32_t soc_prog){
+	int32_t i;
+	t_cpu *cpu;
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	int32_t tam = queue_size(cola_cpu);
+
+	for(i=0 ;i < tam ;i++){
+		cpu = queue_pop(cola_cpu);
+
+		if (cpu->soc_prog == soc_prog){
+			pthread_mutex_unlock(&mutex_uso_cola_cpu);
+			return cpu;
+		}
+		queue_push(cola_cpu, cpu);
+	}
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
+	printf("ERROR EN GET_CPU_ID_PROC\n");
+	return NULL;
+}
+
+
 t_cpu *get_cpu(int32_t soc_cpu){
 
 	int32_t i;
@@ -879,6 +896,7 @@ void *manejador_ready_exec(){
 
 		enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
 		cpu->id_prog_exec = aux_pcb_otros->pcb->id;
+		cpu->soc_prog = aux_pcb_otros->n_socket;
 
 		queue_push(cola_cpu, cpu);
 		queue_push(colas->cola_exec, aux_pcb_otros);
@@ -968,13 +986,13 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = contador_id_programa;
-	pcb->dir_primer_byte_umv_segmento_codigo = resp_sol->dir_primer_byte_umv_segmento_codigo;
-	pcb->dir_primer_byte_umv_segmento_stack = resp_sol->dir_primer_byte_umv_segmento_stack;
-	pcb->dir_primer_byte_umv_contexto_actual = resp_sol->dir_primer_byte_umv_segmento_stack;
-	pcb->dir_primer_byte_umv_indice_codigo = resp_sol->dir_primer_byte_umv_indice_codigo;
-	pcb->dir_primer_byte_umv_indice_etiquetas = resp_sol->dir_primer_byte_umv_indice_etiquetas;
+	pcb->dir_seg_codigo = resp_sol->dir_seg_codigo;
+	pcb->dir_seg_stack = resp_sol->dir_seg_stack;
+	pcb->dir_cont_actual = resp_sol->dir_seg_stack;
+	pcb->dir_indice_codigo = resp_sol->dir_indice_codigo;
+	pcb->dir_indice_etiquetas = resp_sol->dir_indice_etiquetas;
 	pcb->program_counter = metadata_program->instruccion_inicio;
-	pcb->cant_var_contexto_actual = 0;
+	pcb->cant_var_cont_actual = 0;
 	pcb->tam_indice_etiquetas = metadata_program->etiquetas_size;
 
 	destruir_men_comun(men);
@@ -1020,7 +1038,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int
 		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_COD,resp_men_cod->tipo);
 
 	t_dir_mem dir_mem_cod = atoi(resp_men_cod->dato);
-	resp_sol->dir_primer_byte_umv_segmento_codigo = dir_mem_cod;
+	resp_sol->dir_seg_codigo = dir_mem_cod;
 
 	//pido mem para el indice de etiquetas y funciones
 	t_metadata_program* metadata_program = metadata_desde_literal(men_cod_prog->dato);
@@ -1039,7 +1057,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int
 	if( resp_mem->tipo != RESP_MEM_IND_ETI)
 		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_IND_ETI,resp_mem->tipo);
 
-	resp_sol->dir_primer_byte_umv_indice_etiquetas= atoi(resp_mem->dato);
+	resp_sol->dir_indice_etiquetas= atoi(resp_mem->dato);
 
 	//pido mem para el indice de codigo
 	tam = (metadata_program->instrucciones_size*8);
@@ -1057,7 +1075,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int
 	if( resp_mem->tipo != RESP_MEM_IND_COD)
 		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_IND_COD,resp_mem->tipo);
 
-	resp_sol->dir_primer_byte_umv_indice_codigo = atoi(resp_mem->dato);
+	resp_sol->dir_indice_codigo = atoi(resp_mem->dato);
 
 	//pido mem para el stack
 	ped_mem = crear_men_seg( PED_MEM_SEG_STACK , id_prog, tam_stack);
@@ -1075,7 +1093,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t tam_stack, int
 		printf("ERROR: se esperaba %i y obtube un %i\n",RESP_MEM_SEG_STACK,resp_mem->tipo);
 
 	t_dir_mem dir_mem_stack = atoi(resp_mem->dato);
-	resp_sol->dir_primer_byte_umv_segmento_stack = dir_mem_stack;
+	resp_sol->dir_seg_stack = dir_mem_stack;
 	destruir_men_comun(resp_mem);
 	destruir_men_seg(ped_mem);
 	return resp_sol;
@@ -1112,8 +1130,8 @@ void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
 }
 
 void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
-	pcb->cant_var_contexto_actual = pcb_actualizado->cant_var_contexto_actual;
-	pcb->dir_primer_byte_umv_contexto_actual = pcb_actualizado->dir_primer_byte_umv_contexto_actual;
+	pcb->cant_var_cont_actual = pcb_actualizado->cant_var_cont_actual;
+	pcb->dir_cont_actual = pcb_actualizado->dir_cont_actual;
 	pcb->program_counter = pcb_actualizado->program_counter;
 }
 

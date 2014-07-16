@@ -54,12 +54,12 @@ int main(){
 
 	//el cliente le envia un mensaje quantum pcb
     t_pcb *pcb = malloc(sizeof (t_pcb));
-    pcb->cant_var_contexto_actual = 3;
-    pcb->dir_primer_byte_umv_contexto_actual = 4;
-    pcb->dir_primer_byte_umv_indice_codigo = 5;
-    pcb->dir_primer_byte_umv_indice_etiquetas = 6;
-    pcb->dir_primer_byte_umv_segmento_codigo = 7;
-    pcb->dir_primer_byte_umv_segmento_stack = 8;
+    pcb->cant_var_cont_actual = 3;
+    pcb->dir_cont_actual = 4;
+    pcb->dir_indice_codigo = 5;
+    pcb->dir_indice_etiquetas = 6;
+    pcb->dir_seg_codigo = 7;
+    pcb->dir_seg_stack = 8;
     pcb->id = 9;
     pcb->program_counter = 10;
     pcb->tam_indice_etiquetas = 11;
@@ -74,9 +74,9 @@ int main(){
 			"	Tipo    |  1   |  %i\n"
 			"	Quantum |  2   |  %i\n",men_pcb->tipo,men_pcb->quantum);
 	printf(	"	Dato    | 3-4-5-6-7-8-9-10-11|%i-%i-%i-%i-%i-%i-%i-%i-%i",
-			men_pcb->pcb->cant_var_contexto_actual,men_pcb->pcb->dir_primer_byte_umv_contexto_actual,
-			men_pcb->pcb->dir_primer_byte_umv_indice_codigo,men_pcb->pcb->dir_primer_byte_umv_indice_etiquetas ,
-			men_pcb->pcb->dir_primer_byte_umv_segmento_codigo ,men_pcb->pcb->dir_primer_byte_umv_segmento_stack ,
+			men_pcb->pcb->cant_var_cont_actual,men_pcb->pcb->dir_cont_actual,
+			men_pcb->pcb->dir_indice_codigo,men_pcb->pcb->dir_indice_etiquetas ,
+			men_pcb->pcb->dir_seg_codigo ,men_pcb->pcb->dir_seg_stack ,
 			men_pcb->pcb->id ,men_pcb->pcb->program_counter ,men_pcb->pcb->tam_indice_etiquetas);
 	printf("\n");
 	destruir_quantum_pcb(men_pcb);

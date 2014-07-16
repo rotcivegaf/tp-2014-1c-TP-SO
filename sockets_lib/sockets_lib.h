@@ -103,12 +103,12 @@
 	//para los mensajes que contienen el pcb + quantum
 	typedef int32_t  t_dir_mem;
 	typedef struct{
-		int32_t cant_var_contexto_actual;
-		t_dir_mem dir_primer_byte_umv_contexto_actual;
-		t_dir_mem dir_primer_byte_umv_indice_codigo;
-		t_dir_mem dir_primer_byte_umv_indice_etiquetas;
-		t_dir_mem dir_primer_byte_umv_segmento_codigo;
-		t_dir_mem dir_primer_byte_umv_segmento_stack;
+		int32_t cant_var_cont_actual;
+		t_dir_mem dir_cont_actual;
+		t_dir_mem dir_indice_codigo;
+		t_dir_mem dir_indice_etiquetas;
+		t_dir_mem dir_seg_codigo;
+		t_dir_mem dir_seg_stack;
 		int32_t id;
 		int32_t program_counter;
 		int32_t tam_indice_etiquetas;

@@ -80,16 +80,16 @@ int main(){
 
 		traerIndiceEtiquetas();
 		/*se crea un diccionario para guardar las variables del contexto*/
-		crearDiccionario();
+		regenerar_dicc_var();
 
-		for (quantum_actual = 1;(quantum_actual<=quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+		for (quantum_actual = 0;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
 			proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
+			free(proxInstrucc);
 		}
 		if(!fueFinEjecucion){
 			salirPorQuantum();
 		}
-		dictionary_clean(dic_Variables);
 		free(etiquetas);
 		free(pcb);
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
@@ -106,7 +106,7 @@ int main(){
 
 void traerIndiceEtiquetas(){
 	int32_t base, offset, tam;
-	base =pcb->dir_primer_byte_umv_indice_etiquetas;
+	base =pcb->dir_indice_etiquetas;
 	offset=0;
 	tam=pcb->tam_indice_etiquetas;
 
@@ -118,7 +118,7 @@ void traerIndiceEtiquetas(){
 		memcpy(etiquetas ,rec_etiq->dato, rec_etiq->tam_dato);
 	}
 	if(rec_etiq->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 	}
 	destruir_men_comun(rec_etiq);
 }
@@ -137,50 +137,12 @@ void recibirUnPcb(){
 	destruir_quantum_pcb(m);
 }
 
-void crearDiccionario(){
-	int32_t base, offset, pos, i;
-	char *key;
-	char aux_char;
-	//si se trata de un programa con un  stack que ya tiene variables
-	int32_t tam_contexto = pcb->cant_var_contexto_actual;
-	base = pcb->dir_primer_byte_umv_segmento_stack;
-
-	if (tam_contexto > 0){//regenerar diccionario
-		for(i=0;i<tam_contexto;i++){
-			offset= i*5;
-
-			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
-
-			t_men_comun *rec_var = socket_recv_comun(socketUmv);
-
-			if(rec_var->tipo== R_SOL_BYTES){
-				pos = base + offset;
-				aux_char = es_numero_pasar_char(rec_var->dato[0]);
-				key = string_substring_until(&aux_char, 1);
-				pos = base + offset;
-				dictionary_put(dic_Variables, key, pos );
-			}
-			destruir_men_comun(rec_var);
-		}
-	}
-}
-
-void manejarSegmentationFault(){
-	//informar por pantalla el error
-	printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
-	txt_write_in_file(cpu_file_log, "Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual\n");
-
-	quantum_actual++;
-	fueFinEjecucion =1;
-	finalizarContexto(SEGMEN_FAULT);
-}
-
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
 	int32_t base, offset, tam;
 	t_men_comun *men_base_offset;
 
 	//con el indice de codigo y el pc obtengo la posicion de la proxima instruccion a ejecutar
-	base = pcb->dir_primer_byte_umv_indice_codigo;
+	base = pcb->dir_indice_codigo;
 	offset = pcb->program_counter * sizeof(t_intructions);
 	tam = sizeof(t_intructions);
 
@@ -196,7 +158,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	destruir_men_comun(men_base_offset);
 
-	base = pcb->dir_primer_byte_umv_segmento_codigo;
+	base = pcb->dir_seg_codigo;
 
 	//le mando a la umv base, offset y tamanio de la proxima instruccion
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
@@ -208,7 +170,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	if(rec_inst->tipo == R_SOL_BYTES){
 		memcpy(proxInst, rec_inst->dato, tam);
-		proxInst[tam] = '\0';//todo
+		proxInst[tam] = '\0';
 		char *proxInst_sin_blancos = sacar_caracteres_escape(proxInst);
 		txt_write_in_file(cpu_file_log, "Instruccion que voy a ejecutar\n");
 		printf("Instruccion que voy a ejecutar:%s\n",proxInst_sin_blancos);
@@ -238,7 +200,7 @@ void signal_handler(int sig){
 	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
 	printf("Se recibio la SIGUSR1");
 
-	while(quantum_actual <= quantum_max){
+	while(quantum_actual < quantum_max){
 		char* proxInstrucc = solicitarProxSentenciaAUmv();
 		analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 		free(proxInstrucc);
@@ -265,11 +227,11 @@ void signal_handler(int sig){
 
 void preservarContexto(){
 	int32_t base, offset, tam;
-	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset = pcb->dir_primer_byte_umv_contexto_actual - base + (pcb->cant_var_contexto_actual*5);	// la posicion siguiente al ultimo valor de la ultima varaible
+	base = pcb->dir_seg_stack;
+	offset = pcb->dir_cont_actual - base + (pcb->cant_var_cont_actual*5);	// la posicion siguiente al ultimo valor de la ultima varaible
 	tam = sizeof(int32_t);
 
-	char *buffer = copiar_int_to_buffer(pcb->dir_primer_byte_umv_contexto_actual);
+	char *buffer = copiar_int_to_buffer(pcb->dir_cont_actual);
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 	free(buffer);
 
@@ -289,14 +251,14 @@ void preservarContexto(){
 			return;
 		}
 		if(r_proxins->tipo == SEGMEN_FAULT){
-			manejarSegmentationFault();
+			finalizarContexto(SEGMEN_FAULT);
 			destruir_men_comun(r_proxins);
 			return;
 		}
 	}
 	if(r_con->tipo == SEGMEN_FAULT){
+		finalizarContexto(SEGMEN_FAULT);
 		destruir_men_comun(r_con);
-		manejarSegmentationFault();
 		return;
 	}
 	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_con->tipo);
@@ -304,52 +266,46 @@ void preservarContexto(){
 
 void finalizarContexto(int32_t tipo_fin){
 	int32_t i, base, offset;
+	char *aux_string;
 
-	if(tipo_fin == SEM_INEX){
+	switch(tipo_fin){
+	case SEM_INEX:
 		printf("	ERROR,el semaforo es inexistente\n");
-		quantum_actual= quantum_max;
 		fueFinEjecucion=1;
-		return;
-	}
-
-	if (tipo_fin == SEM_BLOQUEADO){
-		quantum_actual = quantum_max;
+		break;
+	case SEM_BLOQUEADO:
 		fueFinEjecucion=1;
 		enviar_pcb_destruir();
-	}
-
-	if(tipo_fin == VAR_INEX){
+		break;
+	case VAR_INEX:
 		printf("	ERROR,la variable global es inexistente\n");
-		quantum_actual= quantum_max;
 		fueFinEjecucion=1;
-		return;
-	}
-
-	if (tipo_fin == ERROR){
+		break;
+	case ERROR:
 		printf("	ERROR, la etiqueta no se ha encontrado pero creo q esta fuera del alcanse del tp\n");
 		fueFinEjecucion = 1;
-		return;
-	}
-	if (tipo_fin == SEGMEN_FAULT){
-		char *aux_string = string_itoa(pcb->id);
+		break;
+	case SEGMEN_FAULT:
+		aux_string = string_itoa(pcb->id);
+		printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
+		txt_write_in_file(cpu_file_log, "Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual\n");
 		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
-		return;
-	}
-	if (tipo_fin == OK){
+		break;
+	case OK:
 		printf("	Imprmiendo variables y finalizando proceso\n");
 		char *string = "\n----------Imprimo el estado final de las variable----------\n";
 
 		imprimirTexto(string);
 
-		for(i=0;i<pcb->cant_var_contexto_actual;i++){//esta MIERDA de for es para imprimir vas variables en la consola del proceso progrma
-			base = pcb->dir_primer_byte_umv_contexto_actual;
+		for(i=0;i<pcb->cant_var_cont_actual;i++){//esta MIERDA de for es para imprimir vas variables en la consola del proceso progrma
+			base = pcb->dir_cont_actual;
 			offset = (5*i);
 			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
 			t_men_comun *men_nombre_var = socket_recv_comun(socketUmv);
 
-			base = pcb->dir_primer_byte_umv_contexto_actual;
+			base = pcb->dir_cont_actual;
 			offset = (5*i)+1;
 
 			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 4, NULL);
@@ -375,12 +331,15 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_cont_var);
 			destruir_men_comun(men_nombre_var);
 		}
-		char *aux_string = string_itoa(pcb->id);
+		aux_string = string_itoa(pcb->id);
 		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
+		break;
+	default:
+		printf("ERROR: tipo_fin:%i inexistente\n",tipo_fin);
+		break;
 	}
-	txt_write_in_file(cpu_file_log, "Mandando a Kernel-PCP el pcb de un programa que se termino de ejecutar\n");
 }
 
 char es_numero_pasar_char(char un_char){
@@ -394,65 +353,66 @@ char es_numero_pasar_char(char un_char){
 }
 
 //Primitivas ANSISOP
-t_puntero definirVariable(t_nombre_variable identificador_variable){
+t_puntero definirVariable(t_nombre_variable id_var){
 	int32_t base, offset, tam;
-	char aux_char;
 
-	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset= pcb->dir_primer_byte_umv_contexto_actual - base + (pcb->cant_var_contexto_actual*5);
+	base = pcb->dir_seg_stack;
+	offset= pcb->dir_cont_actual - base + (pcb->cant_var_cont_actual*5);
 	tam = 5;
 
 	int32_t pos_mem = base + offset;
 
-	printf("	Definir la variable %c en la posicion %i, offset:%i\n",identificador_variable, pos_mem,offset);
-	identificador_variable = es_numero_pasar_char(identificador_variable);
+	printf("	Definir la variable %c en la posicion %i, offset:%i\n",id_var, pos_mem,offset);
+	id_var = es_numero_pasar_char(id_var);
 
-	aux_char = es_numero_pasar_char(identificador_variable);
-	char *key = string_substring_until(&aux_char, 1);
+	id_var = es_numero_pasar_char(id_var);
+	char *key = string_substring_until(&id_var, 1);
 
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, key);
 
 	t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
-
-		dictionary_put(dic_Variables, key, pos_mem);
-		(pcb->cant_var_contexto_actual) ++;
+		int32_t *pos = malloc(sizeof(int32_t));
+		*pos = pos_mem;
+		dictionary_put(dic_Variables, key, pos);
+		free(key);
+		(pcb->cant_var_cont_actual) ++;
 		txt_write_in_file(cpu_file_log, "Definiar la variable \n");
 		txt_write_in_file(cpu_file_log, "en la posicion \n");
 		destruir_men_comun(r_alm);
 		return pos_mem;
 	}else{
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 		destruir_men_comun(r_alm);
+		free(key);
 		return -1;
 	}
 }
 
 t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
-	int32_t e;
-
 	/*Se fija en el diccionario de variables la posicion la posicion va a ser el data del elemento*/
 	identificador_variable = es_numero_pasar_char(identificador_variable);
 	char *key = string_substring_until(&identificador_variable, 1);
 
-	e = dictionary_get(dic_Variables,key);
+	int32_t *dir_mem = dictionary_get(dic_Variables,key);
+	int32_t ret = *dir_mem;
 
-	if (e == NULL)
+	if (dir_mem == NULL)
 		printf("	ERROR no se ha podido encontrar la key:%s\n",key);
 
 	txt_write_in_file(cpu_file_log, "La posicion de la variable\n");
 	txt_write_in_file(cpu_file_log, "es\n");
-	printf("	La posicion de la variable: %s, es %i\n", key, e);
+	printf("	La posicion de la variable: %s, es %i\n", key, ret);
 
-	return e;
+	return ret;
 }
 
 t_valor_variable dereferenciar(t_puntero direccion_variable){
 	//obtiene los cuatro bytes siguientes a direccion_variable
 	t_valor_variable valor;
 
-	int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
+	int32_t base = pcb->dir_seg_stack;
 	int32_t offset = direccion_variable-base+1;
 	int32_t tam= sizeof(int32_t);
 
@@ -468,7 +428,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 		printf("	Dereferenciar %d, offset:%i y su valor es: %d\n",direccion_variable, offset,valor);
 	}
 	if(men_comun->tipo ==SEGMEN_FAULT){
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 	}
 	destruir_men_comun(men_comun);
 	return valor;
@@ -476,7 +436,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-	int32_t base = pcb->dir_primer_byte_umv_segmento_stack;
+	int32_t base = pcb->dir_seg_stack;
 	int32_t offset = direccion_variable-base+1;
 
 	int32_t tam = sizeof(t_valor_variable);
@@ -492,7 +452,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 		printf("	Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 	}
 	destruir_men_comun(r_alm);
 }
@@ -577,9 +537,9 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	preservarContexto();
 
 	//actualizo las estructuras
-	pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+(5*pcb->cant_var_contexto_actual)+8;
-	pcb->cant_var_contexto_actual = 0;
-	dictionary_clean(dic_Variables);
+	pcb->dir_cont_actual = pcb->dir_cont_actual + (5*pcb->cant_var_cont_actual)+8;//todo probar q ande
+	pcb->cant_var_cont_actual = 0;
+	regenerar_dicc_var();
 	pos_retorno = metadata_buscar_etiqueta(etiqueta, etiquetas, pcb->tam_indice_etiquetas);
 	pcb->program_counter = pos_retorno;
 
@@ -593,8 +553,9 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	preservarContexto();
 	//aca le digo a la umv q me guarde en el stack la dir de la variable a la q tengo q asignarle el valor retornado por la "funcion"
 
-	base = pcb->dir_primer_byte_umv_segmento_stack;
-	offset = (pcb->dir_primer_byte_umv_contexto_actual - base) + (pcb->cant_var_contexto_actual*5)+8;
+	base = pcb->dir_seg_stack;
+	offset = pcb->dir_cont_actual - base + (pcb->cant_var_cont_actual*5)+8;
+	printf("OFFSET:%i\n",(pcb->dir_cont_actual - base ));
 	tam = sizeof(int32_t);
 
 	char *buffer = copiar_int_to_buffer(donde_retornar);
@@ -607,9 +568,9 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 		printf("	Se almaceno la direccion de retorno\n");
 
 		//actualizo las estructuras
-		pcb->dir_primer_byte_umv_contexto_actual = (pcb->dir_primer_byte_umv_contexto_actual)+offset+4;
-		pcb->cant_var_contexto_actual = 0;
-		dictionary_clean(dic_Variables);
+		pcb->dir_cont_actual = pcb->dir_seg_stack+offset+4;
+		pcb->cant_var_cont_actual = 0;
+		regenerar_dicc_var();
 		pos_retorno = metadata_buscar_etiqueta(etiqueta, etiquetas, pcb->tam_indice_etiquetas);
 		pcb->program_counter = pos_retorno;
 
@@ -618,7 +579,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 		return;
 	}
 	if(r_alm->tipo == SEGMEN_FAULT){
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 		return;
 	}
 	printf("	ERROR tipo de dato:%i, recibido es erroneo\n", r_alm->tipo);
@@ -628,7 +589,7 @@ void finalizar(){
 	int32_t base, offset, tam;
 
 	//si es el fin de programa, le digo al kernel q finalizo y salgo de la funcion
-	if(pcb->dir_primer_byte_umv_contexto_actual == pcb->dir_primer_byte_umv_segmento_stack){
+	if(pcb->dir_cont_actual == pcb->dir_seg_stack){
 		finalizarContexto(OK);
 		txt_write_in_file(cpu_file_log, "Finalizando el programa actual\n");
 		printf("	Finalizando el programa actual\n");
@@ -639,8 +600,8 @@ void finalizar(){
 	int32_t dir_context_ant;
 	//consigo 2 int, el primero para el program counter a retornar y el segundo para la dir de memoria al contexto anterior
 	tam= 8;
-	base= pcb->dir_primer_byte_umv_segmento_stack;
-	offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack- 8;
+	base= pcb->dir_seg_stack;
+	offset= pcb->dir_cont_actual-base- 8;
 
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
@@ -649,12 +610,13 @@ void finalizar(){
 		memcpy(&dir_context_ant, rec_ret->dato,sizeof(int32_t));
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
 	}else{
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 		return;
 	}
 
 	//actualizar el pcb
-	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-8)/5;
+	int32_t cant_var = (pcb->dir_cont_actual - dir_context_ant-8)/5;
+
 	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
 	regenerar_dicc_var();
@@ -668,8 +630,8 @@ void retornar(t_valor_variable retorno){
 
 	//consigo 3 int, el primero para asignarle el valor retorno, el segundo para el program counter a retornar y el tercero para la dir de memoria al contexto anterior
 	tam= 12;
-	base= pcb->dir_primer_byte_umv_segmento_stack;
-	offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack- 12;
+	base= pcb->dir_seg_stack;
+	offset= pcb->dir_cont_actual-base- 12;
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
@@ -678,12 +640,12 @@ void retornar(t_valor_variable retorno){
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
 		memcpy(&dir_retorno, rec_ret->dato+8,sizeof(int32_t));
 	}else{
-		manejarSegmentationFault();
+		finalizarContexto(SEGMEN_FAULT);
 		return;
 	}
 
 	//actualizar el pcb
-	int32_t cant_var = (pcb->dir_primer_byte_umv_contexto_actual - dir_context_ant-12)/5;
+	int32_t cant_var = (pcb->dir_cont_actual - dir_context_ant-12)/5;
 	actualizar_pcb(cant_var,prog_counter,dir_context_ant);
 
 	regenerar_dicc_var();
@@ -893,35 +855,41 @@ void recibir_resp_kernel(int32_t tipo_esperado){
 	destruir_men_comun(men_sincro_ok);
 }
 
+void limpiar_destruir_dic_var(){
+	void _liberar_var(int32_t *pos){
+		free(pos);
+	}
+	dictionary_clean_and_destroy_elements(dic_Variables, (void *)_liberar_var);
+}
+
 void regenerar_dicc_var(){
-	int32_t base, offset,i, pos;
+	int32_t base, offset,i;
 	char aux_char;
 
-	dictionary_clean(dic_Variables);
+	limpiar_destruir_dic_var();
+	base= pcb->dir_seg_stack;
 
-	base= pcb->dir_primer_byte_umv_segmento_stack;
-	for(i=0;i<pcb->cant_var_contexto_actual;i++){
-		offset= pcb->dir_primer_byte_umv_contexto_actual-pcb->dir_primer_byte_umv_segmento_stack + (i*5);
+	for(i=0;i<pcb->cant_var_cont_actual;i++){
+		offset= pcb->dir_cont_actual- base + (i*5);
 
 		enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
 
 		t_men_comun *men_var = socket_recv_comun(socketUmv);
-		//char *key = malloc(2);
-		//key[0] = men_var->dato[0];
-		//key[1] = '\0';
-		//int32_t *pos = malloc(sizeof(int32_t));
-		//*pos = base + offset;
+
+		int32_t *pos = malloc(sizeof(int32_t));
+		*pos = base + offset;
 		aux_char = es_numero_pasar_char(men_var->dato[0]);
 		char *key = string_substring_until(&aux_char, 1);
-		pos = base + offset;
+
 		dictionary_put(dic_Variables, key, pos );
+		free(key);
 	}
 }
 
 void actualizar_pcb(int32_t cant_var,int32_t program_counter,int32_t dir_primer_byte_umv){
-	pcb->cant_var_contexto_actual = cant_var;
+	pcb->cant_var_cont_actual = cant_var;
 	pcb->program_counter=program_counter;
-	pcb->dir_primer_byte_umv_contexto_actual=dir_primer_byte_umv;
+	pcb->dir_cont_actual=dir_primer_byte_umv;
 }
 
 char *sacar_caracteres_escape(char *un_string){
