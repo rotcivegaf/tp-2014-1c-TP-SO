@@ -38,7 +38,7 @@ int32_t pid_cpu;
 
 int main(){
 	got_usr1 = 0;
-	char *proxInstrucc = malloc(255);
+	char *proxInstrucc;
 
 	dic_Variables = dictionary_create();
 
@@ -124,17 +124,18 @@ void traerIndiceEtiquetas(){
 }
 
 void recibirUnPcb(){
-	t_men_quantum_pcb *m = socket_recv_quantum_pcb(socketKernel);
+	t_men_quantum_pcb *men_pcb = socket_recv_quantum_pcb(socketKernel);
 
 	pcb = malloc(sizeof(t_pcb));
-	if((m->tipo==CONEC_CERRADA) || (m->tipo!=PCB_Y_QUANTUM)){
+	if((men_pcb->tipo==CONEC_CERRADA) || (men_pcb->tipo!=PCB_Y_QUANTUM)){
 		printf("	ERROR se ha perdido la coneccion con el Kernel o el tipo de dato recibido es erroneo\n");
+		free(pcb);
 	}else{
-		memcpy(pcb, m->pcb, sizeof(t_pcb));
-		memcpy(&quantum_max , &(m->quantum), sizeof(int32_t));
+		memcpy(pcb, men_pcb->pcb, sizeof(t_pcb));
+		memcpy(&quantum_max , &(men_pcb->quantum), sizeof(int32_t));
 	}
 
-	destruir_quantum_pcb(m);
+	destruir_quantum_pcb(men_pcb);
 }
 
 char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instruccion(calculos)
@@ -404,7 +405,7 @@ t_puntero obtenerPosicionVariable(t_nombre_variable identificador_variable){
 	txt_write_in_file(cpu_file_log, "La posicion de la variable\n");
 	txt_write_in_file(cpu_file_log, "es\n");
 	printf("	La posicion de la variable: %s, es %i\n", key, ret);
-
+	free(key);
 	return ret;
 }
 
@@ -883,6 +884,7 @@ void regenerar_dicc_var(){
 
 		dictionary_put(dic_Variables, key, pos );
 		free(key);
+		destruir_men_comun(men_var);
 	}
 }
 
