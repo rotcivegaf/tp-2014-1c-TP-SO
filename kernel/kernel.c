@@ -540,9 +540,7 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 
 	aux_pcb->tipo_fin_ejecucion=tipo_error;
 
-	pthread_mutex_lock(&mutex_exec);
 	pasar_pcb_exit(aux_pcb);
-	pthread_mutex_unlock(&mutex_exec);
 
 	enviar_men_comun_destruir(soc_cpu,tipo_error,NULL,0);
 
