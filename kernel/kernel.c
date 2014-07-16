@@ -926,8 +926,11 @@ void *manejador_ready_exec(){
 		pthread_mutex_lock(&mutex_uso_cola_cpu);
 
 		cpu = get_cpu_libre();
-		if (cpu == NULL)
+		if (cpu == NULL){
+			pthread_mutex_unlock(&mutex_uso_cola_cpu);
+			pthread_mutex_unlock(&mutex_ready);
 			continue;
+		}
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
 
