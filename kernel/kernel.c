@@ -944,45 +944,24 @@ void recibir_resp_escrbir_seg(){//uso esto para q espere y no ponga en la cola d
 }
 
 t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t contador_id_programa){
-
 	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
-	t_men_comun* men;
-	t_men_seg *men_esc;
-	char *etis = metadata_program->etiquetas;
 
 	// Escribe el segmento de codigo
-	men_esc = crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0);
-	socket_send_seg(soc_umv,men_esc);
-	destruir_men_seg(men_esc);
-	men = crear_men_comun(CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
-
-	socket_send_comun(soc_umv, men);
-	destruir_men_comun(men);
-	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-	if(men->tipo != MEN_ALM_OK)
-		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
-	destruir_men_comun(men);
-
-
+	enviar_umv_mem_seg_destruir(soc_umv , ESCRIBIR_SEG, contador_id_programa, 0);
+	enviar_men_comun_destruir(soc_umv , CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
+	recibir_resp_escrbir_seg();
 
 	// Escribe el segmento de indice de etiquetas
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
-	men = crear_men_comun(IND_ETI_FUNC,etis,metadata_program->etiquetas_size);
-	socket_send_comun(soc_umv, men);
-
-	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-	if(men->tipo != MEN_ALM_OK)
-		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	enviar_umv_mem_seg_destruir(soc_umv , ESCRIBIR_SEG, contador_id_programa, 0);
+	char *etis = metadata_program->etiquetas;
+	enviar_men_comun_destruir(soc_umv ,IND_ETI_FUNC,etis,metadata_program->etiquetas_size);
+	recibir_resp_escrbir_seg();
 
 	// Escribe el segmento de indice de codigo
-	socket_send_seg(soc_umv,crear_men_seg(ESCRIBIR_SEG, contador_id_programa, 0));
+	enviar_umv_mem_seg_destruir(soc_umv , ESCRIBIR_SEG, contador_id_programa, 0);
 	int32_t tam_ind_cod = metadata_program->instrucciones_size*8;
-	men = crear_men_comun(IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
-	socket_send_comun(soc_umv, men);
-
-	men = socket_recv_comun(soc_umv);//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
-	if(men->tipo != MEN_ALM_OK)
-		printf("ERROR se esperaba un tipo de dato MEN_ALM_OK y se recibio:%i",men->tipo);
+	enviar_men_comun_destruir(soc_umv ,IND_COD,(void *)metadata_program->instrucciones_serializado,tam_ind_cod);
+	recibir_resp_escrbir_seg();
 
 	t_pcb *pcb = malloc(sizeof(t_pcb));
 	pcb->id = contador_id_programa;
@@ -995,7 +974,6 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	pcb->cant_var_cont_actual = 0;
 	pcb->tam_indice_etiquetas = metadata_program->etiquetas_size;
 
-	destruir_men_comun(men);
 	return pcb;
 }
 
