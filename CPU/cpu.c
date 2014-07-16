@@ -298,7 +298,11 @@ void finalizarContexto(int32_t tipo_fin){
 		printf("	Imprmiendo variables y finalizando proceso\n");
 		char *string = "\n----------Imprimo el estado final de las variable----------\n";
 
-		imprimirTexto(string);
+		enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, string, string_length(string)+BARRA_CERO);
+		char *aux_string = string_itoa(pcb->id);
+		enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+		free(aux_string);
+		recibir_resp_kernel(R_IMPRIMIR);
 
 		for(i=0;i<pcb->cant_var_cont_actual;i++){//esta MIERDA de for es para imprimir vas variables en la consola del proceso progrma
 			base = pcb->dir_cont_actual;
@@ -312,23 +316,25 @@ void finalizarContexto(int32_t tipo_fin){
 			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 4, NULL);
 			t_men_comun *men_cont_var = socket_recv_comun(socketUmv);
 
-
 			int32_t cont_var;
 			memcpy(&cont_var,men_cont_var->dato,4);
 
 			char *aux_cont_var =string_itoa(cont_var);
 
-			int32_t tam_string = string_length(aux_cont_var)+4;// 1(tab)+1(nombre de la variable)+1(el igual)+string_length(aux_cont_var)+1(el \n)+1(el \0)
+			int32_t tam_string = string_length(aux_cont_var)+3;// 1(nombre de la variable)+1(el igual)+string_length(aux_cont_var)+1(el \n)+1(el \0)
 			char var_a_imp_con_contexto[tam_string];
-			var_a_imp_con_contexto[0] = '\t';
-			var_a_imp_con_contexto[1] = men_nombre_var->dato[0];
-			var_a_imp_con_contexto[2] = '=';
-			memcpy(var_a_imp_con_contexto+3,aux_cont_var,string_length(aux_cont_var));
-			var_a_imp_con_contexto[tam_string-1] = '\n';
-			var_a_imp_con_contexto[tam_string] = '\0';
+			var_a_imp_con_contexto[0] = men_nombre_var->dato[0];
+			var_a_imp_con_contexto[1] = '=';
+			memcpy(var_a_imp_con_contexto+2,aux_cont_var,string_length(aux_cont_var));
+			var_a_imp_con_contexto[tam_string-1] = '\0';
 			free (aux_cont_var);
 
-			imprimirTexto(var_a_imp_con_contexto);
+			enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, var_a_imp_con_contexto, string_length(var_a_imp_con_contexto)+BARRA_CERO);
+			char *aux_string = string_itoa(pcb->id);
+			enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+			free(aux_string);
+			recibir_resp_kernel(R_IMPRIMIR);
+
 			destruir_men_comun(men_cont_var);
 			destruir_men_comun(men_nombre_var);
 		}

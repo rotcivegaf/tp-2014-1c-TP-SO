@@ -539,7 +539,11 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 	aux_cpu->soc_prog = 0;
 
 	aux_pcb->tipo_fin_ejecucion=tipo_error;
+
+	pthread_mutex_lock(&mutex_exec);
 	pasar_pcb_exit(aux_pcb);
+	pthread_mutex_unlock(&mutex_exec);
+
 	enviar_men_comun_destruir(soc_cpu,tipo_error,NULL,0);
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
@@ -838,6 +842,16 @@ void *manejador_exit(){
 	return NULL;
 }
 
+void umv_destrui_pcb(int32_t id_pcb){
+	enviar_umv_mem_seg_destruir(soc_umv, DESTR_SEGS, id_pcb, 0);
+	//recibo respuesta para sincronizar
+	t_men_comun *men_resp = socket_recv_comun(soc_umv);
+	if (men_resp->tipo != SINCRO_OK)
+		printf("ERROR se esperaba, de la UMV, un tipo de mensaje SINCRO_OK y se recibio:%i\n",men_resp->tipo);
+	printf("Segmentos del programa:%i destruidos\n", id_pcb);
+	destruir_men_comun(men_resp);
+}
+
 void *manejador_new_ready(){
 
 	while(quit_sistema){
@@ -927,16 +941,6 @@ t_cpu *get_cpu_libre(){
 	}
 	printf("No hay cpu libre\n");
 	return NULL;
-}
-
-void umv_destrui_pcb(int32_t id_pcb){
-	enviar_umv_mem_seg_destruir(soc_umv, DESTR_SEGS, id_pcb, 0);
-	//recibo respuesta para sincronizar
-	t_men_comun *men_resp = socket_recv_comun(soc_umv);
-	if (men_resp->tipo != SINCRO_OK)
-		printf("ERROR se esperaba, de la UMV, un tipo de mensaje SINCRO_OK y se recibio:%i\n",men_resp->tipo);
-	printf("Segmentos del programa:%i destruidos\n", id_pcb);
-	destruir_men_comun(men_resp);
 }
 
 void recibir_resp_escrbir_seg(){//uso esto para q espere y no ponga en la cola de new un proceso con los segmentos vacios
