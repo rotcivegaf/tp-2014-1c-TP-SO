@@ -92,13 +92,12 @@ int main(){
 		}
 		free(etiquetas);
 		free(pcb);
+		pcb = NULL;
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
 		fueFinEjecucion = 0;
 		entre_io = 0;
 		sem_block = 0;
-		pcb = NULL;
 	}
-
 	return 0;
 }
 
@@ -200,16 +199,14 @@ void signal_handler(int sig){
 	printf("Se recibio la SIGUSR1\n");
 
 	if (pcb!=NULL){
+		txt_write_in_file(cpu_file_log, "SIGUSR1 - Se termina de ejecutar el quantum actual \n");
+		printf("SIGUSR1 - Se termina de ejecutar el quantum actual\n");
 		for(;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block);quantum_actual ++){
 			char* proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 			free(proxInstrucc);
 		}
 	}
-
-	txt_write_in_file(cpu_file_log, "SIGUSR1 - Se termina de ejecutar el quantum actual \n");
-	printf("SIGUSR1 - Se termina de ejecutar el quantum actual\n");
-
 	enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
 
 	if (pcb!=NULL)
