@@ -68,8 +68,8 @@ programa: $(SOCKET_LIB_SO) $(PROGRAMA_OBJS)
 
 # DECLARO VARIABLES DE ENTORNO
 variables_entorno: 
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tp-2014-1c-hashtaggers/
 	export ANSISOP_CONFIG=./programa/programa_config
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tp-2014-1c-hashtaggers
 
 # CLEAN
 clean:
