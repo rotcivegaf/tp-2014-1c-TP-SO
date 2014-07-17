@@ -83,6 +83,7 @@ int main(){
 		regenerar_dicc_var();
 
 		for (quantum_actual = 0;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+			printf("Quantum nº%i\n",quantum_actual+1);
 			proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 			free(proxInstrucc);
