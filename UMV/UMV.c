@@ -794,7 +794,7 @@ void cambiarRetardo(){
 
 	printf ("--------------------------------\n");
 	printf("Ingrese el tiempo:");
-	if (scanf("%i",&t)!= EOF && t>0){
+	if (scanf("%i",&t)!= EOF && t>=0){
 		retardo = t;
 		printf("Nuevo retardo: %i\n", t);
 	}else{
