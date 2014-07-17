@@ -346,6 +346,7 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 			(semaforo->valor)--;
 			enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 		}else{
+			(semaforo->valor)--;
 			aux_cpu = get_cpu(soc_cpu);
 
 			enviar_men_comun_destruir(soc_cpu, SEM_BLOQUEADO, NULL, 0);
