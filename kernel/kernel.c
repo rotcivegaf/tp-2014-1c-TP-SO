@@ -319,6 +319,7 @@ void *pcp(t_param_pcp *param_pcp){
 								men_cpu->tipo=SEM_OK;
 								socket_send_comun(i,men_cpu);
 							}else{
+								(semaforo->valor)--;
 								aux_cpu = get_cpu(i);
 
 								men_cpu->tipo = SEM_BLOQUEADO;
