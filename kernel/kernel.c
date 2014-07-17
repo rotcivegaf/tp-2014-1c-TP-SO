@@ -26,7 +26,7 @@ FILE *pcp_log;
 
 
 int main(void){
-	dicc_var = dictionary_create(); //todo ver donde destruir esto, porque da memory leak de 96 bytes!
+	dicc_var = dictionary_create();
 	dicc_sem = dictionary_create();
 	//diccionario dispositivos
 	dicc_disp_io = dictionary_create();
@@ -68,7 +68,6 @@ int main(void){
 	pthread_join(hilo_plp, NULL);
 	pthread_join(hilo_pcp, NULL);
 
-	//todo todos estos free y demas, es como si no estuvieran para el valgrind..
 	free(param_plp->puerto_prog);
 	free(param_plp->puerto_umv);
 	free(param_plp->ip_umv);
@@ -151,7 +150,7 @@ void *plp(t_param_plp *param_plp){
 
 						t_cpu *aux_cpu=get_cpu_soc_prog(i);
 						if (aux_cpu==NULL)
-							break;
+							continue;
 						socket_cerrar(i);
 						aux_cpu->id_prog_exec = 0;
 
@@ -159,7 +158,7 @@ void *plp(t_param_plp *param_plp){
 						queue_push(cola_cpu,aux_cpu);
 						sem_incre(&cant_cpu_libres);
 						pthread_mutex_unlock(&mutex_uso_cola_cpu);
-						break;
+						continue;
 					}
 
 					printf("PLP-select: nuevo prog con socket n°%i\n", i);
@@ -264,14 +263,14 @@ void *pcp(t_param_pcp *param_pcp){
 					cpu->soc_cpu = cpu_new_fd;
 					cpu->id_prog_exec = 0;
 
+					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
+					FD_SET(cpu_new_fd, &conj_soc_cpus);
+
 					// Pone la estructura en la cola de cpus (cola con cpus libres)
 					pthread_mutex_lock(&mutex_uso_cola_cpu);
 					queue_push(cola_cpu, cpu);
 					sem_incre(&cant_cpu_libres);
 					pthread_mutex_unlock(&mutex_uso_cola_cpu);
-
-					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
-					FD_SET(cpu_new_fd, &conj_soc_cpus);
 
 					if (cpu_new_fd > fdmax)
 						fdmax = cpu_new_fd;
@@ -387,12 +386,16 @@ void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
 
+	FD_CLR(soc_cpu, &conj_soc_cpus);
+
 	txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
 	logear_int(pcp_log,soc_cpu);
 	txt_write_in_file(pcp_log,"\n");
 	printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", soc_cpu);
 	// Agarra el cpu a partir de su n° de socket
+
 	aux_cpu = get_cpu(soc_cpu);
+
 	if (aux_cpu->id_prog_exec != 0){
 		// Actualizacion pcb
 		aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
@@ -404,10 +407,12 @@ void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 		queue_push(colas->cola_ready,aux_pcb_otros);
 		sem_incre(&cant_ready);
 		pthread_mutex_unlock(&mutex_ready);
+	}else{
+		sem_decre(&cant_cpu_libres);
 	}
+
 	free(aux_cpu);
 	socket_cerrar(soc_cpu);
-	FD_CLR(soc_cpu, &conj_soc_cpus);
 	destruir_men_comun(men_cpu);
 }
 
@@ -689,12 +694,10 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 }
 
 void pasar_pcb_exit(t_pcb_otros *pcb){
-	pthread_mutex_unlock(&mutex_exec);
 	pthread_mutex_lock(&mutex_exit);
 	queue_push(colas->cola_exit,pcb);
 	sem_incre(&cant_exit);
 	pthread_mutex_unlock(&mutex_exit);
-	pthread_mutex_unlock(&mutex_exec);
 	sem_incre(&cant_multiprog);
 }
 /*
@@ -794,7 +797,6 @@ t_cpu *get_cpu_soc_prog(int32_t soc_prog){
 
 	return NULL;
 }
-
 
 t_cpu *get_cpu(int32_t soc_cpu){
 
@@ -926,8 +928,6 @@ void *manejador_ready_exec(){
 		pthread_mutex_lock(&mutex_uso_cola_cpu);
 
 		cpu = get_cpu_libre();
-		if (cpu == NULL)
-			continue;
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
 
