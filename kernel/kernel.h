@@ -126,6 +126,8 @@
 	void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor);
 	void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor);
 	void fin_quantum(int32_t soc_cpu);
+	void signal(int32_t soc_cpu,t_men_comun *men_cpu);
+	void wait(int32_t soc_cpu,t_men_comun *men_cpu);
 
 	void logear_int(FILE* destino,int32_t un_int);
 

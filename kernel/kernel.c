@@ -13,6 +13,9 @@ pthread_mutex_t mutex_exit = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_cola_cpu= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_io= PTHREAD_MUTEX_INITIALIZER;
 
+pthread_mutex_t mutex_dicc_var= PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex_dicc_sem= PTHREAD_MUTEX_INITIALIZER;
+
 pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 
 sem_t cant_new, cant_ready, cant_exit;
@@ -215,9 +218,6 @@ void *plp(t_param_plp *param_plp){
 void *pcp(t_param_pcp *param_pcp){
 	int32_t i, fdmax, cpu_new_fd;
 	fd_set read_fds;
-	t_cpu *aux_cpu;
-	t_pcb_otros *aux_pcb_otros;
-	t_semaforo *semaforo;
 
 	// Crea el hilo que pasa los pcb de ready a exec
 	pthread_t hilo_ready_exec;
@@ -311,61 +311,10 @@ void *pcp(t_param_pcp *param_pcp){
 						grabar_valor_compartida(i, men_cpu);
 						break;
 					case WAIT:
-						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
-
-						if(semaforo != NULL){
-							if(semaforo->valor > 0){
-								(semaforo->valor)--;
-								men_cpu->tipo=SEM_OK;
-								socket_send_comun(i,men_cpu);
-							}else{
-								(semaforo->valor)--;
-								aux_cpu = get_cpu(i);
-
-								men_cpu->tipo = SEM_BLOQUEADO;
-								socket_send_comun(i,men_cpu);
-
-								aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
-
-								queue_push(semaforo->procesos,aux_pcb_otros);
-							}
-
-						txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
-						logear_int(pcp_log,i);
-						txt_write_in_file(pcp_log,"\n");
-						}else{
-							llamada_erronea(i, SEM_INEX);
-
-							txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-						}
-						destruir_men_comun(men_cpu);
+						wait(i ,men_cpu);
 						break;
 					case SIGNAL:
-						semaforo = dictionary_get(dicc_sem,men_cpu->dato);
-
-						if(semaforo != NULL){
-							(semaforo->valor)++;
-							socket_send_comun(i,men_cpu);
-
-							if(queue_size(semaforo->procesos)>0){
-								aux_pcb_otros = queue_pop(semaforo->procesos);
-								pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
-							}
-
-							txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-
-						}else{
-							llamada_erronea(i, SEM_INEX);
-
-							txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
-							logear_int(pcp_log,i);
-							txt_write_in_file(pcp_log,"\n");
-						}
-						destruir_men_comun(men_cpu);
+						signal(i, men_cpu);
 						break;
 					case IO_ID:
 						enviar_IO(i, men_cpu->dato);
@@ -381,6 +330,82 @@ void *pcp(t_param_pcp *param_pcp){
 		usleep(_RETARDO*1000);
 	}
 	return NULL;
+}
+
+void wait(int32_t soc_cpu,t_men_comun *men_cpu){
+	t_semaforo *semaforo;
+	t_cpu *aux_cpu;
+	t_pcb_otros *aux_pcb_otros;
+
+	pthread_mutex_lock(&mutex_dicc_sem);
+
+	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
+
+	if(semaforo != NULL){
+		if(semaforo->valor > 0){
+			(semaforo->valor)--;
+			men_cpu->tipo=SEM_OK;
+			socket_send_comun(soc_cpu,men_cpu);
+		}else{
+			(semaforo->valor)--;
+			aux_cpu = get_cpu(soc_cpu);
+
+			men_cpu->tipo = SEM_BLOQUEADO;
+			socket_send_comun(soc_cpu,men_cpu);
+
+			aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
+
+			queue_push(semaforo->procesos,aux_pcb_otros);
+		}
+
+		txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}else{
+		llamada_erronea(soc_cpu, SEM_INEX);
+
+		txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}
+
+	pthread_mutex_unlock(&mutex_dicc_sem);
+
+	destruir_men_comun(men_cpu);
+}
+
+void signal(int32_t soc_cpu,t_men_comun *men_cpu){
+	t_semaforo *semaforo;
+	t_pcb_otros *aux_pcb_otros;
+
+	pthread_mutex_lock(&mutex_dicc_sem);
+
+	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
+
+	if(semaforo != NULL){
+		(semaforo->valor)++;
+		socket_send_comun(soc_cpu,men_cpu);
+
+		if(queue_size(semaforo->procesos)>0){
+			aux_pcb_otros = queue_pop(semaforo->procesos);
+			pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
+		}
+
+		txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+
+	}else{
+		llamada_erronea(soc_cpu, SEM_INEX);
+
+		txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
+		logear_int(pcp_log,soc_cpu);
+		txt_write_in_file(pcp_log,"\n");
+	}
+
+	pthread_mutex_unlock(&mutex_dicc_sem);
+
+	destruir_men_comun(men_cpu);
 }
 
 void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
@@ -507,6 +532,8 @@ void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
 	char *string_valor;
 	char *key = men_obt_valor->dato;
 
+	pthread_mutex_lock(&mutex_dicc_var);
+
 	if (dictionary_has_key(dicc_var, key)){
 		valor = dictionary_get(dicc_var, key);
 		string_valor = string_itoa(valor);
@@ -520,6 +547,9 @@ void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}
+
+	pthread_mutex_unlock(&mutex_dicc_var);
+
 	destruir_men_comun(men_obt_valor);
 }
 
@@ -527,6 +557,8 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 	int32_t valor;
 	char *key = men_gra_valor->dato;
 	t_men_comun *men_valor;
+
+	pthread_mutex_lock(&mutex_dicc_var);
 
 	if (dictionary_has_key(dicc_var, key)){
 
@@ -551,6 +583,9 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}
+
+	pthread_mutex_unlock(&mutex_dicc_var);
+
 	destruir_men_comun(men_gra_valor);
 }
 
