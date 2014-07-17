@@ -344,14 +344,11 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 	if(semaforo != NULL){
 		if(semaforo->valor > 0){
 			(semaforo->valor)--;
-			men_cpu->tipo=SEM_OK;
-			socket_send_comun(soc_cpu,men_cpu);
+			enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 		}else{
-			(semaforo->valor)--;
 			aux_cpu = get_cpu(soc_cpu);
 
-			men_cpu->tipo = SEM_BLOQUEADO;
-			socket_send_comun(soc_cpu,men_cpu);
+			enviar_men_comun_destruir(soc_cpu, SEM_BLOQUEADO, NULL, 0);
 
 			aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
 
@@ -384,7 +381,8 @@ void signal(int32_t soc_cpu,t_men_comun *men_cpu){
 
 	if(semaforo != NULL){
 		(semaforo->valor)++;
-		socket_send_comun(soc_cpu,men_cpu);
+
+		enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 
 		if(queue_size(semaforo->procesos)>0){
 			aux_pcb_otros = queue_pop(semaforo->procesos);
