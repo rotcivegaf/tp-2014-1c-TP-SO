@@ -18,7 +18,7 @@ int main(int argc, char *argv[]){
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript=tamanioArchivo(scriptAProcesar);
-	char *script = malloc(tamanioScript);
+	char script[tamanioScript];
 
 	soc_kernel=socket_crear_client(puerto_kernel, ip_kernel);
 	handshake_kernel(soc_kernel);
@@ -33,8 +33,8 @@ int main(int argc, char *argv[]){
 	t_men_comun *mensaje_cod_prog = crear_men_comun(CODIGO_SCRIPT,script,tamanioScript);
 	socket_send_comun(soc_kernel,mensaje_cod_prog);
 	log_info(logger,"Se envió el codigo del script al kernel");
+
 	destruir_men_comun(mensaje_cod_prog);
-	free(script);
 
 	//Espero mensajes del kernel
 	int fin_ejecucion = 0;
