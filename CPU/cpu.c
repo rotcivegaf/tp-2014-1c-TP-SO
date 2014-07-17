@@ -207,11 +207,12 @@ void signal_handler(int sig){
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 			free(proxInstrucc);
 		}
-	}
-	enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
-
-	if (pcb!=NULL)
+		enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
 		enviar_pcb_destruir();
+	}else{
+		enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
+	}
+
 	txt_write_in_file(cpu_file_log, "Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
 	printf("Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
 

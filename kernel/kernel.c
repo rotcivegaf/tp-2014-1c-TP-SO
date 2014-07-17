@@ -386,7 +386,6 @@ void *pcp(t_param_pcp *param_pcp){
 void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
-
 	FD_CLR(soc_cpu, &conj_soc_cpus);
 
 	txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
@@ -394,7 +393,6 @@ void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 	txt_write_in_file(pcp_log,"\n");
 	printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", soc_cpu);
 	// Agarra el cpu a partir de su n° de socket
-
 	aux_cpu = get_cpu(soc_cpu);
 
 	if (aux_cpu->id_prog_exec != 0){
@@ -411,8 +409,8 @@ void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 	}else{
 		sem_decre(&cant_cpu_libres);
 	}
-
 	free(aux_cpu);
+
 	socket_cerrar(soc_cpu);
 	destruir_men_comun(men_cpu);
 }
@@ -471,8 +469,8 @@ void enviar_IO(int32_t soc_cpu, char *id_IO){
 }
 
 void fin_quantum(int32_t soc_cpu){
-	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	t_pcb_otros *aux_pcb_otros;
+	t_cpu *aux_cpu = get_cpu(soc_cpu);
 
 	// Actualizacion pcb
 	aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
@@ -483,14 +481,15 @@ void fin_quantum(int32_t soc_cpu){
 
 	// Setea en la estructura del cpu como que no esta ejecutando nada
 	aux_cpu->id_prog_exec = 0;
+	aux_cpu->soc_prog = 0;
 
 	// Pone el pcb en ready
 
 	pthread_mutex_lock(&mutex_ready);
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 
-	queue_push(colas->cola_ready,aux_pcb_otros);
 	queue_push(cola_cpu,aux_cpu);
+	queue_push(colas->cola_ready,aux_pcb_otros);
 
 	sem_incre(&cant_ready);
 	sem_incre(&cant_cpu_libres);
@@ -767,6 +766,7 @@ t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 	actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
 
 	cpu->id_prog_exec = 0;
+	cpu->soc_prog = 0;
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	pthread_mutex_lock(&mutex_block);
@@ -934,7 +934,11 @@ void *manejador_ready_exec(){
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
 
+		if(aux_pcb_otros == NULL)
+			printf("ERROR manejador_ready_exec()\n");
+
 		enviar_cpu_pcb_destruir(cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
+
 		cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 		cpu->soc_prog = aux_pcb_otros->n_socket;
 
