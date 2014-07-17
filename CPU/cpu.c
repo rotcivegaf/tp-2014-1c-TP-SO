@@ -674,17 +674,19 @@ void retornar(t_valor_variable retorno){
 }
 
 void imprimir(t_valor_variable valor_mostrar){
-	char *string_int = string_itoa(valor_mostrar);
+	if(!fueFinEjecucion){
+		char *string_int = string_itoa(valor_mostrar);
 
-	enviar_men_comun_destruir(socketKernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
-	char *aux_string = string_itoa(pcb->id);
-	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
-	free(aux_string);
-	recibir_resp_kernel(R_IMPRIMIR);
+		enviar_men_comun_destruir(socketKernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
+		char *aux_string = string_itoa(pcb->id);
+		enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+		free(aux_string);
+		recibir_resp_kernel(R_IMPRIMIR);
 
-	txt_write_in_file(cpu_file_log, "	Imprimiendo valor\n");
-	printf("	Imprimiendo valor: %s\n", string_int);
-	free(string_int);
+		txt_write_in_file(cpu_file_log, "	Imprimiendo valor\n");
+		printf("	Imprimiendo valor: %s\n", string_int);
+		free(string_int);
+	}
 }
 
 void imprimirTexto(char* texto){
