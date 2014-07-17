@@ -674,6 +674,8 @@ void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
 
+	aux_cpu->id_prog_exec = 0;
+
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
 	queue_push(cola_cpu,aux_cpu);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
