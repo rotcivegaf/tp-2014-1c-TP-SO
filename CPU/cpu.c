@@ -706,7 +706,7 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	free(aux_tiempo);
 
 	enviar_pcb_destruir();
-
+	fueFinEjecucion = 1;
 	entre_io =1;
 
 	txt_write_in_file(cpu_file_log, "Saliendo a IO en dispositivo\n");

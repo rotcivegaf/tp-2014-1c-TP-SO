@@ -460,11 +460,11 @@ void enviar_IO(int32_t soc_cpu, char *id_IO){
 	queue_push(aux_IO->procesos, espera);
 	dictionary_put(dicc_disp_io, id_IO, aux_IO);
 
-	pthread_mutex_unlock(&mutex_io);
+	actualizar_pcb_y_bloq(aux_cpu);
 
 	sem_incre(&(aux_IO->cont_cant_proc));
 
-	actualizar_pcb_y_bloq(aux_cpu);
+	pthread_mutex_unlock(&mutex_io);
 
 	destruir_men_comun(men);
 }
@@ -664,7 +664,7 @@ t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t id_proc){
 		}
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
-	printf("ERROR EN get_pcb_otros_exec\n");
+	printf("ERROR EN get_pcb_otros_exec_sin_quitarlo\n");
 	return NULL;
 }
 
@@ -761,18 +761,20 @@ t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog){
 
 t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu){
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(cpu->id_prog_exec);
+
 	t_pcb *pcb_recibido = socket_recv_quantum_pcb(cpu->soc_cpu)->pcb;
 	actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
 
 	cpu->id_prog_exec = 0;
 
 	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	pthread_mutex_lock(&mutex_block);
+
 	queue_push(cola_cpu,cpu);
+	queue_push(colas->cola_block,aux_pcb_otros);
+
 	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_cola_cpu);
-
-	pthread_mutex_lock(&mutex_block);
-	queue_push(colas->cola_block,aux_pcb_otros);
 	pthread_mutex_unlock(&mutex_block);
 
 	return aux_pcb_otros;
@@ -837,7 +839,7 @@ t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 		queue_push(colas->cola_exec, aux_pcb_otros);
 	}
 	pthread_mutex_unlock(&mutex_exec);
-	printf("ERROR EN get_pcb_otros_exec\n");
+	printf("ERROR en get_pcb_otros_exec\n");
 	return NULL;
 }
 
@@ -1082,7 +1084,6 @@ void *manejador_IO(t_IO *io){
 	t_IO_espera *proceso;
 
 	while(quit_sistema){
-
 		sem_decre(&(io->cont_cant_proc));
 
 		proceso = queue_pop(io->procesos);
@@ -1091,7 +1092,6 @@ void *manejador_IO(t_IO *io){
 			usleep(io->io_sleep*1000);
 
 		pasar_pcbBlock_ready(proceso->id_prog);
-
 	}
 	return NULL;
 }
