@@ -26,7 +26,7 @@ enum tipo_fin {
 };
 
 t_dictionary *dic_Variables;
-t_pcb *pcb;
+t_pcb *pcb = NULL;
 int32_t socketKernel, socketUmv;
 int32_t sem_block = 0;//todo no implementado
 int32_t quantum_actual;
@@ -96,11 +96,9 @@ int main(){
 		fueFinEjecucion = 0;
 		entre_io = 0;
 		sem_block = 0;
+		pcb = NULL;
 	}
 
-	destruir_dic_Variables();
-	socket_cerrar(socketKernel);
-	socket_cerrar(socketUmv);
 	return 0;
 }
 
@@ -199,31 +197,28 @@ void signal_handler(int sig){
 	got_usr1 =1;
 
 	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
-	printf("Se recibio la SIGUSR1");
+	printf("Se recibio la SIGUSR1\n");
 
-	while(quantum_actual < quantum_max){
-		char* proxInstrucc = solicitarProxSentenciaAUmv();
-		analizadorLinea(proxInstrucc, &functions, &kernel_functions);
-		free(proxInstrucc);
-		quantum_actual ++;
+	if (pcb!=NULL){
+		for(;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block);quantum_actual ++){
+			char* proxInstrucc = solicitarProxSentenciaAUmv();
+			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
+			free(proxInstrucc);
+		}
 	}
-	if(!fueFinEjecucion){
-		salirPorQuantum();
-	}
+
 	txt_write_in_file(cpu_file_log, "SIGUSR1 - Se termina de ejecutar el quantum actual \n");
-	printf("SIGUSR1 - Se termina de ejecutar el quantum actual");
-
-	free(etiquetas);
-	free(pcb);
-	cambio_PA(0);
-	destruir_dic_Variables();
+	printf("SIGUSR1 - Se termina de ejecutar el quantum actual\n");
 
 	enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
 
-	enviar_pcb_destruir();
-
+	if (pcb!=NULL)
+		enviar_pcb_destruir();
 	txt_write_in_file(cpu_file_log, "Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
 	printf("Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
+
+	socket_cerrar(socketKernel);
+	socket_cerrar(socketUmv);
 }
 
 void preservarContexto(){
@@ -562,7 +557,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 
 	base = pcb->dir_seg_stack;
 	offset = pcb->dir_cont_actual - base + (pcb->cant_var_cont_actual*5)+8;
-	printf("OFFSET:%i\n",(pcb->dir_cont_actual - base ));
+
 	tam = sizeof(int32_t);
 
 	char *buffer = copiar_int_to_buffer(donde_retornar);
