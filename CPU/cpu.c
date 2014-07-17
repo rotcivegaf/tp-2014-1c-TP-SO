@@ -177,6 +177,11 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 		destruir_men_comun(rec_inst);
 		return proxInst_sin_blancos;
 	}
+	if(rec_inst->tipo == SEGMEN_FAULT){
+		finalizarContexto(SEGMEN_FAULT);
+		destruir_men_comun(rec_inst);
+		return NULL;
+	}
 	printf("ERROR tipo de dato:%i, recibido es erroneo\n", rec_inst->tipo);
 	return NULL;
 }
@@ -758,7 +763,7 @@ void mi_signal(t_nombre_semaforo identificador_semaforo){
 		txt_write_in_file(cpu_file_log,"Signal a semaforo inexistente\n");
 		printf("	Signal a semaforo %s inexistente \n", identificador_semaforo);
 		finalizarContexto(SEM_INEX);
-		}
+	}
 	destruir_men_comun(respuesta);
 }
 
