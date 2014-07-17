@@ -357,6 +357,7 @@ char *solicitar_bytes(int32_t id_proc, int32_t base, int32_t offset, int32_t tam
 		txt_write_in_file(umv_file_log,", tamanio:");
 		logear_int(umv_file_log,tam);
 		txt_write_in_file(umv_file_log,"\n");
+		ret = NULL;
 		return ret;
 	}
 	pthread_mutex_lock(&mutex_mem_prin);
