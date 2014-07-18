@@ -32,7 +32,7 @@ int32_t sem_block = 0;//todo no implementado
 int32_t quantum_actual;
 int32_t quantum_max;
 char* etiquetas;
-int32_t fueFinEjecucion = 0, entre_io = 0;
+int32_t fueFinEjecucion = 0, entre_io = 0, huboSegFault = 0;
 FILE *cpu_file_log;
 int32_t pid_cpu;
 
@@ -96,6 +96,7 @@ int main(){
 		pcb = NULL;
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
 		fueFinEjecucion = 0;
+		huboSegFault = 0;
 		entre_io = 0;
 		sem_block = 0;
 	}
@@ -292,6 +293,7 @@ void finalizarContexto(int32_t tipo_fin){
 		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
+		huboSegFault = 1;
 		break;
 	case OK:
 		printf("	Imprmiendo variables y finalizando proceso\n");
@@ -442,25 +444,27 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 
 void asignar(t_puntero direccion_variable, t_valor_variable valor){
 	//envio a la umv para almacenar base= contexto actual offset= direccion_variable tamaño=4bytes buffer= valor
-	int32_t base = pcb->dir_seg_stack;
-	int32_t offset = direccion_variable-base+1;
+	if(!huboSegFault){
+		int32_t base = pcb->dir_seg_stack;
+		int32_t offset = direccion_variable-base+1;
 
-	int32_t tam = sizeof(t_valor_variable);
-	char *buffer = copiar_int_to_buffer(valor);
-	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
-	free(buffer);
+		int32_t tam = sizeof(t_valor_variable);
+		char *buffer = copiar_int_to_buffer(valor);
+		enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
+		free(buffer);
 
-	t_men_comun *r_alm = socket_recv_comun(socketUmv);
+		t_men_comun *r_alm = socket_recv_comun(socketUmv);
 
-	if(r_alm->tipo == R_ALM_BYTES){
-		txt_write_in_file(cpu_file_log, "Asignando en la direccion \n");
-		txt_write_in_file(cpu_file_log, "el valor \n");
-		printf("	Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
+		if(r_alm->tipo == R_ALM_BYTES){
+			txt_write_in_file(cpu_file_log, "Asignando en la direccion \n");
+			txt_write_in_file(cpu_file_log, "el valor \n");
+			printf("	Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
+		}
+		if(r_alm->tipo == SEGMEN_FAULT){
+			finalizarContexto(SEGMEN_FAULT);
+		}
+		destruir_men_comun(r_alm);
 	}
-	if(r_alm->tipo == SEGMEN_FAULT){
-		finalizarContexto(SEGMEN_FAULT);
-	}
-	destruir_men_comun(r_alm);
 }
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
@@ -674,7 +678,7 @@ void retornar(t_valor_variable retorno){
 }
 
 void imprimir(t_valor_variable valor_mostrar){
-	if(!fueFinEjecucion){
+	if(!huboSegFault){
 		char *string_int = string_itoa(valor_mostrar);
 
 		enviar_men_comun_destruir(socketKernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
