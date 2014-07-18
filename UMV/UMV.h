@@ -52,7 +52,7 @@
 	t_seg *buscar_segmento_dir_logica(int32_t id_proc, int32_t dir_logica);
 	void compactar();
 	int32_t crearSegmento(t_men_seg *men_ped_seg);
-	int32_t asignarMemoriaAleatoria(int32_t tamanio);
+	int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id);
 	t_list *obtener_lista_seg_ord_dir_fisica();
 	int32_t buscar_espacio_mem_prin(int32_t tam_a_reservar);
 	void destruirSegmentos(int id_prog);
