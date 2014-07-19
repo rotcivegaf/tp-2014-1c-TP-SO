@@ -493,8 +493,8 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id){
 
 	int32_t ret = (rand());
 	t_seg *nodo;
-	int x =0;
-	int memEstaOk;
+	int32_t x =0;
+	int32_t memEstaOk;
 	
 	
 	
@@ -503,7 +503,7 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id){
 	do{
 
 	memEstaOk = 1;
-		for (x; x<list_size(list_seg) ;x++){
+		for (;x<list_size(list_seg);x++){
 
 			nodo = list_get(list_seg,x);
 

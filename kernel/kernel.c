@@ -147,7 +147,7 @@ void *plp(t_param_plp *param_plp){
 						txt_write_in_file(plp_log,"Cerro la conexion el programa con socket n°:");
 						logear_int(plp_log,i);
 						txt_write_in_file(plp_log,"\n");
-						printf("PLP-select: Prog desconectado n°socket %d\n", i);
+						//printf("PLP-select: Prog desconectado n°socket %d\n", i);
 						FD_CLR(i, &conj_soc_progs); // Elimina al socket del conjunto maestro
 						destruir_men_comun(men_cod_prog);
 
@@ -164,7 +164,7 @@ void *plp(t_param_plp *param_plp){
 						continue;
 					}
 
-					printf("PLP-select: nuevo prog con socket n°%i\n", i);
+					//printf("PLP-select: nuevo prog con socket n°%i\n", i);
 					txt_write_in_file(plp_log,"Nuevo programa con socket n°:");
 					logear_int(plp_log,i);
 					txt_write_in_file(plp_log,"\n");
@@ -263,7 +263,7 @@ void *pcp(t_param_pcp *param_pcp){
 					cpu->soc_cpu = cpu_new_fd;
 					cpu->id_prog_exec = 0;
 
-					printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
+					//printf("PCP-select: CPU conectada n°socket %i\n", cpu_new_fd);
 					FD_SET(cpu_new_fd, &conj_soc_cpus);
 
 					// Pone la estructura en la cola de cpus (cola con cpus libres)
@@ -351,6 +351,10 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 
 			enviar_men_comun_destruir(soc_cpu, SEM_BLOQUEADO, NULL, 0);
 
+			txt_write_in_file(pcp_log,"Se bloqueo al programa por un wait, con id ");
+			logear_int(pcp_log,aux_cpu->id_prog_exec);
+			txt_write_in_file(pcp_log,"/n");
+
 			aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
 
 			queue_push(semaforo->procesos,aux_pcb_otros);
@@ -415,7 +419,7 @@ void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu){
 	txt_write_in_file(pcp_log,"Cerro la conexion con la senial SIGUSR1 el cpu con socket n°:");
 	logear_int(pcp_log,soc_cpu);
 	txt_write_in_file(pcp_log,"\n");
-	printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", soc_cpu);
+	//printf("PCP-select: CPU desconectada con SIGUSR1 socket n°%i\n", soc_cpu);
 	// Agarra el cpu a partir de su n° de socket
 	aux_cpu = get_cpu(soc_cpu);
 
@@ -446,7 +450,7 @@ void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
 	txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket n°:");
 	logear_int(pcp_log,soc_cpu);
 	txt_write_in_file(pcp_log,"\n");
-	printf("PCP-select: CPU desconectada n°socket %i\n", soc_cpu);
+	//printf("PCP-select: CPU desconectada n°socket %i\n", soc_cpu);
 
 	// Agarra el cpu a partir de su n° de socket
 	aux_cpu = get_cpu(soc_cpu);
@@ -608,52 +612,51 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 }
 
 void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor){
-	t_pcb_otros *aux_pcb_otros;
 	t_men_comun *men_id_prog;
-	int32_t aux_i;
-
 	men_id_prog = socket_recv_comun(soc);
 
 	if (men_id_prog->tipo != ID_PROG)
 		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
 
-	aux_i = atoi(men_id_prog->dato);
+	t_cpu *aux_cpu = get_cpu(soc);
 
-	pthread_mutex_lock(&mutex_exec);
-	aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
-	pthread_mutex_unlock(&mutex_exec);
+	socket_send_comun(aux_cpu->soc_prog, men_imp_valor);
 
-	socket_send_comun(aux_pcb_otros->n_socket, men_imp_valor);
-	destruir_men_comun(men_id_prog);
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 
-	txt_write_in_file(pcp_log,"IMPRIMIR_VALOR por cpu con socket n°");
+	txt_write_in_file(pcp_log,"IMPRIMIR_VALOR por cpu con socket");
 	logear_int(pcp_log,soc);
+	txt_write_in_file(pcp_log,"al programa con id ");
+	logear_int(pcp_log,aux_cpu->id_prog_exec);
+	txt_write_in_file(pcp_log,".Valor impreso: ");
+	logear_int(pcp_log,atoi(men_imp_valor->dato));
 	txt_write_in_file(pcp_log,"\n");
 
 	enviar_men_comun_destruir(soc, R_IMPRIMIR,NULL,0);
 }
 
 void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
-	t_pcb_otros *aux_pcb_otros;
 	t_men_comun *men_id_prog;
-	int32_t aux_i;
 
 	men_id_prog = socket_recv_comun(soc);
 
 	if (men_id_prog->tipo != ID_PROG)
 		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
 
-	aux_i = atoi(men_id_prog->dato);
+	t_cpu *aux_cpu = get_cpu(soc);
 
-	pthread_mutex_lock(&mutex_exec);
-	aux_pcb_otros = get_pcb_otros_exec_sin_quitarlo(aux_i);
-	pthread_mutex_unlock(&mutex_exec);
+	socket_send_comun(aux_cpu->soc_prog, men_imp_texto);
 
-	socket_send_comun(aux_pcb_otros->n_socket, men_imp_texto);
-	destruir_men_comun(men_id_prog);
+	pthread_mutex_lock(&mutex_uso_cola_cpu);
+	queue_push(cola_cpu,aux_cpu);
+	pthread_mutex_unlock(&mutex_uso_cola_cpu);
 
 	txt_write_in_file(pcp_log,"IMPRIMIR_TEXTO por cpu con socket n°");
 	logear_int(pcp_log,soc);
+	txt_write_in_file(pcp_log," al programa con id:");
+	logear_int(pcp_log,aux_cpu->id_prog_exec);
 	txt_write_in_file(pcp_log,"\n");
 
 	enviar_men_comun_destruir(soc, R_IMPRIMIR,NULL,0);
@@ -668,8 +671,10 @@ void fin_ejecucion(int32_t tipo,int32_t socket_cpu){
 	logear_int(pcp_log,aux_pcb_otros->pcb->id);
 	txt_write_in_file(pcp_log,"\n");
 
-	txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
-	logear_int(pcp_log,aux_pcb_otros->pcb->id);
+	if(tipo==SEGMEN_FAULT){
+		txt_write_in_file(pcp_log,"Error por segmentation fault del programa:");
+		logear_int(pcp_log,aux_pcb_otros->pcb->id);
+	}
 
 	aux_pcb_otros->tipo_fin_ejecucion = tipo;
 	pasar_pcb_exit(aux_pcb_otros);
