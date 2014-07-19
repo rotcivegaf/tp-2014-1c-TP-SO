@@ -76,6 +76,7 @@
 		t_dir_mem dir_seg_stack;
 		t_dir_mem dir_indice_codigo;
 		t_dir_mem dir_indice_etiquetas;
+		int32_t memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
 		int32_t valor;
