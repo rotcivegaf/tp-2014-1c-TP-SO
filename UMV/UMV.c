@@ -492,16 +492,17 @@ int32_t crearSegmento(t_men_seg *men_ped){
 int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id){
 
 	int32_t ret = (rand());
-	
+	t_seg *nodo;
+	int x =0;
 	
 	// se recorre la lista y se controla que los segmentos que pertenecen a ese programa no se pise, si se pisa se
 	// genera un nuevo numero aleatorio y se recorre nuevamente la lista controlando hasta que todo este ok
 	do{
 
 	int memEstaOk = 1;
-		for (int x=0;list_size(list_seg)-1;x++){
+		for (x; x<list_size(list_seg) ;x++){
 
-			t_seg *nodo = list_get(list_seg,x);
+			nodo = list_get(list_seg,x);
 
 			if (nodo->id_proc == id){
 				if ((((nodo->dir_logica) <= ret) && ((nodo->dir_logica + nodo->tam_seg) >= ret)) || (((nodo->dir_logica) <= ret+tamanio) && ((nodo->dir_logica + nodo->tam_seg) >= ret+tamanio)) || ((ret <= nodo->dir_logica) && (ret >= (nodo->dir_logica+nodo->tam_seg)))){
