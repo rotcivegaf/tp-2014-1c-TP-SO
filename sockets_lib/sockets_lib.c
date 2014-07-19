@@ -6,6 +6,7 @@
 int socket_crear_server(char *puerto){
 	struct addrinfo hints;
 	struct addrinfo *serverInfo;
+	int32_t on =1;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
@@ -18,6 +19,9 @@ int socket_crear_server(char *puerto){
 		perror("socket server");
 		exit(1);
 	}
+
+	setsockopt(soc, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int32_t));
+
 	int resultado_bind = bind(soc ,serverInfo->ai_addr, serverInfo->ai_addrlen);
 	if (resultado_bind == -1){
 		perror("connect");
