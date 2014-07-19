@@ -494,12 +494,15 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id){
 	int32_t ret = (rand());
 	t_seg *nodo;
 	int x =0;
+	int memEstaOk;
+	
+	
 	
 	// se recorre la lista y se controla que los segmentos que pertenecen a ese programa no se pise, si se pisa se
 	// genera un nuevo numero aleatorio y se recorre nuevamente la lista controlando hasta que todo este ok
 	do{
 
-	int memEstaOk = 1;
+	memEstaOk = 1;
 		for (x; x<list_size(list_seg) ;x++){
 
 			nodo = list_get(list_seg,x);
