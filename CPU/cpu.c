@@ -27,7 +27,7 @@ enum tipo_fin {
 
 t_dictionary *dic_Variables;
 t_pcb *pcb = NULL;
-int32_t socketKernel, socketUmv;
+int32_t soc_kernel, soc_umv;
 int32_t sem_block = 0;//todo no implementado
 int32_t quantum_actual;
 int32_t quantum_max;
@@ -35,16 +35,12 @@ char* etiquetas;
 int32_t fueFinEjecucion = 0, entre_io = 0, huboSegFault = 0;
 FILE *cpu_file_log;
 int32_t pid_cpu;
+int quit_sistema = 1;
 
 int main(){
-	got_usr1 = 0;
 	char *proxInstrucc;
 
 	dic_Variables = dictionary_create();
-
-	sa.sa_handler = signal_handler; // puntero a una funcion handler del signal
-	sa.sa_flags = 0; // flags especiales para afectar el comportamiento de la señal
-	sigemptyset(&sa.sa_mask); // conjunto de señales a bloquear durante la ejecucion del signal-catching function
 
 	cpu_file_log = txt_open_for_append("./CPU/logs/cpu.log");
 	txt_write_in_file(cpu_file_log,"---------------------Nueva ejecucion------------------------------\n");
@@ -67,14 +63,14 @@ int main(){
 	handshake_umv(puertoUmv, ipUmv);
 
 	/*maneja si recibe la señal SIGUSR, hay que revisarlo todavia*/
-	if(sigaction(SIGUSR1, &sa, NULL) == -1){// sigaction permite llamar o especificar la accion asociada a la señal
-		perror("sigaction");
-		exit(1);
-	}
+	signal(SIGUSR1, signal_handler);
+	signal(SIGINT, signal_handler);
 
-	while(!got_usr1){
+	while(quit_sistema){
 		/*recibe un pcb del kernel*/
 		recibirUnPcb();
+		if(pcb == NULL)
+			goto _fin;
 		/* le digo a la UMV q cambie el proceso activo */
 		cambio_PA(pcb->id);
 
@@ -100,7 +96,18 @@ int main(){
 		entre_io = 0;
 		sem_block = 0;
 	}
+	socket_cerrar(soc_kernel);
+	socket_cerrar(soc_umv);
+	_fin:
 	return 0;
+}
+
+void signal_handler(int sig){
+	quit_sistema = 0;
+	if (pcb == NULL){
+		socket_cerrar(soc_kernel);
+		socket_cerrar(soc_umv);
+	}
 }
 
 void traerIndiceEtiquetas(){
@@ -111,7 +118,7 @@ void traerIndiceEtiquetas(){
 
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
-	t_men_comun *rec_etiq = socket_recv_comun(socketUmv);
+	t_men_comun *rec_etiq = socket_recv_comun(soc_umv);
 	if(rec_etiq->tipo == R_SOL_BYTES){
 		etiquetas = malloc(rec_etiq->tam_dato);
 		memcpy(etiquetas ,rec_etiq->dato, rec_etiq->tam_dato);
@@ -123,7 +130,20 @@ void traerIndiceEtiquetas(){
 }
 
 void recibirUnPcb(){
-	t_men_quantum_pcb *men_pcb = socket_recv_quantum_pcb(socketKernel);
+	int32_t length = 0;
+	char *aux_len = malloc(sizeof(int32_t));
+	int resultado_recv = recv(soc_kernel, aux_len, sizeof(int32_t), MSG_PEEK);
+	if (resultado_recv == -1)	return;
+	if (resultado_recv == 0)	return;
+	memcpy(&length, aux_len, sizeof(int32_t));
+	free(aux_len);
+	char stream[length];
+	resultado_recv = recv(soc_kernel, stream, length, MSG_WAITALL);
+	if (resultado_recv == -1)	return;
+	if (resultado_recv == 0)	return;
+	if (resultado_recv != length)	printf("NO PUDE RECIBIR TODO\n");
+
+	t_men_quantum_pcb *men_pcb = men_deserealizer_quantum_pcb(stream);
 
 	pcb = malloc(sizeof(t_pcb));
 	if((men_pcb->tipo==CONEC_CERRADA) || (men_pcb->tipo!=PCB_Y_QUANTUM)){
@@ -148,7 +168,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
-	men_base_offset = socket_recv_comun(socketUmv);
+	men_base_offset = socket_recv_comun(soc_umv);
 
 	memcpy(&offset, men_base_offset->dato, sizeof(int32_t));
 	memcpy(&tam, men_base_offset->dato+sizeof(int32_t), sizeof(int32_t));
@@ -164,7 +184,7 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	//recibir la instruccion a ejecutar
-	t_men_comun *rec_inst = socket_recv_comun(socketUmv);
+	t_men_comun *rec_inst = socket_recv_comun(soc_umv);
 
 	char proxInst[tam+BARRA_CERO];
 
@@ -189,41 +209,14 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 
 void salirPorQuantum(){
 	//mando el pcb con un tipo de mensaje que sali por quantum
-	enviar_men_comun_destruir(socketKernel, FIN_QUANTUM, NULL, 0);
+	enviar_men_comun_destruir(soc_kernel, FIN_QUANTUM, NULL, 0);
 	enviar_pcb_destruir();
 }
 
 void enviar_pcb_destruir(){
 	t_men_quantum_pcb *men = crear_men_quantum_pcb(PCB_Y_QUANTUM,0, pcb);
-	socket_send_quantum_pcb(socketKernel, men);
+	socket_send_quantum_pcb(soc_kernel, men);
 	destruir_quantum_pcb(men);
-}
-
-void signal_handler(int sig){
-	got_usr1 =1;
-
-	txt_write_in_file(cpu_file_log, "Se recibio la SIGUSR1 \n");
-	printf("Se recibio la SIGUSR1\n");
-
-	if (pcb!=NULL){
-		txt_write_in_file(cpu_file_log, "SIGUSR1 - Se termina de ejecutar el quantum actual \n");
-		printf("SIGUSR1 - Se termina de ejecutar el quantum actual\n");
-		for(;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block);quantum_actual ++){
-			char* proxInstrucc = solicitarProxSentenciaAUmv();
-			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
-			free(proxInstrucc);
-		}
-		enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
-		enviar_pcb_destruir();
-	}else{
-		enviar_men_comun_destruir(socketKernel, SIGUSR1_CPU_DESCONEC, NULL, 0);
-	}
-
-	txt_write_in_file(cpu_file_log, "Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
-	printf("Se desconecta la CPU por recibir la señal SIGUSR1. Chau \n");
-
-	socket_cerrar(socketKernel);
-	socket_cerrar(socketUmv);
 }
 
 void preservarContexto(){
@@ -236,7 +229,7 @@ void preservarContexto(){
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 	free(buffer);
 
-	t_men_comun *r_con = socket_recv_comun(socketUmv);
+	t_men_comun *r_con = socket_recv_comun(soc_umv);
 	if (r_con->tipo == R_ALM_BYTES){
 		destruir_men_comun(r_con);
 		offset = offset + 4;
@@ -244,7 +237,7 @@ void preservarContexto(){
 		enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 		free(buffer);
 
-		t_men_comun *r_proxins = socket_recv_comun(socketUmv);
+		t_men_comun *r_proxins = socket_recv_comun(soc_umv);
 		if(r_proxins->tipo == R_ALM_BYTES){
 			txt_write_in_file(cpu_file_log, "Se almaceno correctamente el contexto\n");
 			printf("	Se almaceno correctamente el contexto\n");
@@ -290,7 +283,7 @@ void finalizarContexto(int32_t tipo_fin){
 		aux_string = string_itoa(pcb->id);
 		printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
 		txt_write_in_file(cpu_file_log, "Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual\n");
-		enviar_men_comun_destruir(socketKernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, SEGMEN_FAULT, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
 		huboSegFault = 1;
@@ -299,9 +292,9 @@ void finalizarContexto(int32_t tipo_fin){
 		printf("	Imprmiendo variables y finalizando proceso\n");
 		char *string = "\n----------Imprimo el estado final de las variable----------\n";
 
-		enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, string, string_length(string)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, string, string_length(string)+BARRA_CERO);
 		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		recibir_resp_kernel(R_IMPRIMIR);
 
@@ -309,13 +302,13 @@ void finalizarContexto(int32_t tipo_fin){
 			base = pcb->dir_cont_actual;
 			offset = (5*i);
 			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
-			t_men_comun *men_nombre_var = socket_recv_comun(socketUmv);
+			t_men_comun *men_nombre_var = socket_recv_comun(soc_umv);
 
 			base = pcb->dir_cont_actual;
 			offset = (5*i)+1;
 
 			enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 4, NULL);
-			t_men_comun *men_cont_var = socket_recv_comun(socketUmv);
+			t_men_comun *men_cont_var = socket_recv_comun(soc_umv);
 
 			int32_t cont_var;
 			memcpy(&cont_var,men_cont_var->dato,4);
@@ -330,9 +323,9 @@ void finalizarContexto(int32_t tipo_fin){
 			var_a_imp_con_contexto[tam_string-1] = '\0';
 			free (aux_cont_var);
 
-			enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, var_a_imp_con_contexto, string_length(var_a_imp_con_contexto)+BARRA_CERO);
+			enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, var_a_imp_con_contexto, string_length(var_a_imp_con_contexto)+BARRA_CERO);
 			char *aux_string = string_itoa(pcb->id);
-			enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+			enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
 			free(aux_string);
 			recibir_resp_kernel(R_IMPRIMIR);
 
@@ -340,7 +333,7 @@ void finalizarContexto(int32_t tipo_fin){
 			destruir_men_comun(men_nombre_var);
 		}
 		aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, FIN_EJECUCION, aux_string, string_length(aux_string)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, FIN_EJECUCION, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		fueFinEjecucion = 1;
 		break;
@@ -378,7 +371,7 @@ t_puntero definirVariable(t_nombre_variable id_var){
 
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, key);
 
-	t_men_comun *r_alm = socket_recv_comun(socketUmv);
+	t_men_comun *r_alm = socket_recv_comun(soc_umv);
 
 	if(r_alm->tipo == R_ALM_BYTES){
 		int32_t *pos = malloc(sizeof(int32_t));
@@ -427,7 +420,7 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
 	//recibir de umv 4 bytes de valor_variable
-	t_men_comun *men_comun = socket_recv_comun(socketUmv);
+	t_men_comun *men_comun = socket_recv_comun(soc_umv);
 
 	if (men_comun->tipo == R_SOL_BYTES){
 		memcpy(&valor, men_comun->dato,men_comun->tam_dato);
@@ -453,7 +446,7 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 		enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 		free(buffer);
 
-		t_men_comun *r_alm = socket_recv_comun(socketUmv);
+		t_men_comun *r_alm = socket_recv_comun(soc_umv);
 
 		if(r_alm->tipo == R_ALM_BYTES){
 			txt_write_in_file(cpu_file_log, "Asignando en la direccion \n");
@@ -469,10 +462,10 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 
 t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	//le mando al kernel el nombre de la variable compartida
-	enviar_men_comun_destruir(socketKernel, OBTENER_VALOR, variable, string_length(variable)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, OBTENER_VALOR, variable, string_length(variable)+BARRA_CERO);
 
 	//recibo el valor
-	t_men_comun *respuesta = socket_recv_comun(socketKernel);
+	t_men_comun *respuesta = socket_recv_comun(soc_kernel);
 	t_valor_variable valor;
 
 	if((respuesta->tipo != VAR_INEX) && (respuesta->tipo != R_OBTENER_VALOR))
@@ -499,9 +492,9 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	//le mando al kernel el nombre de la variable compartida
 	//le mando el valor que le quiero asignar
 
-	enviar_men_comun_destruir(socketKernel, GRABAR_VALOR, variable, string_length(variable)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, GRABAR_VALOR, variable, string_length(variable)+BARRA_CERO);
 
-	t_men_comun *men_resp = socket_recv_comun(socketKernel);
+	t_men_comun *men_resp = socket_recv_comun(soc_kernel);
 	if(men_resp->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
 		printf("	Error en acceso a la variable %s, no existe", variable);
@@ -512,9 +505,9 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	if(men_resp->tipo == R_GRABAR_VALOR){
 		destruir_men_comun(men_resp);
 		char *c =  string_itoa(valor);
-		enviar_men_comun_destruir(socketKernel, VALOR_ASIGNADO, c, string_length(c)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, VALOR_ASIGNADO, c, string_length(c)+BARRA_CERO);
 		free(c);
-		men_resp = socket_recv_comun(socketKernel);
+		men_resp = socket_recv_comun(soc_kernel);
 		destruir_men_comun(men_resp);
 		return valor;
 	}
@@ -572,7 +565,7 @@ void llamarConRetorno(t_nombre_etiqueta etiqueta, t_puntero donde_retornar){
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, tam, buffer);
 	free(buffer);
 
-	t_men_comun *r_alm = socket_recv_comun(socketUmv);
+	t_men_comun *r_alm = socket_recv_comun(soc_umv);
 	if(r_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Se almaceno la direccion de retorno \n");
 		printf("	Se almaceno la direccion de retorno\n");
@@ -615,7 +608,7 @@ void finalizar(){
 
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
-	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
+	t_men_comun *rec_ret= socket_recv_comun(soc_umv);
 	if(rec_ret->tipo == R_SOL_BYTES){
 		memcpy(&dir_context_ant, rec_ret->dato,sizeof(int32_t));
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
@@ -644,7 +637,7 @@ void retornar(t_valor_variable retorno){
 	offset= pcb->dir_cont_actual-base- 12;
 	enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, tam, NULL);
 
-	t_men_comun *rec_ret= socket_recv_comun(socketUmv);
+	t_men_comun *rec_ret= socket_recv_comun(soc_umv);
 	if(rec_ret->tipo == R_SOL_BYTES){
 		memcpy(&dir_context_ant, rec_ret->dato,sizeof(int32_t));
 		memcpy(&prog_counter, rec_ret->dato+4,sizeof(int32_t));
@@ -668,7 +661,7 @@ void retornar(t_valor_variable retorno){
 	enviar_men_cpu_umv_destruir(ALM_BYTES, base, offset, sizeof(int32_t), buffer);
 
 	free(buffer);
-	t_men_comun *rec_alm = socket_recv_comun(socketUmv);
+	t_men_comun *rec_alm = socket_recv_comun(soc_umv);
 	if(rec_alm->tipo == R_ALM_BYTES){
 		txt_write_in_file(cpu_file_log, "Retornando valor de variable\n");
 		printf("	Retornando valor de variable:%d en la direccion %d\n", retorno, dir_retorno);
@@ -681,9 +674,9 @@ void imprimir(t_valor_variable valor_mostrar){
 	if(!huboSegFault){
 		char *string_int = string_itoa(valor_mostrar);
 
-		enviar_men_comun_destruir(socketKernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
 		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+		enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
 		free(aux_string);
 		recibir_resp_kernel(R_IMPRIMIR);
 
@@ -696,10 +689,10 @@ void imprimir(t_valor_variable valor_mostrar){
 void imprimirTexto(char* texto){
 	char *texto_sin_esc = sacar_caracteres_escape(texto);
 
-	enviar_men_comun_destruir(socketKernel, IMPRIMIR_TEXTO, texto_sin_esc, string_length(texto_sin_esc)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, texto_sin_esc, string_length(texto_sin_esc)+BARRA_CERO);
 
 	char *aux_string = string_itoa(pcb->id);
-	enviar_men_comun_destruir(socketKernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
 	free(aux_string);
 
 	recibir_resp_kernel(R_IMPRIMIR);
@@ -710,9 +703,9 @@ void imprimirTexto(char* texto){
 }
 
 void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
-	enviar_men_comun_destruir(socketKernel, IO_ID, dispositivo, string_length(dispositivo)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, IO_ID, dispositivo, string_length(dispositivo)+BARRA_CERO);
 	char *aux_tiempo = string_itoa(tiempo);
-	enviar_men_comun_destruir(socketKernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, IO_CANT_UNIDADES,aux_tiempo , string_length(aux_tiempo)+BARRA_CERO);
 	free(aux_tiempo);
 
 	enviar_pcb_destruir();
@@ -724,11 +717,11 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 }
 
 void wait(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destruir(socketKernel, WAIT, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, WAIT, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
 	txt_write_in_file(cpu_file_log, "Haciendo wait a semaforo\n");
 	printf("	Haciendo wait a semaforo %s\n", identificador_semaforo);
 
-	t_men_comun *men_resp = socket_recv_comun(socketKernel);
+	t_men_comun *men_resp = socket_recv_comun(soc_kernel);
 
 	switch(men_resp->tipo){
 		case SEM_OK:
@@ -758,12 +751,12 @@ void wait(t_nombre_semaforo identificador_semaforo){
 }
 
 void mi_signal(t_nombre_semaforo identificador_semaforo){
-	enviar_men_comun_destruir(socketKernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
+	enviar_men_comun_destruir(soc_kernel, SIGNAL, identificador_semaforo, string_length(identificador_semaforo)+BARRA_CERO);
 
 	txt_write_in_file(cpu_file_log,"Haciendo signal a semaforo\n");
 	printf("	Haciendo signal a semaforo %s\n", identificador_semaforo);
 
-	t_men_comun *respuesta = socket_recv_comun(socketKernel);
+	t_men_comun *respuesta = socket_recv_comun(soc_kernel);
 
 	if(respuesta->tipo == SEM_INEX){
 		txt_write_in_file(cpu_file_log,"Signal a semaforo inexistente\n");
@@ -793,12 +786,12 @@ void logear_char(FILE* destino,char un_char){
 
 void handshake_umv(char *puerto, char *ip){
 	//envio a la UMV
-	socketUmv = socket_crear_client(puerto,ip);
+	soc_umv = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destruir(socketUmv, HS_CPU, NULL, 0);
+	enviar_men_comun_destruir(soc_umv, HS_CPU, NULL, 0);
 
 	//espero coneccion de la UMV
-	t_men_comun *mensaje_inicial = socket_recv_comun(socketUmv);
+	t_men_comun *mensaje_inicial = socket_recv_comun(soc_umv);
 	if(mensaje_inicial->tipo == HS_UMV){
 		txt_write_in_file(cpu_file_log, "UMV conectada \n");
 		printf("UMV conectada\n");
@@ -811,12 +804,12 @@ void handshake_umv(char *puerto, char *ip){
 
 void handshake_kernel(char *puerto, char *ip){
 	//envio al kernel
-	socketKernel = socket_crear_client(puerto,ip);
+	soc_kernel = socket_crear_client(puerto,ip);
 
-	enviar_men_comun_destruir(socketKernel, HS_CPU, NULL, 0);
+	enviar_men_comun_destruir(soc_kernel, HS_CPU, NULL, 0);
 
 	//espero conexion de kernel
-	t_men_comun *mensaje_inicial = socket_recv_comun(socketKernel);
+	t_men_comun *mensaje_inicial = socket_recv_comun(soc_kernel);
 	if(mensaje_inicial->tipo == HS_KERNEL){
 		txt_write_in_file(cpu_file_log, "Kernel conectado\n");
 		printf("Kernel conectado\n");
@@ -856,12 +849,12 @@ char *copiar_int_to_buffer(int32_t un_int){
 /*envia un mensaje cpu umv y lo destruye */
 void enviar_men_cpu_umv_destruir(int32_t tipo, int32_t base, int32_t offset, int32_t tam, char *buffer){
 	t_men_cpu_umv *men_cpu_umv = crear_men_cpu_umv(tipo, base, offset,tam , buffer);
-	socket_send_cpu_umv(socketUmv, men_cpu_umv);
+	socket_send_cpu_umv(soc_umv, men_cpu_umv);
 	destruir_men_cpu_umv(men_cpu_umv);
 }
 
 void recibir_resp_kernel(int32_t tipo_esperado){
-	t_men_comun *men_sincro_ok = socket_recv_comun(socketKernel);
+	t_men_comun *men_sincro_ok = socket_recv_comun(soc_kernel);
 	if(men_sincro_ok->tipo != tipo_esperado)
 		printf("	ERROR el kernel me mando:%i y se esperaba %i\n",men_sincro_ok->tipo,tipo_esperado);
 	destruir_men_comun(men_sincro_ok);
@@ -886,7 +879,7 @@ void regenerar_dicc_var(){
 
 		enviar_men_cpu_umv_destruir(SOL_BYTES, base, offset, 1, NULL);
 
-		t_men_comun *men_var = socket_recv_comun(socketUmv);
+		t_men_comun *men_var = socket_recv_comun(soc_umv);
 
 		int32_t *pos = malloc(sizeof(int32_t));
 		*pos = base + offset;
