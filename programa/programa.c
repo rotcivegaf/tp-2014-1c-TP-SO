@@ -41,7 +41,6 @@ int main(int argc, char *argv[]){
 	t_men_comun *mensaje_recibido;
 	while (fin_ejecucion != 1){
 		mensaje_recibido = socket_recv_comun(soc_kernel);
-
 		switch(mensaje_recibido->tipo){
 		case IMPRIMIR_VALOR:
 			printf("%s\n",mensaje_recibido->dato);
