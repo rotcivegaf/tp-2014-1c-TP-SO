@@ -47,7 +47,6 @@
 		char *puerto_prog;
 		char *ip_umv;
 		char *puerto_umv;
-		int32_t tam_stack;
 	} t_param_plp;
 	typedef struct{
 		char *puerto_cpu;
@@ -59,7 +58,6 @@
 		char *ip_umv;
 		char *puerto_umv;
 		int32_t multiprogramacion;
-		int32_t tam_stack;
 	} t_datos_config;
 	typedef struct{
 		int32_t  io_sleep;
@@ -83,12 +81,31 @@
 		t_queue *procesos;
 	}t_semaforo;
 
+	//funciones del plp
+	int32_t ingresar_nuevo_programa();
+	void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog);
+	void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog);
+
+	//funciones del pcp
+	int32_t ingresar_new_cpu(int32_t listener_cpu);
+	void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu);
+	void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu);
+	void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu);
+	void fin_ejecucion(int32_t tipo,int32_t socket_cpu, t_men_comun *men_cpu);
+	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);
+	void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto);
+	void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor);
+	void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor);
+	void fin_quantum(int32_t soc_cpu, t_men_comun *men_cpu);
+	void signal(int32_t soc_cpu,t_men_comun *men_cpu);
+	void wait(int32_t soc_cpu,t_men_comun *men_cpu);
+
 	t_datos_config *levantar_config();
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
-	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog, int32_t  tam_stack, int32_t  id_prog);
-	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol ,int32_t  contador_id_programa);
+	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog);
+	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol);
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
 	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
 	t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config);
@@ -104,10 +121,7 @@
 	t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
-	t_cpu *get_cpu(int32_t  soc_cpu);
-	void enviar_IO(int32_t  soc_cpu, char *id_IO);
 	void moverAblock(t_pcb_otros *pcb_peso);
-	t_cpu *get_cpu_libre();
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
 	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb,int32_t  quantum);
@@ -117,22 +131,14 @@
 	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
-	//funciones del pcp
-	void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu);
-	void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu);
-	void enviar_IO(int32_t soc_cpu, char *id_IO);
-	void fin_ejecucion(int32_t tipo,int32_t socket_cpu);
-	void imprimir_valor(int32_t soc, t_men_comun *men_imp_valor);
-	void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto);
-	void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor);
-	void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor);
-	void fin_quantum(int32_t soc_cpu);
-	void signal(int32_t soc_cpu,t_men_comun *men_cpu);
-	void wait(int32_t soc_cpu,t_men_comun *men_cpu);
-
 	void logear_int(FILE* destino,int32_t un_int);
 
 	void enviar_resp_cpu(int32_t soc_cpu, int32_t tipo_mensaje);
-	t_cpu *get_cpu_soc_prog(int32_t soc_prog);
+
+	t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu);
+
+
+	t_cpu *get_cpu(int32_t  soc_cpu);
+		t_cpu *get_cpu_libre();
 
 #endif /* KERNEL_H_ */
