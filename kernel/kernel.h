@@ -139,6 +139,5 @@
 
 
 	t_cpu *get_cpu(int32_t  soc_cpu);
-		t_cpu *get_cpu_libre();
 
 #endif /* KERNEL_H_ */

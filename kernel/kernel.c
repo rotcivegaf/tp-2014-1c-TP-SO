@@ -346,6 +346,10 @@ int32_t ingresar_new_cpu(int32_t listener_cpu){
 }
 
 void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
+	pthread_mutex_lock(&mutex_uso_lista_cpu);
+	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
+	pthread_mutex_unlock(&mutex_uso_lista_cpu);
+
 	FD_CLR(soc_cpu, &conj_soc_cpus);
 	socket_cerrar(soc_cpu);
 	destruir_men_comun(men_cpu);
@@ -354,10 +358,6 @@ void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
 	logear_int(pcp_log,soc_cpu);
 	txt_write_in_file(pcp_log,"\n");
 	printf("PCP-select: CPU desconectada socket nº%i\n", soc_cpu);
-
-	pthread_mutex_lock(&mutex_uso_lista_cpu);
-	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
-	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 
 	if (aux_cpu->id_prog_exec != 0){
 		t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
@@ -375,78 +375,64 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_semaforo *semaforo;
 	t_cpu *aux_cpu;
 	t_pcb_otros *aux_pcb_otros;
-
 	pthread_mutex_lock(&mutex_dicc_sem);
 
 	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
-
 	if(semaforo != NULL){
 		if(semaforo->valor > 0){
 			(semaforo->valor)--;
 			enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 		}else{
 			(semaforo->valor)--;
-			aux_cpu = get_cpu(soc_cpu);
-
+			pthread_mutex_lock(&mutex_uso_lista_cpu);
+			aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
+			pthread_mutex_unlock(&mutex_uso_lista_cpu);
 			enviar_men_comun_destruir(soc_cpu, SEM_BLOQUEADO, NULL, 0);
-
 			txt_write_in_file(pcp_log,"Se bloqueo al programa por un wait, con id ");
 			logear_int(pcp_log,aux_cpu->id_prog_exec);
 			txt_write_in_file(pcp_log,"/n");
-
 			aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
-
 			queue_push(semaforo->procesos,aux_pcb_otros);
 		}
-
 		txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}else{
 		llamada_erronea(soc_cpu, SEM_INEX);
-
 		txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
-
 	destruir_men_comun(men_cpu);
 }
 
 void signal(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_semaforo *semaforo;
 	t_pcb_otros *aux_pcb_otros;
-
 	pthread_mutex_lock(&mutex_dicc_sem);
 
 	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
 
 	if(semaforo != NULL){
 		(semaforo->valor)++;
-
 		enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
-
 		if(queue_size(semaforo->procesos)>0){
 			aux_pcb_otros = queue_pop(semaforo->procesos);
 			pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
 		}
-
 		txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
-
 	}else{
 		llamada_erronea(soc_cpu, SEM_INEX);
-
 		txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
-
 	destruir_men_comun(men_cpu);
 }
 
@@ -824,14 +810,6 @@ t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *aux_cpu){
 	return aux_pcb_otros;
 }
 
-t_cpu *get_cpu_libre(){//todo
-	bool _esta_libre(t_cpu *un_cpu){
-		return un_cpu->id_prog_exec == 0;
-	}
-	t_cpu *aux_cpu = list_find(lista_cpu, (void*)_esta_libre);
-	return aux_cpu;
-}
-
 t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
 	t_pcb_otros *aux_pcb_otros;
 	int32_t i;
@@ -885,7 +863,7 @@ void umv_destrui_pcb(int32_t id_pcb){
 }
 
 void *manejador_new_ready(){
-
+	t_pcb_otros *aux_pcb_otros;
 	while(quit_sistema){
 		sem_decre(&cant_new);// Se fija que haya algun programa en la cola de New
 		sem_decre(&cant_multiprog); // Se fija que no se supere el grado de multiprogramación
@@ -893,25 +871,25 @@ void *manejador_new_ready(){
 		pthread_mutex_lock(&mutex_new);
 		pthread_mutex_lock(&mutex_ready);
 
-		queue_push(colas->cola_ready, get_peso_min());
+		aux_pcb_otros = get_peso_min();
+		if (aux_pcb_otros == NULL)
+			continue;
 
-		pthread_mutex_unlock(&mutex_new);
-		pthread_mutex_unlock(&mutex_ready);
+		queue_push(colas->cola_ready, aux_pcb_otros);
 
 		sem_incre(&cant_ready);
+		pthread_mutex_unlock(&mutex_new);
+		pthread_mutex_unlock(&mutex_ready);
 	}
 	return NULL;
 }
 
 t_pcb_otros *get_peso_min(){
-
 	int32_t i, peso_min = -1;
 	t_pcb_otros *aux;
-
 	int32_t tam_cola = queue_size(colas->cola_new);
 
 	for (i=0;i < tam_cola;i++){
-
 		aux = queue_pop(colas->cola_new);
 		if(peso_min < aux->peso)
 			peso_min = aux->peso;
@@ -919,12 +897,19 @@ t_pcb_otros *get_peso_min(){
 	}
 	for (i=0;i < tam_cola;i++){
 		aux = queue_pop(colas->cola_new);
-
 		if (peso_min == aux->peso)
 			return aux;
 		queue_push(colas->cola_new,aux);
 	}
+	printf("ERROR: get_peso_min()\n");
 	return NULL;
+}
+
+t_cpu *get_cpu_libre_remove(){
+	bool _esta_libre(t_cpu *un_cpu){
+		return un_cpu->id_prog_exec == 0;
+	}
+	return list_remove_by_condition(lista_cpu, (void*)_esta_libre);
 }
 
 void *manejador_ready_exec(){
@@ -939,7 +924,7 @@ void *manejador_ready_exec(){
 		pthread_mutex_lock(&mutex_ready);
 		pthread_mutex_lock(&mutex_uso_lista_cpu);
 
-		aux_cpu = get_cpu_libre();
+		aux_cpu = get_cpu_libre_remove();
 
 		aux_pcb_otros = queue_pop(colas->cola_ready);
 
@@ -952,6 +937,7 @@ void *manejador_ready_exec(){
 		aux_cpu->soc_prog = aux_pcb_otros->n_socket;
 
 		list_add(lista_cpu, aux_cpu);
+
 		queue_push(colas->cola_exec, aux_pcb_otros);
 
 		pthread_mutex_unlock(&mutex_ready);
@@ -1241,6 +1227,15 @@ void imprimir_cola(t_queue *cola){
 			queue_push(cola, aux);
 		}
 	}
+	printf("\n");
+}
+
+void imprimir_lista_cpu(){
+	void _imp_cpu(t_cpu *un_cpu){
+		printf("%i/%i/%i - ",un_cpu->soc_cpu, un_cpu->soc_prog, un_cpu->id_prog_exec);
+	}
+	list_iterate(lista_cpu, (void*)_imp_cpu);
+	printf("\n");
 }
 
 void *imp_colas (){
@@ -1257,31 +1252,31 @@ void *imp_colas (){
 		pthread_mutex_lock(&mutex_block);
 		pthread_mutex_lock(&mutex_exec);
 		pthread_mutex_lock(&mutex_exit);
+		pthread_mutex_lock(&mutex_uso_lista_cpu);
 
 		printf("--COLA-NEW---------------------------------------------------------\n");
 		printf("|PID/PESO= ");
 		imprimir_cola(colas->cola_new);
-		printf("\n");
 
 		printf("--COLA-READY-------------------------------------------------------\n");
 		printf("|PID/PESO= ");
 		imprimir_cola(colas->cola_ready);
-		printf("\n");
 
 		printf("--COLA-BLOCK-------------------------------------------------------\n");
 		printf("|PID/PESO= ");
 		imprimir_cola(colas->cola_block);
-		printf("\n");
 
 		printf("--COLA-EXEC--------------------------------------------------------\n");
 		printf("|PID/PESO= ");
 		imprimir_cola(colas->cola_exec);
-		printf("\n");
 
 		printf("--COLA-EXIT--------------------------------------------------------\n");
 		printf("|PID/PESO= ");
 		imprimir_cola(colas->cola_exit);
-		printf("\n");
+
+		printf("--LISTA-CPU--------------------------------------------------------\n");
+		printf("|S_CPU/S_PROG/PID= ");
+		imprimir_lista_cpu();
 		printf("-------------------------------------------------------------------\n");
 
 		pthread_mutex_unlock(&mutex_new);
@@ -1289,6 +1284,7 @@ void *imp_colas (){
 		pthread_mutex_unlock(&mutex_block);
 		pthread_mutex_unlock(&mutex_exec);
 		pthread_mutex_unlock(&mutex_exit);
+		pthread_mutex_unlock(&mutex_uso_lista_cpu);
 	}
 	return NULL;
 }

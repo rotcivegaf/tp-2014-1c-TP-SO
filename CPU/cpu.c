@@ -96,8 +96,8 @@ int main(){
 		entre_io = 0;
 		sem_block = 0;
 	}
-	socket_cerrar(soc_kernel);
-	socket_cerrar(soc_umv);
+	//socket_cerrar(soc_kernel);
+	//socket_cerrar(soc_umv);
 	_fin:
 	return 0;
 }
