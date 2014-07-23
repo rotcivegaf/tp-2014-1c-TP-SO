@@ -45,8 +45,6 @@
 	} t_pcb_otros;
 	typedef struct{
 		char *puerto_prog;
-		char *ip_umv;
-		char *puerto_umv;
 	} t_param_plp;
 	typedef struct{
 		char *puerto_cpu;
@@ -74,7 +72,6 @@
 		t_dir_mem dir_seg_stack;
 		t_dir_mem dir_indice_codigo;
 		t_dir_mem dir_indice_etiquetas;
-		int32_t memoria_insuficiente;
 	} t_resp_sol_mem;
 	typedef struct{
 		int32_t valor;
@@ -104,6 +101,8 @@
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
 	void handshake_umv(char *ip_umv, char *puerto_umv);
+	void menu_imp();
+	void imp_colas();
 	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog);
 	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol);
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
@@ -111,7 +110,6 @@
 	t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config);
 	void *plp();
 	void *pcp();
-	void *imp_colas();
 	void *manejador_new_ready();
 	void *manejador_ready_exec();
 	void *manejador_exit();
@@ -120,7 +118,6 @@
 	void  mover_pcb_exit(int32_t  soc_prog);
 	t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
-	t_pcb_otros *get_pcb_otros_exec_sin_quitarlo(int32_t  id_proc);
 	void moverAblock(t_pcb_otros *pcb_peso);
 	t_pcb_otros *get_peso_min();
 	void umv_destrui_pcb(int32_t id_pcb);
