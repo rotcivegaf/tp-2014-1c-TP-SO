@@ -44,15 +44,6 @@
 		int32_t tipo_fin_ejecucion;
 	} t_pcb_otros;
 	typedef struct{
-		char *puerto_prog;
-	} t_param_plp;
-	typedef struct{
-		char *puerto_cpu;
-		t_queue *cola_IO;
-	} t_param_pcp;
-	typedef struct{
-		char *puerto_prog;
-		char *puerto_cpu;
 		char *ip_umv;
 		char *puerto_umv;
 		int32_t multiprogramacion;
@@ -78,10 +69,27 @@
 		t_queue *procesos;
 	}t_semaforo;
 
+	//inicio
+	t_datos_config *levantar_config();
+	void handshake_cpu(int32_t  soc);
+	void handshake_prog(int32_t  soc);
+	void handshake_umv(char *ip_umv, char *puerto_umv);
+
+	//hilos
+	void *plp();
+	void *pcp();
+	void *manejador_new_ready();
+	void *manejador_ready_exec();
+	void *manejador_exit();
+	void *manejador_IO(t_IO *io);
+
 	//funciones del plp
 	int32_t ingresar_nuevo_programa();
 	void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog);
 	void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog);
+
+	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog);
+	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol);
 
 	//funciones del pcp
 	int32_t ingresar_new_cpu(int32_t listener_cpu);
@@ -97,44 +105,34 @@
 	void signal(int32_t soc_cpu,t_men_comun *men_cpu);
 	void wait(int32_t soc_cpu,t_men_comun *men_cpu);
 
-	t_datos_config *levantar_config();
-	void handshake_cpu(int32_t  soc);
-	void handshake_prog(int32_t  soc);
-	void handshake_umv(char *ip_umv, char *puerto_umv);
-	void menu_imp();
-	void imp_colas();
-	t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog);
-	t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *resp_sol);
+	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
+
+	//funciones cpu
+	t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu);
+	t_cpu *get_cpu(int32_t  soc_cpu);
+
+	//funciones pcb
 	int32_t  calcular_peso(t_men_comun *men_cod_prog);
-	t_param_plp *ini_pram_plp(t_datos_config *diccionario_config);
-	t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config);
-	void *plp();
-	void *pcp();
-	void *manejador_new_ready();
-	void *manejador_ready_exec();
-	void *manejador_exit();
-	void *manejador_IO(t_IO *io);
-	//Se le manda el numero de socket del programa y lo busca en cada cola, si lo encuentra lo pone en exit (y retorna) y si no lo vuelve a poner
-	void  mover_pcb_exit(int32_t  soc_prog);
+	t_pcb_otros *get_peso_min();
+
+	void umv_destrui_pcb(int32_t id_pcb);
+	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb);
+	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
+
 	t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
+
 	void moverAblock(t_pcb_otros *pcb_peso);
-	t_pcb_otros *get_peso_min();
-	void umv_destrui_pcb(int32_t id_pcb);
-	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb,int32_t  quantum);
-	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
+	void mover_pcb_exit(int32_t  soc_prog);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
 	void pasar_pcbBlock_ready(int32_t id_pcb);
-	void llamada_erronea(int32_t soc_cpu,int32_t tipo_error);
+
 	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
 
+	//menu imprimir
+	void menu_imp();
+	void imp_colas();
+
 	void logear_int(FILE* destino,int32_t un_int);
-
-	void enviar_resp_cpu(int32_t soc_cpu, int32_t tipo_mensaje);
-
-	t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu);
-
-
-	t_cpu *get_cpu(int32_t  soc_cpu);
 
 #endif /* KERNEL_H_ */

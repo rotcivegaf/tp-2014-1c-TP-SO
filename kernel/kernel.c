@@ -21,6 +21,8 @@ pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t cant_new, cant_ready, cant_exit;
 sem_t cant_multiprog, cant_cpu_libres;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO, _TAMANIO_STACK;
+char *PUERTO_PROG;
+char *PUERTO_CPU;
 t_dictionary *dicc_disp_io;
 t_dictionary *dicc_var;
 t_dictionary *dicc_sem;
@@ -42,7 +44,6 @@ int main(void){
 	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion------------------------------\n");
 
-
 	//Conecta con la umv
 	handshake_umv(diccionario_config->ip_umv, diccionario_config->puerto_umv);
 
@@ -53,7 +54,7 @@ int main(void){
 
 	crear_cont(&cant_cpu_libres , 0);
 	crear_cont(&cant_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
-
+	free(diccionario_config);
 	//Creacion de colas
 	lista_cpu = list_create();
 	colas = malloc(sizeof(t_colas));
@@ -63,19 +64,12 @@ int main(void){
 	colas->cola_exec = queue_create();
 	colas->cola_exit = queue_create();
 
-	//parametros plp pcp
-	t_param_plp *param_plp = ini_pram_plp(diccionario_config);
-	t_param_pcp *param_pcp = ini_pram_pcp(diccionario_config);
-
 	//Creacion de hilos
 	pthread_t hilo_plp, hilo_pcp;
-	pthread_create(&hilo_plp, NULL, plp, (void *)param_plp);
-	pthread_create(&hilo_pcp, NULL, pcp, (void *)param_pcp);
+	pthread_create(&hilo_plp, NULL, plp, NULL);
+	pthread_create(&hilo_pcp, NULL, pcp, NULL);
 	menu_imp();
 
-	free(param_plp->puerto_prog);
-	free(param_plp);
-	free(param_pcp->puerto_cpu);
 	queue_destroy(colas->cola_block);
 	queue_destroy(colas->cola_exec);
 	queue_destroy(colas->cola_exit);
@@ -85,7 +79,7 @@ int main(void){
 	return EXIT_SUCCESS;
 }
 
-void *plp(t_param_plp *param_plp){
+void *plp(){
 	t_men_comun *men_prog;
 	int32_t new_prog;
 	pthread_t hilo_new_ready;
@@ -96,7 +90,7 @@ void *plp(t_param_plp *param_plp){
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
 
 	//Abre un server para escuchar las conexiones de los programas
-	listener_prog = socket_crear_server(param_plp->puerto_prog);
+	listener_prog = socket_crear_server(PUERTO_PROG);
 	txt_write_in_file(plp_log,"Escuchando conexiones entrantes de programas \n");
 
 	FD_ZERO(&conj_soc_progs);    // borra los conjuntos maestro y temporal de sockets
@@ -220,7 +214,7 @@ void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 	}
 }
 //funciones PCP
-void *pcp(t_param_pcp *param_pcp){
+void *pcp(){
 	int32_t i, fdmax, new_soc;
 	fd_set read_fds;
 
@@ -232,7 +226,7 @@ void *pcp(t_param_pcp *param_pcp){
 	pthread_t hilo_exit;
 	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 
-	int32_t listener_cpu = socket_crear_server(param_pcp->puerto_cpu);
+	int32_t listener_cpu = socket_crear_server(PUERTO_CPU);
 	txt_write_in_file(pcp_log,"Escuchando conexiones entrantes de cpus \n");
 
 	FD_ZERO(&conj_soc_cpus);
@@ -868,7 +862,7 @@ void *manejador_ready_exec(){
 			continue;
 		}
 
-		enviar_cpu_pcb_destruir(aux_cpu->soc_cpu,aux_pcb_otros->pcb,_QUANTUM_MAX);
+		enviar_cpu_pcb_destruir(aux_cpu->soc_cpu,aux_pcb_otros->pcb);
 
 		aux_cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 		aux_cpu->soc_prog = aux_pcb_otros->n_socket;
@@ -996,8 +990,8 @@ void *manejador_IO(t_IO *io){
 	return NULL;
 }
 
-void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb,int32_t quantum){
-	t_men_quantum_pcb * men_pcb= crear_men_quantum_pcb(PCB_Y_QUANTUM,quantum,pcb);
+void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb){
+	t_men_quantum_pcb * men_pcb= crear_men_quantum_pcb(PCB_Y_QUANTUM,_QUANTUM_MAX,pcb);
 	socket_send_quantum_pcb(soc,men_pcb);
 	destruir_quantum_pcb(men_pcb);
 }
@@ -1031,10 +1025,11 @@ t_datos_config *levantar_config(){
 		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
 	int i;
+
 	t_config *diccionario_config = config_create("./kernel/kernel_config");
 	t_datos_config *ret = malloc(sizeof(t_datos_config));
-	ret->puerto_prog = config_get_string_value( diccionario_config, "Puerto_prog");
-	ret->puerto_cpu = config_get_string_value( diccionario_config, "Puerto_CPU");
+	PUERTO_PROG = config_get_string_value( diccionario_config, "Puerto_prog");
+	PUERTO_CPU = config_get_string_value( diccionario_config, "Puerto_CPU");
 	ret->ip_umv = config_get_string_value( diccionario_config, "IP_UMV");
 	ret->puerto_umv = config_get_string_value( diccionario_config, "Puerto_umv");
 	char **id_ios = config_get_array_value( diccionario_config, "ID_HIO");
@@ -1079,8 +1074,8 @@ t_datos_config *levantar_config(){
 	free(aux_var_glob);
 
 	printf("------Archivo Config------------------------------\n");
-	printf("Puerto Proc-Prog = %s\n", ret->puerto_prog);
-	printf("Puerto CPU = %s\n", ret->puerto_cpu);
+	printf("Puerto Proc-Prog = %s\n", PUERTO_PROG);
+	printf("Puerto CPU = %s\n", PUERTO_CPU);
 	printf("UMV\n");
 	printf("	IP     = %s\n", ret->ip_umv);
 	printf("	Puerto = %s\n", ret->puerto_umv);
@@ -1127,13 +1122,11 @@ void handshake_prog(int32_t soc){
 }
 
 void handshake_umv(char *ip_umv, char *puerto_umv){
-	//envio a la UMV
 	soc_umv = socket_crear_client(puerto_umv,ip_umv);
 
 	enviar_men_comun_destruir(soc_umv,HS_KERNEL,NULL,0);
-	//espero coneccion de la UMV
-	t_men_comun *men_hs = socket_recv_comun(soc_umv);
 
+	t_men_comun *men_hs = socket_recv_comun(soc_umv);
 	if(men_hs->tipo != HS_UMV){
 		printf("ERROR HANDSHAKE");
 		txt_write_in_file(plp_log,"Error en el handshake con la UMV \n");
@@ -1258,20 +1251,6 @@ void sem_incre(sem_t *sem){
 		perror("ERROR sem decrementar");
 		exit(1);
 	}
-}
-
-t_param_plp *ini_pram_plp(t_datos_config *diccionario_config){
-	t_param_plp *aux = malloc(sizeof(t_param_plp));
-	aux->puerto_prog = diccionario_config->puerto_prog;
-	return aux;
-}
-
-t_param_pcp *ini_pram_pcp(t_datos_config *diccionario_config){
-	t_param_pcp *aux = malloc(sizeof(t_param_pcp));
-
-	aux->puerto_cpu = diccionario_config->puerto_cpu;
-
-	return aux;
 }
 
 void logear_int(FILE* destino,int32_t un_int){
