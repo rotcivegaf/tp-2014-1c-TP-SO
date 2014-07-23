@@ -879,6 +879,7 @@ void imp_tablas_segmentos(int32_t id_prog){
 		return seg->id_proc == id_prog;
 	}
 	void imp_seg(t_seg *seg){
+		printf("	%i	|%i	|%i	|%i	|%i\n",seg->tipo_seg ,seg->id_proc, seg->dir_fisica, seg->tam_seg, seg->dir_logica);
 		txt_write_in_file(consola_file_log,"	");
 		logear_int(consola_file_log,seg->tipo_seg);
 		txt_write_in_file(consola_file_log,"	|");
@@ -894,10 +895,12 @@ void imp_tablas_segmentos(int32_t id_prog){
 	pthread_mutex_lock(&mutex_list_seg);
 
 	if (id_prog == 0){//imprimo todos los segementos de los programas
-		if(list_is_empty(list_seg))
+		if(list_is_empty(list_seg)){
 			txt_write_in_file(consola_file_log,"	Lista de segmentos vacia\n");
-		else{
+			printf("\n	Lista de segmentos vacia\n");
+		}else{
 			txt_write_in_file(consola_file_log,"	TIPO	|ID	|DIR_F	|TAM	|DIR_L\n");
+			printf("\n	TIPO	|ID	|DIR_F	|TAM	|DIR_L\n");
 			list_iterate(list_seg, (void *)imp_seg);
 		}
 	}else{//imprimo los segementos de un programa especifico
