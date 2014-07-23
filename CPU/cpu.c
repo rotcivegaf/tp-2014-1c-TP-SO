@@ -815,12 +815,12 @@ void handshake_kernel(char *puerto, char *ip){
 }
 
 void imprimo_config(char *puertoKernel, char *ipKernel, char *puertoUmv, char *ipUmv){
-	printf("\n\n------------------------------Archivo Config----------------------\n");
+	printf("---------------Archivo Config----------------------\n");
 	printf("	Puerto Kernel	= %s\n", puertoKernel);
 	printf("	IP Kernel	= %s\n", ipKernel);
 	printf("	Puerto UMV	= %s\n", puertoUmv);
 	printf("	IP UMV		= %s\n", ipUmv);
-	printf("------------------------------------------------------------------\n\n");
+	printf("---------------------------------------------------\n");
 }
 
 void destruir_dic_Variables(){
