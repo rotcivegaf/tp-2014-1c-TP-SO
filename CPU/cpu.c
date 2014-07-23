@@ -28,11 +28,10 @@ enum tipo_fin {
 t_dictionary *dic_Variables;
 t_pcb *pcb = NULL;
 int32_t soc_kernel, soc_umv;
-int32_t sem_block = 0;//todo no implementado
 int32_t quantum_actual;
 int32_t quantum_max;
 char* etiquetas;
-int32_t fueFinEjecucion = 0, entre_io = 0, huboSegFault = 0;
+int32_t fueFinEjecucion = 0, huboSegFault = 0;
 FILE *cpu_file_log;
 int32_t pid_cpu;
 int quit_sistema = 1;
@@ -78,7 +77,7 @@ int main(){
 		/*se crea un diccionario para guardar las variables del contexto*/
 		regenerar_dicc_var();
 
-		for (quantum_actual = 0;(quantum_actual < quantum_max) && (!fueFinEjecucion) && (!entre_io) && (!sem_block); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
+		for (quantum_actual = 0;(quantum_actual < quantum_max) && (!fueFinEjecucion); quantum_actual++){//aca cicla hasta q el haya terminado los quantums
 			printf("Quantum nº%i\n",quantum_actual+1);
 			proxInstrucc = solicitarProxSentenciaAUmv();
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
@@ -89,15 +88,10 @@ int main(){
 		}
 		free(etiquetas);
 		free(pcb);
-		pcb = NULL;
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
 		fueFinEjecucion = 0;
 		huboSegFault = 0;
-		entre_io = 0;
-		sem_block = 0;
 	}
-	//socket_cerrar(soc_kernel);
-	//socket_cerrar(soc_umv);
 	_fin:
 	return 0;
 }
@@ -131,6 +125,7 @@ void traerIndiceEtiquetas(){
 
 void recibirUnPcb(){
 	int32_t length = 0;
+	pcb = NULL;
 	char *aux_len = malloc(sizeof(int32_t));
 	int resultado_recv = recv(soc_kernel, aux_len, sizeof(int32_t), MSG_PEEK);
 	if (resultado_recv == -1)	return;
@@ -710,7 +705,6 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 
 	enviar_pcb_destruir();
 	fueFinEjecucion = 1;
-	entre_io =1;
 
 	txt_write_in_file(cpu_file_log, "Saliendo a IO en dispositivo\n");
 	printf("	Saliendo a IO ID:%s, cant. unidades:%d\n", dispositivo, tiempo);
@@ -837,7 +831,8 @@ void destruir_dic_Variables(){
 }
 
 void cambio_PA(int32_t id_proc){
-	printf("Cambio el proceso activo al proceso nº%i\n",id_proc);
+	if(id_proc != 0)
+		printf("Cambio el proceso activo al proceso nº%i\n",id_proc);
 	enviar_men_cpu_umv_destruir(CAMBIO_PA, id_proc, 0, 0, NULL);
 }
 //recibe un int y lo transforma en un char *
