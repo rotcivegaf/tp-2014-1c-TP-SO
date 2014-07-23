@@ -1145,11 +1145,12 @@ void handshake_umv(char *ip_umv, char *puerto_umv){
 
 void menu_imp(){
 	char opcion;
+	int new_quantum;
 
 	while(quit_sistema){
 		do {
 			scanf("%c", &opcion);
-		} while (opcion != 'c' && opcion != 'v' && opcion != 's');
+		} while (opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q');
 		switch (opcion) {
 		case 'c':
 			imp_colas();
@@ -1161,6 +1162,10 @@ void menu_imp(){
 		case 's':
 			printf("Semaforos:\n");
 			imp_semaforos();
+			break;
+		case 'Q':
+			scanf("%i",&new_quantum);
+			_QUANTUM_MAX = new_quantum;
 			break;
 		}
 	}
