@@ -26,8 +26,8 @@ PROGRAMA_H = programa/programa.h
 # ALL
 all: coverflow
 
-# ALLC (make all y make clean)
-allc: all clean variables_entorno
+# ALLC (make all and make clean)
+allc: all clean
 
 # coverflow
 coverflow:\
@@ -66,14 +66,8 @@ programa.o: $(PROGRAMA_C) $(PROGRAMA_H)
 programa: $(SOCKET_LIB_SO) $(PROGRAMA_OBJS)
 	$(CC) -L"./" -o programa.ansisop $(PROGRAMA_OBJS) -lsockets_lib -lcommons
 
-# DECLARO VARIABLES DE ENTORNO
-variables_entorno: 
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/tp-2014-1c-hashtaggers/
-	export ANSISOP_CONFIG=./programa/programa_config
-
 # CLEAN
 clean:
 	rm $(SOCKET_LIB_OBJS) $(UMV_OBJS) $(CPU_OBJS) $(KERNEL_OBJS) $(PROGRAMA_OBJS)
-
 
 # CLEAR COVERFLOW
