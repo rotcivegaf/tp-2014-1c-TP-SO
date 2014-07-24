@@ -127,8 +127,12 @@
 	//menu imprimir
 	void menu_imp();
 	void imp_colas();
+	void cambiar_multiprog(int un_int);
 
 	void logear_int(FILE* destino,int32_t un_int);
+
+	void lock_todo();
+	void unlock_todo();
 
 	void limpiar_destruir_dic_var();
 	void limpiar_destruir_dic_sem();

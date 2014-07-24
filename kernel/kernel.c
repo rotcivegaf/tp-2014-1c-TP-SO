@@ -66,6 +66,17 @@ int main(void){
 	pthread_create(&hilo_pcp, NULL, pcp, NULL);
 	menu_imp();
 
+	//destruyo y cierro
+	pthread_mutex_destroy(&mutex_new);
+	pthread_mutex_destroy(&mutex_ready);
+	pthread_mutex_destroy(&mutex_block);
+	pthread_mutex_destroy(&mutex_exec);
+	pthread_mutex_destroy(&mutex_exit);
+	pthread_mutex_destroy(&mutex_uso_lista_cpu);
+	pthread_mutex_destroy(&mutex_io);
+	pthread_mutex_destroy(&mutex_dicc_var);
+	pthread_mutex_destroy(&mutex_dicc_sem);
+	pthread_mutex_destroy(&mutex_dispositivos_io);
 	queue_destroy(colas->cola_block);
 	queue_destroy(colas->cola_exec);
 	queue_destroy(colas->cola_exit);
@@ -1124,12 +1135,13 @@ void handshake_umv(){
 
 void menu_imp(){
 	char opcion;
-	int new_quantum;
+	int un_int;
 
 	while(quit_sistema){
 		do {
 			scanf("%c", &opcion);
-		} while (opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q' && opcion != 'e');
+		} while (opcion != 'e' && opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q'
+				&& opcion != 'k' &&opcion != 'm');
 		switch (opcion) {
 		case 'e':
 			quit_sistema = 0;
@@ -1146,11 +1158,41 @@ void menu_imp(){
 			imp_semaforos();
 			break;
 		case 'Q':
-			scanf("%i",&new_quantum);
-			_QUANTUM_MAX = new_quantum;
+			scanf("%i",&un_int);
+			_QUANTUM_MAX = un_int;
+			break;
+		case 'k':
+			scanf("%i",&un_int);
+			_TAMANIO_STACK = un_int;
+			break;
+		case 'm':
+			scanf("%i",&un_int);
+			cambiar_multiprog(un_int);
 			break;
 		}
 	}
+}
+
+void cambiar_multiprog(int miltiprog_nueva){
+	int i, cant_progs, miltiprog_actual, dif, valor_sem;
+
+	lock_todo();
+	cant_progs = queue_size(colas->cola_ready) + queue_size(colas->cola_block) + queue_size(colas->cola_exec);
+	sem_getvalue(&cant_multiprog, &valor_sem);
+	miltiprog_actual = cant_progs + valor_sem;
+	dif = miltiprog_nueva - miltiprog_actual;
+
+	if (dif > 0){
+		for(i=0;i<dif;i++)
+			sem_incre(&cant_multiprog);
+	}else{
+		if ((dif*(-1)) <= valor_sem){
+			for(i=0;i<(dif*(-1));i++)
+				sem_decre(&cant_multiprog);
+		}else
+			printf("No se a podido bajar el nivel de multiprogramacion\n");
+	}
+	unlock_todo();
 }
 
 void imprimir_cola(t_queue *cola){
@@ -1180,46 +1222,54 @@ void imprimir_lista_cpu(){
 	printf("\n");
 }
 
-void imp_colas(){
-		pthread_mutex_lock(&mutex_new);
-		pthread_mutex_lock(&mutex_ready);
-		pthread_mutex_lock(&mutex_block);
-		pthread_mutex_lock(&mutex_exec);
-		pthread_mutex_lock(&mutex_exit);
-		pthread_mutex_lock(&mutex_uso_lista_cpu);
-
-		printf("--COLA-NEW---------------------------------------------------------\n");
-		printf("|PID/PESO= ");
-		imprimir_cola(colas->cola_new);
-
-		printf("--COLA-READY-------------------------------------------------------\n");
-		printf("|PID/PESO= ");
-		imprimir_cola(colas->cola_ready);
-
-		printf("--COLA-BLOCK-------------------------------------------------------\n");
-		printf("|PID/PESO= ");
-		imprimir_cola(colas->cola_block);
-
-		printf("--COLA-EXEC--------------------------------------------------------\n");
-		printf("|PID/PESO= ");
-		imprimir_cola(colas->cola_exec);
-
-		printf("--COLA-EXIT--------------------------------------------------------\n");
-		printf("|PID/PESO= ");
-		imprimir_cola(colas->cola_exit);
-
-		printf("--LISTA-CPU--------------------------------------------------------\n");
-		printf("|S_CPU/S_PROG/PID= ");
-		imprimir_lista_cpu();
-		printf("-------------------------------------------------------------------\n");
-
-		pthread_mutex_unlock(&mutex_new);
-		pthread_mutex_unlock(&mutex_ready);
-		pthread_mutex_unlock(&mutex_block);
-		pthread_mutex_unlock(&mutex_exec);
-		pthread_mutex_unlock(&mutex_exit);
-		pthread_mutex_unlock(&mutex_uso_lista_cpu);
+void lock_todo(){
+	pthread_mutex_lock(&mutex_new);
+	pthread_mutex_lock(&mutex_ready);
+	pthread_mutex_lock(&mutex_block);
+	pthread_mutex_lock(&mutex_exec);
+	pthread_mutex_lock(&mutex_exit);
+	pthread_mutex_lock(&mutex_uso_lista_cpu);
 }
+
+void unlock_todo(){
+	pthread_mutex_unlock(&mutex_new);
+	pthread_mutex_unlock(&mutex_ready);
+	pthread_mutex_unlock(&mutex_block);
+	pthread_mutex_unlock(&mutex_exec);
+	pthread_mutex_unlock(&mutex_exit);
+	pthread_mutex_unlock(&mutex_uso_lista_cpu);
+}
+
+void imp_colas(){
+	lock_todo();
+	printf("--COLA-NEW---------------------------------------------------------\n");
+	printf("|PID/PESO= ");
+	imprimir_cola(colas->cola_new);
+
+	printf("--COLA-READY-------------------------------------------------------\n");
+	printf("|PID/PESO= ");
+	imprimir_cola(colas->cola_ready);
+
+	printf("--COLA-BLOCK-------------------------------------------------------\n");
+	printf("|PID/PESO= ");
+	imprimir_cola(colas->cola_block);
+
+	printf("--COLA-EXEC--------------------------------------------------------\n");
+	printf("|PID/PESO= ");
+	imprimir_cola(colas->cola_exec);
+
+	printf("--COLA-EXIT--------------------------------------------------------\n");
+	printf("|PID/PESO= ");
+	imprimir_cola(colas->cola_exit);
+
+	printf("--LISTA-CPU--------------------------------------------------------\n");
+	printf("|S_CPU/S_PROG/PID= ");
+	imprimir_lista_cpu();
+	printf("-------------------------------------------------------------------\n");
+
+	unlock_todo();
+}
+
 
 void crear_cont(sem_t *sem ,int32_t val_ini){
 	if(sem_init(sem, 0, val_ini)== -1){
@@ -1228,12 +1278,14 @@ void crear_cont(sem_t *sem ,int32_t val_ini){
 	}
 }
 
+
 void sem_decre(sem_t *sem){
 	if (sem_wait(sem) == -1){
 		perror("ERROR sem decrementar");
 		exit(1);
 	}
 }
+
 
 void sem_incre(sem_t *sem){
 	if (sem_post(sem) == -1){
@@ -1242,11 +1294,13 @@ void sem_incre(sem_t *sem){
 	}
 }
 
+
 void logear_int(FILE* destino,int32_t un_int){
 	char *aux_string = string_itoa(un_int);
 	txt_write_in_file(destino,aux_string);
 	free(aux_string);
 }
+
 
 void logear_char(FILE* destino,char un_char){
 	if (un_char == '\0'){
@@ -1260,6 +1314,7 @@ void logear_char(FILE* destino,char un_char){
 	txt_write_in_file(destino,"-");
 }
 
+
 t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu){
 	bool _es_soc_cpu(t_cpu *un_cpu){
 		return un_cpu->soc_cpu == soc_cpu;
@@ -1270,12 +1325,14 @@ t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu){
 	return aux_cpu;
 }
 
+
 void limpiar_destruir_dic_var(){
 	void _liberar_var(int32_t *valor){
 		free(valor);
 	}
 	dictionary_clean_and_destroy_elements(dicc_var, (void *)_liberar_var);
 }
+
 
 void limpiar_destruir_dic_sem(){
 	void _liberar_sem(t_semaforo *un_sem){
@@ -1284,6 +1341,7 @@ void limpiar_destruir_dic_sem(){
 	}
 	dictionary_clean_and_destroy_elements(dicc_sem, (void *)_liberar_sem);
 }
+
 
 void limpiar_destruir_dic_io(){
 	void _liberar_io(t_IO *un_io){
