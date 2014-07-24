@@ -27,9 +27,6 @@
 #include <signal.h>
 #include "sockets_lib.h"
 
-struct sigaction sa;
-volatile sig_atomic_t got_usr1;
-
 void traerIndiceEtiquetas();
 void recibirUnPcb();
 void handshake_umv(char *puerto, char *ip);

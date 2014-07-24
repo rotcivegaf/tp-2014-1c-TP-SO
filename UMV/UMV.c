@@ -31,15 +31,12 @@ int32_t main(){
 	list_seg = list_create();
 	alg_actual = config_get_int_value(ptrConfig,"modo");
 
-	pthread_t hilo_consola;
 	pthread_t hilo_conecciones;
-	//se crea el hilo para la consola
-	pthread_create( &hilo_consola,  NULL,crearConsola,  NULL);
+
 	//se crea el hilo que atendera las coneccines
 	crear_hilo_detached(&hilo_conecciones, admin_conecciones,  NULL);
 
-	//se espera a que finalize el hilo consola
-	pthread_join( hilo_consola, NULL);
+	crearConsola();
 
 	txt_write_in_file(umv_file_log,"Destruyo la lista de segmentos\n");
 	destruir_lista_segmento(list_seg);
@@ -501,7 +498,7 @@ int32_t asignarMemoriaAleatoria(int32_t tamanio, int32_t id){
 	
 	
 	// se recorre la lista y se controla que los segmentos que pertenecen a ese programa no se pise, si se pisa se
-	// genera un nuevo numero aleatorio y se recorre nuevamente la lista controlando hasta que todo este ok
+	// genera un nuevo numero aleatorio y se recorre nuevamente la lista controlando hasta que to do este ok
 	do{
 
 	memEstaOk = 1;
@@ -612,7 +609,7 @@ void destruirSegmentos(int id_prog){
 }
 
 //consola
-void* crearConsola(){
+void crearConsola(){
 	char opcion;
 	consola_file_log = txt_open_for_append("./UMV/logs/consola.log");
 	txt_write_in_file(consola_file_log,"--------------------Nueva ejecucion-------------------------------------------------------------------------------------------\n");
@@ -644,10 +641,7 @@ void* crearConsola(){
 	}while (opcion != '6');
 	txt_write_in_file(consola_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
 	txt_close_file(consola_file_log);
-	//salida de la UMV
 	quit_sistema = 0;
-
-	return NULL;
 }
 
 void menuPrincipal(){

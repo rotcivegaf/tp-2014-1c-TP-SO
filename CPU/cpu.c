@@ -93,6 +93,13 @@ int main(){
 		huboSegFault = 0;
 	}
 	_fin:
+
+	limpiar_destruir_dic_var();
+	dictionary_destroy(dic_Variables);
+	config_destroy(unaConfig);
+	txt_write_in_file(cpu_file_log,"--------------------Fin ejecucion---------------------------------\n");
+	txt_close_file(cpu_file_log);
+
 	return 0;
 }
 
@@ -288,9 +295,7 @@ void finalizarContexto(int32_t tipo_fin){
 		char *string = "\n----------Imprimo el estado final de las variable----------\n";
 
 		enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, string, string_length(string)+BARRA_CERO);
-		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
-		free(aux_string);
+
 		recibir_resp_kernel(R_IMPRIMIR);
 
 		for(i=0;i<pcb->cant_var_cont_actual;i++){//esta MIERDA de for es para imprimir vas variables en la consola del proceso progrma
@@ -319,9 +324,7 @@ void finalizarContexto(int32_t tipo_fin){
 			free (aux_cont_var);
 
 			enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, var_a_imp_con_contexto, string_length(var_a_imp_con_contexto)+BARRA_CERO);
-			char *aux_string = string_itoa(pcb->id);
-			enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
-			free(aux_string);
+
 			recibir_resp_kernel(R_IMPRIMIR);
 
 			destruir_men_comun(men_cont_var);
@@ -670,9 +673,6 @@ void imprimir(t_valor_variable valor_mostrar){
 		char *string_int = string_itoa(valor_mostrar);
 
 		enviar_men_comun_destruir(soc_kernel, IMPRIMIR_VALOR, string_int, string_length(string_int)+BARRA_CERO);
-		char *aux_string = string_itoa(pcb->id);
-		enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
-		free(aux_string);
 		recibir_resp_kernel(R_IMPRIMIR);
 
 		txt_write_in_file(cpu_file_log, "	Imprimiendo valor\n");
@@ -683,12 +683,7 @@ void imprimir(t_valor_variable valor_mostrar){
 
 void imprimirTexto(char* texto){
 	char *texto_sin_esc = sacar_caracteres_escape(texto);
-
 	enviar_men_comun_destruir(soc_kernel, IMPRIMIR_TEXTO, texto_sin_esc, string_length(texto_sin_esc)+BARRA_CERO);
-
-	char *aux_string = string_itoa(pcb->id);
-	enviar_men_comun_destruir(soc_kernel, ID_PROG, aux_string, string_length(aux_string)+BARRA_CERO);
-	free(aux_string);
 
 	recibir_resp_kernel(R_IMPRIMIR);
 

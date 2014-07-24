@@ -58,7 +58,7 @@
 	void destruirSegmentos(int id_prog);
 
 	//consola
-	void *crearConsola();
+	void crearConsola();
 	void menuPrincipal();
 	void cambiarAlgoritmo();
 	void cambiarRetardo();

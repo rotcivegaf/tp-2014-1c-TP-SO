@@ -1,5 +1,6 @@
 #include "kernel.h"
 
+t_config *CONFIG;
 fd_set conj_soc_progs;   // conjunto maestro de sockets del PLP(sockets de progrmas)
 fd_set conj_soc_cpus;    // conjunto maestro de sockets del PCP(sockets de cpus)
 int32_t listener_prog;
@@ -21,22 +22,18 @@ pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 sem_t cant_new, cant_ready, cant_exit;
 sem_t cant_multiprog, cant_cpu_libres;
 int32_t quit_sistema = 1, _QUANTUM_MAX, _RETARDO, _TAMANIO_STACK;
-char *PUERTO_PROG;
-char *PUERTO_CPU;
 t_dictionary *dicc_disp_io;
 t_dictionary *dicc_var;
 t_dictionary *dicc_sem;
 FILE *plp_log;
 FILE *pcp_log;
 
-
 int main(void){
 	dicc_var = dictionary_create();
 	dicc_sem = dictionary_create();
-	//diccionario dispositivos
 	dicc_disp_io = dictionary_create();
 
-	t_datos_config *diccionario_config = levantar_config();
+	levantar_config();
 
 	plp_log = txt_open_for_append("./kernel/logs/plp.log");
 	txt_write_in_file(plp_log,"---------------------Nueva ejecucion------------------------------\n");
@@ -45,7 +42,7 @@ int main(void){
 	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion------------------------------\n");
 
 	//Conecta con la umv
-	handshake_umv(diccionario_config->ip_umv, diccionario_config->puerto_umv);
+	handshake_umv();
 
 	//Inicializacion semaforos
 	crear_cont(&cant_new , 0);
@@ -53,8 +50,7 @@ int main(void){
 	crear_cont(&cant_exit , 0);
 
 	crear_cont(&cant_cpu_libres , 0);
-	crear_cont(&cant_multiprog , diccionario_config->multiprogramacion); //cantidad de procesos que todavia entran
-	free(diccionario_config);
+	crear_cont(&cant_multiprog , config_get_int_value( CONFIG, "MULTIPROGRAMACION")); //cantidad de procesos que todavia entran
 	//Creacion de colas
 	lista_cpu = list_create();
 	colas = malloc(sizeof(t_colas));
@@ -75,7 +71,19 @@ int main(void){
 	queue_destroy(colas->cola_exit);
 	queue_destroy(colas->cola_new);
 	queue_destroy(colas->cola_ready);
+	free(colas);
 	list_destroy(lista_cpu);
+	limpiar_destruir_dic_io();
+	dictionary_destroy(dicc_disp_io);
+	limpiar_destruir_dic_var();
+	dictionary_destroy(dicc_var);
+	limpiar_destruir_dic_sem();
+	dictionary_destroy(dicc_sem);
+	config_destroy(CONFIG);
+	txt_write_in_file(plp_log,"--------------------Fin ejecucion---------------------------------\n");
+	txt_close_file(plp_log);
+	txt_write_in_file(pcp_log,"--------------------Fin ejecucion---------------------------------\n");
+	txt_close_file(pcp_log);
 	return EXIT_SUCCESS;
 }
 
@@ -90,7 +98,7 @@ void *plp(){
 	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
 
 	//Abre un server para escuchar las conexiones de los programas
-	listener_prog = socket_crear_server(PUERTO_PROG);
+	listener_prog = socket_crear_server(config_get_string_value( CONFIG, "Puerto_prog"));
 	txt_write_in_file(plp_log,"Escuchando conexiones entrantes de programas \n");
 
 	FD_ZERO(&conj_soc_progs);    // borra los conjuntos maestro y temporal de sockets
@@ -124,7 +132,7 @@ void *plp(){
 						administrar_new_script(i, men_prog);
 						break;
 					default:
-						printf("ERROR PLP: se esperaba al recibir el tipo de dato:%i\n", men_prog->tipo);
+						printf("ERROR PLP: se recibio el tipo de dato:%i\n", men_prog->tipo);
 						break;
 					}
 				}
@@ -212,6 +220,7 @@ void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 		logear_int(plp_log,pcb_otros->pcb->id);
 		txt_write_in_file(plp_log,"\n");
 	}
+	destruir_men_comun(men_prog);
 }
 //funciones PCP
 void *pcp(){
@@ -226,7 +235,7 @@ void *pcp(){
 	pthread_t hilo_exit;
 	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 
-	int32_t listener_cpu = socket_crear_server(PUERTO_CPU);
+	int32_t listener_cpu = socket_crear_server(config_get_string_value( CONFIG, "Puerto_CPU"));
 	txt_write_in_file(pcp_log,"Escuchando conexiones entrantes de cpus \n");
 
 	FD_ZERO(&conj_soc_cpus);
@@ -285,9 +294,10 @@ void *pcp(){
 						enviar_IO(i, men_cpu);
 						break;
 					default:
-						printf("ERROR se esperaba al recibir el tipo de dato:%i\n", men_cpu->tipo);
+						printf("ERROR PCP se recibio el tipo de dato:%i\n", men_cpu->tipo);
 						break;
 					}
+					destruir_men_comun(men_cpu);
 				}
 			}
 		}
@@ -326,7 +336,6 @@ void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
 
 	FD_CLR(soc_cpu, &conj_soc_cpus);
 	socket_cerrar(soc_cpu);
-	destruir_men_comun(men_cpu);
 
 	txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket nº:");
 	logear_int(pcp_log,soc_cpu);
@@ -379,7 +388,6 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
-	destruir_men_comun(men_cpu);
 }
 
 void signal(int32_t soc_cpu,t_men_comun *men_cpu){
@@ -407,7 +415,6 @@ void signal(int32_t soc_cpu,t_men_comun *men_cpu){
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
-	destruir_men_comun(men_cpu);
 }
 
 t_cpu *get_cpu(int32_t soc_cpu){
@@ -448,11 +455,9 @@ void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu){
 	pthread_mutex_unlock(&mutex_io);
 
 	destruir_men_comun(men);
-	destruir_men_comun(men_cpu);
 }
 
 void fin_quantum(int32_t soc_cpu, t_men_comun *men_cpu){
-	destruir_men_comun(men_cpu);
 	t_pcb_otros *aux_pcb_otros;
 
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
@@ -505,8 +510,6 @@ void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_var);
-
-	destruir_men_comun(men_obt_valor);
 }
 
 void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
@@ -541,8 +544,6 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 		logear_int(pcp_log,soc_cpu);
 		txt_write_in_file(pcp_log,"\n");
 	}
-
-	destruir_men_comun(men_gra_valor);
 }
 
 void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
@@ -570,12 +571,6 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 }
 
 void imprimir_valor(int32_t soc_cpu, t_men_comun *men_imp_valor){
-	t_men_comun *men_id_prog;
-	men_id_prog = socket_recv_comun(soc_cpu);
-
-	if (men_id_prog->tipo != ID_PROG)
-		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
-
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	socket_send_comun(aux_cpu->soc_prog, men_imp_valor);
@@ -593,13 +588,6 @@ void imprimir_valor(int32_t soc_cpu, t_men_comun *men_imp_valor){
 }
 
 void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
-	t_men_comun *men_id_prog;
-
-	men_id_prog = socket_recv_comun(soc);
-
-	if (men_id_prog->tipo != ID_PROG)
-		printf("ERROR: esperaba el id de un programa y recibi: %i\n",men_id_prog->tipo);
-
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	t_cpu *aux_cpu = get_cpu(soc);
 	socket_send_comun(aux_cpu->soc_prog, men_imp_texto);
@@ -615,8 +603,6 @@ void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 }
 
 void fin_ejecucion(int32_t tipo,int32_t soc_cpu, t_men_comun *men_cpu){
-	destruir_men_comun(men_cpu);
-
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
@@ -915,6 +901,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 	pcb->cant_var_cont_actual = 0;
 	pcb->tam_indice_etiquetas = metadata_program->etiquetas_size;
 
+	metadata_destruir(metadata_program);
 	return pcb;
 }
 
@@ -968,12 +955,16 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog){
 		return NULL;
 	resp_sol->dir_seg_stack = resp;
 
+	metadata_destruir(metadata_program);
 	return resp_sol;
 }
 
 int32_t calcular_peso(t_men_comun *men_cod_prog){
-	t_metadata_program *metadata_program = metadata_desde_literal(men_cod_prog->dato);
-	return (5 * (metadata_program->cantidad_de_etiquetas) + 3 * (metadata_program->cantidad_de_funciones) + (metadata_program->instrucciones_size));
+	t_metadata_program *meta = metadata_desde_literal(men_cod_prog->dato);
+	int32_t ret = (5*meta->cantidad_de_etiquetas) +
+			(3*meta->cantidad_de_funciones) + meta->instrucciones_size;
+	metadata_destruir(meta);
+	return ret;
 }
 
 void *manejador_IO(t_IO *io){
@@ -1020,20 +1011,15 @@ void imp_semaforos(){
 	pthread_mutex_unlock(&mutex_dicc_sem);
 }
 
-t_datos_config *levantar_config(){
+void levantar_config(){
 	void _imp_disp(char *key, t_IO *io){
 		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
 	int i;
+	CONFIG = config_create("./kernel/kernel_config");
 
-	t_config *diccionario_config = config_create("./kernel/kernel_config");
-	t_datos_config *ret = malloc(sizeof(t_datos_config));
-	PUERTO_PROG = config_get_string_value( diccionario_config, "Puerto_prog");
-	PUERTO_CPU = config_get_string_value( diccionario_config, "Puerto_CPU");
-	ret->ip_umv = config_get_string_value( diccionario_config, "IP_UMV");
-	ret->puerto_umv = config_get_string_value( diccionario_config, "Puerto_umv");
-	char **id_ios = config_get_array_value( diccionario_config, "ID_HIO");
-	char **io_sleeps = config_get_array_value( diccionario_config, "HIO");
+	char **id_ios = config_get_array_value( CONFIG, "ID_HIO");
+	char **io_sleeps = config_get_array_value( CONFIG, "HIO");
 
 	for (i=0; id_ios[i] != '\0'; i++){
 		t_IO *new_IO = malloc(sizeof(t_IO));
@@ -1047,8 +1033,8 @@ t_datos_config *levantar_config(){
 	free(id_ios);
 	free(io_sleeps);
 
-	char **aux_id_sem = config_get_array_value( diccionario_config, "SEMAFOROS");
-	char **aux_valor = config_get_array_value( diccionario_config, "VALOR_SEMAFORO");
+	char **aux_id_sem = config_get_array_value( CONFIG, "SEMAFOROS");
+	char **aux_valor = config_get_array_value( CONFIG, "VALOR_SEMAFORO");
 
 	for(i=0;aux_id_sem[i] != '\0'; i++){
 		t_semaforo *new_sem = malloc(sizeof(t_semaforo));
@@ -1060,11 +1046,10 @@ t_datos_config *levantar_config(){
 	free(aux_id_sem);
 	free(aux_valor);
 
-	ret->multiprogramacion = config_get_int_value( diccionario_config, "MULTIPROGRAMACION");
-	_QUANTUM_MAX = config_get_int_value( diccionario_config, "QUANTUM");
-	_RETARDO = config_get_int_value( diccionario_config, "RETARDO");
-	_TAMANIO_STACK = config_get_int_value( diccionario_config, "TAMANIO_STACK");
-	char **aux_var_glob = config_get_array_value( diccionario_config, "VARIABLES_GLOBALES");
+	_QUANTUM_MAX = config_get_int_value( CONFIG, "QUANTUM");
+	_RETARDO = config_get_int_value( CONFIG, "RETARDO");
+	_TAMANIO_STACK = config_get_int_value( CONFIG, "TAMANIO_STACK");
+	char **aux_var_glob = config_get_array_value( CONFIG, "VARIABLES_GLOBALES");
 
 	for (i=0; aux_var_glob[i] != '\0'; i++){
 		int32_t *valor_ini = malloc(sizeof(int32_t));
@@ -1074,11 +1059,11 @@ t_datos_config *levantar_config(){
 	free(aux_var_glob);
 
 	printf("------Archivo Config------------------------------\n");
-	printf("Puerto Proc-Prog = %s\n", PUERTO_PROG);
-	printf("Puerto CPU = %s\n", PUERTO_CPU);
+	printf("Puerto Proc-Prog = %s\n", config_get_string_value( CONFIG, "Puerto_prog"));
+	printf("Puerto CPU = %s\n", config_get_string_value( CONFIG, "Puerto_CPU"));
 	printf("UMV\n");
-	printf("	IP     = %s\n", ret->ip_umv);
-	printf("	Puerto = %s\n", ret->puerto_umv);
+	printf("	IP     = %s\n", config_get_string_value( CONFIG, "IP_UMV"));
+	printf("	Puerto = %s\n", config_get_string_value( CONFIG, "Puerto_umv"));
 	printf("Entrada/Salida\n");
 
 	dictionary_iterator(dicc_disp_io, (void *)_imp_disp);
@@ -1088,15 +1073,13 @@ t_datos_config *levantar_config(){
 	imp_semaforos();
 
 	printf("Varias\n");
-	printf("	Multiprogramacion = %i\n", ret->multiprogramacion);
+	printf("	Multiprogramacion = %i\n", config_get_int_value( CONFIG, "MULTIPROGRAMACION"));
 	printf("	Quantum = %i\n", _QUANTUM_MAX);
 	printf("	Retardo =  %i\n", _RETARDO);
 	printf("	Tamanio Stack = %i\n", _TAMANIO_STACK);
 	printf("Variables Globales\n");
 	imp_variables_compartidas();
 	printf("--------------------------------------------------\n");
-
-	return ret;
 }
 
 void handshake_cpu(int32_t soc){
@@ -1121,7 +1104,10 @@ void handshake_prog(int32_t soc){
 	enviar_men_comun_destruir(soc,HS_KERNEL,NULL,0);
 }
 
-void handshake_umv(char *ip_umv, char *puerto_umv){
+void handshake_umv(){
+	char *ip_umv = config_get_string_value( CONFIG, "IP_UMV");
+	char *puerto_umv = config_get_string_value( CONFIG, "Puerto_umv");
+
 	soc_umv = socket_crear_client(puerto_umv,ip_umv);
 
 	enviar_men_comun_destruir(soc_umv,HS_KERNEL,NULL,0);
@@ -1143,8 +1129,11 @@ void menu_imp(){
 	while(quit_sistema){
 		do {
 			scanf("%c", &opcion);
-		} while (opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q');
+		} while (opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q' && opcion != 'e');
 		switch (opcion) {
+		case 'e':
+			quit_sistema = 0;
+			break;
 		case 'c':
 			imp_colas();
 			break;
@@ -1279,4 +1268,27 @@ t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu){
 	if (aux_cpu == NULL)
 		printf("ERROR: get_cpu_soc_cpu_remove()\n");
 	return aux_cpu;
+}
+
+void limpiar_destruir_dic_var(){
+	void _liberar_var(int32_t *valor){
+		free(valor);
+	}
+	dictionary_clean_and_destroy_elements(dicc_var, (void *)_liberar_var);
+}
+
+void limpiar_destruir_dic_sem(){
+	void _liberar_sem(t_semaforo *un_sem){
+		queue_destroy(un_sem->procesos);
+		free(un_sem);
+	}
+	dictionary_clean_and_destroy_elements(dicc_sem, (void *)_liberar_sem);
+}
+
+void limpiar_destruir_dic_io(){
+	void _liberar_io(t_IO *un_io){
+		queue_destroy(un_io->procesos);
+		free(un_io);
+	}
+	dictionary_clean_and_destroy_elements(dicc_disp_io, (void *)_liberar_io);
 }

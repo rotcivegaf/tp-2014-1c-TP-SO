@@ -44,11 +44,6 @@
 		int32_t tipo_fin_ejecucion;
 	} t_pcb_otros;
 	typedef struct{
-		char *ip_umv;
-		char *puerto_umv;
-		int32_t multiprogramacion;
-	} t_datos_config;
-	typedef struct{
 		int32_t  io_sleep;
 		t_queue *procesos;
 		pthread_t hilo;
@@ -70,10 +65,10 @@
 	}t_semaforo;
 
 	//inicio
-	t_datos_config *levantar_config();
+	void levantar_config();
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
-	void handshake_umv(char *ip_umv, char *puerto_umv);
+	void handshake_umv();
 
 	//hilos
 	void *plp();
@@ -112,7 +107,7 @@
 	t_cpu *get_cpu(int32_t  soc_cpu);
 
 	//funciones pcb
-	int32_t  calcular_peso(t_men_comun *men_cod_prog);
+	int32_t calcular_peso(t_men_comun *men_cod_prog);
 	t_pcb_otros *get_peso_min();
 
 	void umv_destrui_pcb(int32_t id_pcb);
@@ -134,5 +129,9 @@
 	void imp_colas();
 
 	void logear_int(FILE* destino,int32_t un_int);
+
+	void limpiar_destruir_dic_var();
+	void limpiar_destruir_dic_sem();
+	void limpiar_destruir_dic_io();
 
 #endif /* KERNEL_H_ */
