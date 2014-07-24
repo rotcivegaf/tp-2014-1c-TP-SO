@@ -617,27 +617,29 @@ void crearConsola(){
 		menuPrincipal();
 		do {
 			scanf("%c", &opcion);
-		} while (opcion<'1' || opcion>'6');
-
+		} while (opcion<'0' || opcion>'6');
 		switch (opcion) {
-			case '1':
-				operacion();
-				break;
-			case '2':
-				cambiarRetardo();
-				break;
-			case '3':
-				cambiarAlgoritmo();
-				break;
-			case '4':
-				pthread_mutex_lock(&mutex_list_seg);
-				compactar();
-				pthread_mutex_unlock(&mutex_list_seg);
-				break;
-			case '5':
-				imprimirDump();
-				break;
-			}
+		case '0':
+			cambiar_mem_total();
+			break;
+		case '1':
+			operacion();
+			break;
+		case '2':
+			cambiarRetardo();
+			break;
+		case '3':
+			cambiarAlgoritmo();
+			break;
+		case '4':
+			pthread_mutex_lock(&mutex_list_seg);
+			compactar();
+			pthread_mutex_unlock(&mutex_list_seg);
+			break;
+		case '5':
+			imprimirDump();
+			break;
+		}
 	}while (opcion != '6');
 	txt_write_in_file(consola_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
 	txt_close_file(consola_file_log);
@@ -647,12 +649,24 @@ void crearConsola(){
 void menuPrincipal(){
 	printf ("--------------------------------\n"
 			"Elija una opcion:\n"
+			"	0.Cambiar tamanio memoria principal\n"
 			"	1.Operacion\n"
 			"	2.Retardo\n"
 			"	3.Cambiar Algoritmo\n"
 			"	4.Compactacion\n"
 			"	5.Dump\n"
 			"	6.Salir\n");
+}
+
+void cambiar_mem_total(){
+	int nuevo_tamanio;
+
+	scanf("%i",&nuevo_tamanio);
+
+	pthread_mutex_lock(&mutex_mem_prin);
+	tam_mem_total = nuevo_tamanio;
+	mem_prin =realloc(mem_prin, nuevo_tamanio);
+	pthread_mutex_unlock(&mutex_mem_prin);
 }
 
 void operacion(){

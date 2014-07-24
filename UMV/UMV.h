@@ -62,6 +62,7 @@
 	void menuPrincipal();
 	void cambiarAlgoritmo();
 	void cambiarRetardo();
+	void cambiar_mem_total();
 	void operacion();
 	void operacion_segmentos(char opcion);
 	void operacion_memoria(char opcion);
