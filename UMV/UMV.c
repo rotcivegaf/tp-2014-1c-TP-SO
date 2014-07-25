@@ -18,7 +18,7 @@ int32_t main(){
 	srand(time(0));
 	//se crean los logs
 	umv_file_log = txt_open_for_append("./UMV/logs/umv.log");
-	txt_write_in_file(umv_file_log,"---------------------Nueva ejecucion--------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(umv_file_log,"---------Nueva ejecucion--------\n");
 	//crear configuracion y solicitar memoria
 	ptrConfig = config_create("./UMV/umv_config.txt");
 	tam_mem_total = config_get_int_value(ptrConfig,"tamanio");
@@ -43,8 +43,7 @@ int32_t main(){
 	config_destroy(ptrConfig);
 	txt_write_in_file(umv_file_log,"Libero la memoria principal\n");
 	free(mem_prin);
-
-	txt_write_in_file(umv_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(umv_file_log,"----------Fin ejecucion---------\n");
 	txt_close_file(umv_file_log);
 
 	pthread_mutex_destroy(&mutex_mem_prin);
@@ -612,7 +611,7 @@ void destruirSegmentos(int id_prog){
 void crearConsola(){
 	char opcion;
 	consola_file_log = txt_open_for_append("./UMV/logs/consola.log");
-	txt_write_in_file(consola_file_log,"--------------------Nueva ejecucion-------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(consola_file_log,"----------Nueva ejecucion-------\n");
 	do {
 		menuPrincipal();
 		do {
@@ -641,7 +640,7 @@ void crearConsola(){
 			break;
 		}
 	}while (opcion != '6');
-	txt_write_in_file(consola_file_log,"--------------------Fin ejecucion---------------------------------------------------------------------------------------------\n");
+	txt_write_in_file(consola_file_log,"----------Fin ejecucion---------\n");
 	txt_close_file(consola_file_log);
 	quit_sistema = 0;
 }
@@ -983,11 +982,11 @@ void imp_cont_mem_prin(){
 }
 
 void encabezado(long byte, char *modo){
-	printf("---------------** UMV: Unidad de Memoria Virtual **---------------\n");
+	printf("----** UMV: Unidad de Memoria Virtual **----\n");
 	printf("Puerto: %s\n", config_get_string_value(ptrConfig,"puerto"));
 	printf("Operando en modo: %s\n", modo);
 	printf("Espacio reservado: %ld bytes\n", byte);
-	printf("------------------------------------------------------------------\n\n");
+	printf("--------------------------------\n");
 }
 
 void traducir_tipo_de_seg_y_logear(int32_t tipo){

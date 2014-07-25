@@ -9,12 +9,12 @@ int main(int argc, char *argv[]){
 
 	t_config *config=config_create(getenv("ANSISOP_CONFIG"));// comando para usar la variable de entorno   export ANSISOP_CONFIG=/home/victor/workspace/tp-2014-1c-hashtaggers/programa/programa_config
 
-	printf("\n\n---------------------Archivo Config-------------------------------\n");
+	printf("---------Archivo Config---------\n");
 	char *ip_kernel=config_get_string_value(config, "IP_Kernel");
 	char *puerto_kernel = config_get_string_value(config, "Puerto_Kernel");
 	printf("	IP Kernel     = %s\n", ip_kernel);
 	printf("	Puerto Kernel = %s\n", puerto_kernel);
-	printf("------------------------------------------------------------------\n\n");
+	printf("--------------------------------\n");
 
 	FILE *scriptAProcesar = fopen(argv[1],"r");
 	int tamanioScript=tamanioArchivo(scriptAProcesar);

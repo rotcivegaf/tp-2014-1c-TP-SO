@@ -36,10 +36,9 @@ int main(void){
 	levantar_config();
 
 	plp_log = txt_open_for_append("./kernel/logs/plp.log");
-	txt_write_in_file(plp_log,"---------------------Nueva ejecucion------------------------------\n");
-
+	txt_write_in_file(plp_log,"---------Nueva ejecucion--------\n");
 	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
-	txt_write_in_file(pcp_log,"---------------------Nueva ejecucion------------------------------\n");
+	txt_write_in_file(pcp_log,"----------Nueva ejecucion-------\n");
 
 	//Conecta con la umv
 	handshake_umv();
@@ -91,9 +90,9 @@ int main(void){
 	limpiar_destruir_dic_sem();
 	dictionary_destroy(dicc_sem);
 	config_destroy(CONFIG);
-	txt_write_in_file(plp_log,"--------------------Fin ejecucion---------------------------------\n");
+	txt_write_in_file(plp_log,"---------Fin ejecucion----------\n");
 	txt_close_file(plp_log);
-	txt_write_in_file(pcp_log,"--------------------Fin ejecucion---------------------------------\n");
+	txt_write_in_file(pcp_log,"---------Fin ejecucion----------\n");
 	txt_close_file(pcp_log);
 	return EXIT_SUCCESS;
 }
@@ -178,7 +177,7 @@ void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog){
 	destruir_men_comun(men_prog);
 
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
-
+	mover_pcb_exit(soc_prog);
 	t_cpu *aux_cpu = list_remove_by_condition(lista_cpu, (void*)_es_soc_prog);
 
 	if (aux_cpu!=NULL){
@@ -186,7 +185,6 @@ void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog){
 		socket_cerrar(aux_cpu->soc_cpu);
 	}
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
-	mover_pcb_exit(soc_prog);
 }
 
 void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
@@ -1069,7 +1067,7 @@ void levantar_config(){
 	}
 	free(aux_var_glob);
 
-	printf("------Archivo Config------------------------------\n");
+	printf("------Archivo Config------------\n");
 	printf("Puerto Proc-Prog = %s\n", config_get_string_value( CONFIG, "Puerto_prog"));
 	printf("Puerto CPU = %s\n", config_get_string_value( CONFIG, "Puerto_CPU"));
 	printf("UMV\n");
@@ -1090,7 +1088,7 @@ void levantar_config(){
 	printf("	Tamanio Stack = %i\n", _TAMANIO_STACK);
 	printf("Variables Globales\n");
 	imp_variables_compartidas();
-	printf("--------------------------------------------------\n");
+	printf("--------------------------------\n");
 }
 
 void handshake_cpu(int32_t soc){
