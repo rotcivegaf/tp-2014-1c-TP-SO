@@ -6,7 +6,7 @@ cd so-commons-library/
 sudo make install
 cd ..
 # Instalo las parser-ansisop
-cd ansisop-parser/parser/
+cd ansisop-parser2/parser/
 sudo make all
 sudo make install
 cd ..
