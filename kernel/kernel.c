@@ -1141,7 +1141,7 @@ void menu_imp(){
 		do {
 			scanf("%c", &opcion);
 		} while (opcion != 'e' && opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q'
-				&& opcion != 'k' &&opcion != 'm');
+				&& opcion != 'k' && opcion != 'm' && opcion != 'r');
 		switch (opcion) {
 		case 'e':
 			quit_sistema = 0;
@@ -1168,6 +1168,10 @@ void menu_imp(){
 		case 'm':
 			scanf("%i",&un_int);
 			cambiar_multiprog(un_int);
+			break;
+		case 'r':
+			scanf("%i",&un_int);
+			_RETARDO = un_int;
 			break;
 		}
 	}
