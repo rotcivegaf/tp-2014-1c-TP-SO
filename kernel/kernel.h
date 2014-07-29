@@ -8,13 +8,13 @@
 	#include <sys/types.h>
 	#include <unistd.h>
 	//commons
-	#include <commons/config.h>
-	#include <commons/txt.h>
-	#include <commons/collections/dictionary.h>
-	#include <commons/collections/queue.h>
+	#include "commons/config.h"
+	#include "commons/txt.h"
+	#include "commons/collections/dictionary.h"
+	#include "commons/collections/queue.h"
 	//parser-ansisop
-	#include <parser/metadata_program.h>
-	#include <parser/parser.h>
+	#include "parser/metadata_program.h"
+	#include "parser/parser.h"
 	//hilos
 	#include <pthread.h>
 	//semaforos
