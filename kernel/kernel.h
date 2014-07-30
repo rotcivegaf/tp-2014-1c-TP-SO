@@ -66,6 +66,7 @@
 
 	//inicio
 	void levantar_config();
+	void crear_inicializar_estructuras();
 	void handshake_cpu(int32_t  soc);
 	void handshake_prog(int32_t  soc);
 	void handshake_umv();
@@ -134,8 +135,11 @@
 	void lock_todo();
 	void unlock_todo();
 
+	void finalizo_ejecucion();
 	void limpiar_destruir_dic_var();
 	void limpiar_destruir_dic_sem();
 	void limpiar_destruir_dic_io();
+
+	void socket_select(int32_t descriptor_max, fd_set *read_fds);
 
 #endif /* KERNEL_H_ */

@@ -29,35 +29,9 @@ FILE *plp_log;
 FILE *pcp_log;
 
 int main(void){
-	dicc_var = dictionary_create();
-	dicc_sem = dictionary_create();
-	dicc_disp_io = dictionary_create();
-
 	levantar_config();
-
-	plp_log = txt_open_for_append("./kernel/logs/plp.log");
-	txt_write_in_file(plp_log,"---------Nueva ejecucion--------\n");
-	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
-	txt_write_in_file(pcp_log,"----------Nueva ejecucion-------\n");
-
-	//Conecta con la umv
 	handshake_umv();
-
-	//Inicializacion semaforos
-	crear_cont(&cant_new , 0);
-	crear_cont(&cant_ready , 0);
-	crear_cont(&cant_exit , 0);
-
-	crear_cont(&cant_cpu_libres , 0);
-	crear_cont(&cant_multiprog , config_get_int_value( CONFIG, "MULTIPROGRAMACION")); //cantidad de procesos que todavia entran
-	//Creacion de colas
-	lista_cpu = list_create();
-	colas = malloc(sizeof(t_colas));
-	colas->cola_new = queue_create();
-	colas->cola_ready = queue_create();
-	colas->cola_block = queue_create();
-	colas->cola_exec = queue_create();
-	colas->cola_exit = queue_create();
+	crear_inicializar_estructuras();
 
 	//Creacion de hilos
 	pthread_t hilo_plp, hilo_pcp;
@@ -65,35 +39,8 @@ int main(void){
 	pthread_create(&hilo_pcp, NULL, pcp, NULL);
 	menu_imp();
 
-	//destruyo y cierro
-	pthread_mutex_destroy(&mutex_new);
-	pthread_mutex_destroy(&mutex_ready);
-	pthread_mutex_destroy(&mutex_block);
-	pthread_mutex_destroy(&mutex_exec);
-	pthread_mutex_destroy(&mutex_exit);
-	pthread_mutex_destroy(&mutex_uso_lista_cpu);
-	pthread_mutex_destroy(&mutex_io);
-	pthread_mutex_destroy(&mutex_dicc_var);
-	pthread_mutex_destroy(&mutex_dicc_sem);
-	pthread_mutex_destroy(&mutex_dispositivos_io);
-	queue_destroy(colas->cola_block);
-	queue_destroy(colas->cola_exec);
-	queue_destroy(colas->cola_exit);
-	queue_destroy(colas->cola_new);
-	queue_destroy(colas->cola_ready);
-	free(colas);
-	list_destroy(lista_cpu);
-	limpiar_destruir_dic_io();
-	dictionary_destroy(dicc_disp_io);
-	limpiar_destruir_dic_var();
-	dictionary_destroy(dicc_var);
-	limpiar_destruir_dic_sem();
-	dictionary_destroy(dicc_sem);
-	config_destroy(CONFIG);
-	txt_write_in_file(plp_log,"---------Fin ejecucion----------\n");
-	txt_close_file(plp_log);
-	txt_write_in_file(pcp_log,"---------Fin ejecucion----------\n");
-	txt_close_file(pcp_log);
+	finalizo_ejecucion();
+
 	return EXIT_SUCCESS;
 }
 
@@ -121,11 +68,12 @@ void *plp(){
 
 	while(quit_sistema){
 		read_fds = conj_soc_progs; // Copia el conjunto maestro al temporal
-		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+		socket_select(fdmax, &read_fds);
+		/*if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			txt_write_in_file(plp_log,"Error en el select \n");
 			perror("PLP-select");
 			exit(1);
-		}
+		}*/
 		for(i = 3; i <= fdmax; i++) {
 			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
 				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
@@ -254,11 +202,12 @@ void *pcp(){
 
 	while(quit_sistema){
 		read_fds = conj_soc_cpus;
-		if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+		socket_select(fdmax, &read_fds);
+		/*if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 			txt_write_in_file(pcp_log,"Error en el select \n");
 			perror("PCP-select");
 			exit(1);
-		}
+		}*/
 		for(i = 3; i <= fdmax; i++) {
 			if (FD_ISSET(i, &read_fds)) {
 				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus(se conecta una nueva cpu)
@@ -1025,11 +974,17 @@ void levantar_config(){
 		printf("	ID:%s ,Sleep:%i\n",key,io->io_sleep);
 	}
 	int i;
+
+	plp_log = txt_open_for_append("./kernel/logs/plp.log");
+	txt_write_in_file(plp_log,"---------Nueva ejecucion--------\n");
+	pcp_log = txt_open_for_append("./kernel/logs/pcp.log");
+	txt_write_in_file(pcp_log,"----------Nueva ejecucion-------\n");
 	CONFIG = config_create("./kernel/kernel_config");
 
 	char **id_ios = config_get_array_value( CONFIG, "ID_HIO");
 	char **io_sleeps = config_get_array_value( CONFIG, "HIO");
 
+	dicc_disp_io = dictionary_create();
 	for (i=0; id_ios[i] != '\0'; i++){
 		t_IO *new_IO = malloc(sizeof(t_IO));
 		crear_cont(&(new_IO->cont_cant_proc) , 0);
@@ -1045,6 +1000,7 @@ void levantar_config(){
 	char **aux_id_sem = config_get_array_value( CONFIG, "SEMAFOROS");
 	char **aux_valor = config_get_array_value( CONFIG, "VALOR_SEMAFORO");
 
+	dicc_sem = dictionary_create();
 	for(i=0;aux_id_sem[i] != '\0'; i++){
 		t_semaforo *new_sem = malloc(sizeof(t_semaforo));
 		new_sem->valor = atoi(aux_valor[i]);
@@ -1060,6 +1016,7 @@ void levantar_config(){
 	_TAMANIO_STACK = config_get_int_value( CONFIG, "TAMANIO_STACK");
 	char **aux_var_glob = config_get_array_value( CONFIG, "VARIABLES_GLOBALES");
 
+	dicc_var = dictionary_create();
 	for (i=0; aux_var_glob[i] != '\0'; i++){
 		int32_t *valor_ini = malloc(sizeof(int32_t));
 		*valor_ini = 0;
@@ -1272,14 +1229,12 @@ void imp_colas(){
 	unlock_todo();
 }
 
-
 void crear_cont(sem_t *sem ,int32_t val_ini){
 	if(sem_init(sem, 0, val_ini)== -1){
 		perror("No se puede crear el semáforo");
 		exit(1);
 	}
 }
-
 
 void sem_decre(sem_t *sem){
 	if (sem_wait(sem) == -1){
@@ -1288,7 +1243,6 @@ void sem_decre(sem_t *sem){
 	}
 }
 
-
 void sem_incre(sem_t *sem){
 	if (sem_post(sem) == -1){
 		perror("ERROR sem decrementar");
@@ -1296,13 +1250,19 @@ void sem_incre(sem_t *sem){
 	}
 }
 
+void socket_select(int32_t descriptor_max, fd_set *read_fds){
+	if (select(descriptor_max+1, read_fds, NULL, NULL, NULL) == -1) {
+		txt_write_in_file(plp_log,"Error en el select \n");
+		perror("PLP-select");
+		exit(1);
+	}
+}
 
 void logear_int(FILE* destino,int32_t un_int){
 	char *aux_string = string_itoa(un_int);
 	txt_write_in_file(destino,aux_string);
 	free(aux_string);
 }
-
 
 void logear_char(FILE* destino,char un_char){
 	if (un_char == '\0'){
@@ -1316,7 +1276,6 @@ void logear_char(FILE* destino,char un_char){
 	txt_write_in_file(destino,"-");
 }
 
-
 t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu){
 	bool _es_soc_cpu(t_cpu *un_cpu){
 		return un_cpu->soc_cpu == soc_cpu;
@@ -1327,14 +1286,12 @@ t_cpu *get_cpu_soc_cpu_remove(int32_t soc_cpu){
 	return aux_cpu;
 }
 
-
 void limpiar_destruir_dic_var(){
 	void _liberar_var(int32_t *valor){
 		free(valor);
 	}
 	dictionary_clean_and_destroy_elements(dicc_var, (void *)_liberar_var);
 }
-
 
 void limpiar_destruir_dic_sem(){
 	void _liberar_sem(t_semaforo *un_sem){
@@ -1344,11 +1301,59 @@ void limpiar_destruir_dic_sem(){
 	dictionary_clean_and_destroy_elements(dicc_sem, (void *)_liberar_sem);
 }
 
-
 void limpiar_destruir_dic_io(){
 	void _liberar_io(t_IO *un_io){
 		queue_destroy(un_io->procesos);
 		free(un_io);
 	}
 	dictionary_clean_and_destroy_elements(dicc_disp_io, (void *)_liberar_io);
+}
+
+void finalizo_ejecucion(){
+	pthread_mutex_destroy(&mutex_new);
+	pthread_mutex_destroy(&mutex_ready);
+	pthread_mutex_destroy(&mutex_block);
+	pthread_mutex_destroy(&mutex_exec);
+	pthread_mutex_destroy(&mutex_exit);
+	pthread_mutex_destroy(&mutex_uso_lista_cpu);
+	pthread_mutex_destroy(&mutex_io);
+	pthread_mutex_destroy(&mutex_dicc_var);
+	pthread_mutex_destroy(&mutex_dicc_sem);
+	pthread_mutex_destroy(&mutex_dispositivos_io);
+	queue_destroy(colas->cola_block);
+	queue_destroy(colas->cola_exec);
+	queue_destroy(colas->cola_exit);
+	queue_destroy(colas->cola_new);
+	queue_destroy(colas->cola_ready);
+	free(colas);
+	list_destroy(lista_cpu);
+	limpiar_destruir_dic_io();
+	dictionary_destroy(dicc_disp_io);
+	limpiar_destruir_dic_var();
+	dictionary_destroy(dicc_var);
+	limpiar_destruir_dic_sem();
+	dictionary_destroy(dicc_sem);
+	config_destroy(CONFIG);
+	txt_write_in_file(plp_log,"---------Fin ejecucion----------\n");
+	txt_close_file(plp_log);
+	txt_write_in_file(pcp_log,"---------Fin ejecucion----------\n");
+	txt_close_file(pcp_log);
+}
+
+void crear_inicializar_estructuras(){
+	//Inicializacion semaforos
+	crear_cont(&cant_new , 0);
+	crear_cont(&cant_ready , 0);
+	crear_cont(&cant_exit , 0);
+
+	crear_cont(&cant_cpu_libres , 0);
+	crear_cont(&cant_multiprog , config_get_int_value( CONFIG, "MULTIPROGRAMACION")); //cantidad de procesos que todavia entran
+	//Creacion de colas
+	lista_cpu = list_create();
+	colas = malloc(sizeof(t_colas));
+	colas->cola_new = queue_create();
+	colas->cola_ready = queue_create();
+	colas->cola_block = queue_create();
+	colas->cola_exec = queue_create();
+	colas->cola_exit = queue_create();
 }
