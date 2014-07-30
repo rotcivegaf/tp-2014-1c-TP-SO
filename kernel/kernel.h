@@ -81,6 +81,7 @@
 
 	//funciones del plp
 	int32_t ingresar_nuevo_programa();
+	void administrar_men_progs(int32_t soc_prog);
 	void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog);
 	void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog);
 

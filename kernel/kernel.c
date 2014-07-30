@@ -34,9 +34,13 @@ int main(void){
 	crear_inicializar_estructuras();
 
 	//Creacion de hilos
-	pthread_t hilo_plp, hilo_pcp;
+	pthread_t hilo_plp, hilo_pcp, hilo_new_ready, hilo_ready_exec, hilo_exit;
 	pthread_create(&hilo_plp, NULL, plp, NULL);
 	pthread_create(&hilo_pcp, NULL, pcp, NULL);
+
+	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
+	pthread_create(&hilo_ready_exec, NULL, manejador_ready_exec,NULL);
+	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 	menu_imp();
 
 	finalizo_ejecucion();
@@ -45,14 +49,9 @@ int main(void){
 }
 
 void *plp(){
-	t_men_comun *men_prog;
-	int32_t new_prog;
-	pthread_t hilo_new_ready;
+	int32_t new_prog, num_fd;
 	fd_set read_fds; // conjunto temporal de sockets para select()
 	int32_t fdmax;   // socket con el mayor valor
-
-	//Creacion del hilo que maneja el pasaje de pcbs de new a ready
-	pthread_create(&hilo_new_ready, NULL, manejador_new_ready, NULL);
 
 	//Abre un server para escuchar las conexiones de los programas
 	listener_prog = socket_crear_server(config_get_string_value( CONFIG, "Puerto_prog"));
@@ -64,36 +63,17 @@ void *plp(){
 
 	fdmax = listener_prog; // por ahora es éste
 
-	int32_t i;
-
 	while(quit_sistema){
 		read_fds = conj_soc_progs; // Copia el conjunto maestro al temporal
 		socket_select(fdmax, &read_fds);
-		/*if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
-			txt_write_in_file(plp_log,"Error en el select \n");
-			perror("PLP-select");
-			exit(1);
-		}*/
-		for(i = 3; i <= fdmax; i++) {
-			if (FD_ISSET(i, &read_fds)) { // Si hay datos entrantes en el socket i
-				if (i == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
+		for(num_fd = 3; num_fd <= fdmax; num_fd++) {
+			if (FD_ISSET(num_fd, &read_fds)) { // Si hay datos entrantes en el socket i
+				if (num_fd == listener_prog) { //Si i es el socket que espera conexiones, es porque hay un nuevo prog
 					new_prog = ingresar_nuevo_programa();
 					if (new_prog > fdmax) // Actualiza el socket maximo
 						fdmax = new_prog;
-				}else{
-					men_prog = socket_recv_comun(i);
-					switch(men_prog->tipo){
-					case CONEC_CERRADA:
-						administrar_prog_cerrado(i, men_prog);
-						break;
-					case CODIGO_SCRIPT:
-						administrar_new_script(i, men_prog);
-						break;
-					default:
-						printf("ERROR PLP: se recibio el tipo de dato:%i\n", men_prog->tipo);
-						break;
-					}
-				}
+				}else
+					administrar_men_progs(num_fd);
 			}
 		}
 	usleep(_RETARDO*1000);
@@ -113,16 +93,29 @@ int32_t ingresar_nuevo_programa(){
 	return new_soc;
 }
 
+void administrar_men_progs(int32_t soc_prog){
+	t_men_comun *men_prog = socket_recv_comun(soc_prog);
+	switch(men_prog->tipo){
+	case CONEC_CERRADA:
+		administrar_prog_cerrado(soc_prog, men_prog);
+		break;
+	case CODIGO_SCRIPT:
+		administrar_new_script(soc_prog, men_prog);
+		break;
+	default:
+		printf("ERROR PLP: se recibio el tipo de dato:%i\n", men_prog->tipo);
+		break;
+	}
+	destruir_men_comun(men_prog);
+}
+
 void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog){
 	bool _es_soc_prog(t_cpu *un_cpu){
 		return un_cpu->soc_prog == soc_prog;
 	}
-	txt_write_in_file(plp_log,"Cerro la conexion el programa con socket n°:");
-	logear_int(plp_log,soc_prog);
-	txt_write_in_file(plp_log,"\n");
-	printf("PLP-select: Prog desconectado socket nº%i\n", soc_prog);
+	txt_write_in_file(plp_log,"Cerro la conexion el programa con socket n°:");logear_int(plp_log,soc_prog);	txt_write_in_file(plp_log,"\n");printf("PLP-select: Prog desconectado socket nº%i\n", soc_prog);
+
 	FD_CLR(soc_prog, &conj_soc_progs);
-	destruir_men_comun(men_prog);
 
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	mover_pcb_exit(soc_prog);
@@ -137,9 +130,7 @@ void administrar_prog_cerrado(int32_t soc_prog,t_men_comun *men_prog){
 
 void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 	//printf("PLP-select: nuevo prog con socket n°%i\n", i);
-	txt_write_in_file(plp_log,"Nuevo programa con socket n°:");
-	logear_int(plp_log,soc_prog);
-	txt_write_in_file(plp_log,"\n");
+	txt_write_in_file(plp_log,"Nuevo programa con socket n°:");logear_int(plp_log,soc_prog);txt_write_in_file(plp_log,"\n");
 
 	_CONTADOR_PROGRAMA++;
 
@@ -148,9 +139,7 @@ void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 
 	if (resp_sol == NULL){
 		FD_CLR(soc_prog, &conj_soc_progs);
-		txt_write_in_file(plp_log,"Memoria insuficiente para el programa con socket n°:");
-		logear_int(plp_log,soc_prog);
-		txt_write_in_file(plp_log,"\n");
+		txt_write_in_file(plp_log,"Memoria insuficiente para el programa con socket n°:");logear_int(plp_log,soc_prog);txt_write_in_file(plp_log,"\n");
 
 		//Avisa al programa que no hay memoria
 		char *aux_sring = string_itoa(_CONTADOR_PROGRAMA);
@@ -171,26 +160,13 @@ void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 		sem_incre(&cant_new);
 		pthread_mutex_unlock(&mutex_new);
 
-		txt_write_in_file(plp_log,"Se creo el pcb para el programa con socket n°:");
-		logear_int(plp_log,soc_prog);
-		txt_write_in_file(plp_log," , su id es:");
-		logear_int(plp_log,pcb_otros->pcb->id);
-		txt_write_in_file(plp_log,"\n");
+		txt_write_in_file(plp_log,"Se creo el pcb para el programa con socket n°:");logear_int(plp_log,soc_prog);txt_write_in_file(plp_log," , su id es:");logear_int(plp_log,pcb_otros->pcb->id);txt_write_in_file(plp_log,"\n");
 	}
-	destruir_men_comun(men_prog);
 }
 //funciones PCP
 void *pcp(){
 	int32_t i, fdmax, new_soc;
 	fd_set read_fds;
-
-	// Crea el hilo que pasa los pcb de ready a exec
-	pthread_t hilo_ready_exec;
-	pthread_create(&hilo_ready_exec, NULL, manejador_ready_exec,NULL);
-
-	// Crea el hilo que maneja las llegadas de pcbs a exit
-	pthread_t hilo_exit;
-	pthread_create(&hilo_exit, NULL, manejador_exit, NULL);
 
 	int32_t listener_cpu = socket_crear_server(config_get_string_value( CONFIG, "Puerto_CPU"));
 	txt_write_in_file(pcp_log,"Escuchando conexiones entrantes de cpus \n");
@@ -1345,9 +1321,9 @@ void crear_inicializar_estructuras(){
 	crear_cont(&cant_new , 0);
 	crear_cont(&cant_ready , 0);
 	crear_cont(&cant_exit , 0);
-
 	crear_cont(&cant_cpu_libres , 0);
 	crear_cont(&cant_multiprog , config_get_int_value( CONFIG, "MULTIPROGRAMACION")); //cantidad de procesos que todavia entran
+
 	//Creacion de colas
 	lista_cpu = list_create();
 	colas = malloc(sizeof(t_colas));
