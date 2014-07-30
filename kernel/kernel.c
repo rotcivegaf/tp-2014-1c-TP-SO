@@ -165,7 +165,7 @@ void administrar_new_script(int32_t soc_prog, t_men_comun *men_prog){
 }
 //funciones PCP
 void *pcp(){
-	int32_t i, fdmax, new_soc;
+	int32_t num_fd, fdmax, new_soc;
 	fd_set read_fds;
 
 	int32_t listener_cpu = socket_crear_server(config_get_string_value( CONFIG, "Puerto_CPU"));
@@ -184,60 +184,63 @@ void *pcp(){
 			perror("PCP-select");
 			exit(1);
 		}*/
-		for(i = 3; i <= fdmax; i++) {
-			if (FD_ISSET(i, &read_fds)) {
-				if (i == listener_cpu) { // Si los datos son en el srv que escucha cpus(se conecta una nueva cpu)
+		for(num_fd = 3; num_fd <= fdmax; num_fd++) {
+			if (FD_ISSET(num_fd, &read_fds)) {
+				if (num_fd == listener_cpu) { // Si los datos son en el srv que escucha cpus(se conecta una nueva cpu)
 					new_soc = ingresar_new_cpu(listener_cpu);
 					if (new_soc > fdmax)
 						fdmax = new_soc;
-				}else{
-					// Sino, es un cpu mandando datos
-					t_men_comun *men_cpu = socket_recv_comun(i);
-					switch(men_cpu->tipo){
-					case CONEC_CERRADA:
-						conec_cerrada_cpu(i, men_cpu);
-						break;
-					case FIN_QUANTUM:
-						fin_quantum(i, men_cpu);
-						break;
-					case FIN_EJECUCION:
-						fin_ejecucion(FIN_EJECUCION,i ,men_cpu);
-						break;
-					case SEGMEN_FAULT:
-						fin_ejecucion(SEGMEN_FAULT,i , men_cpu);
-						break;
-					case IMPRIMIR_TEXTO:
-						imprimir_texto(i, men_cpu);
-						break;
-					case IMPRIMIR_VALOR:
-						imprimir_valor(i, men_cpu);
-						break;
-					case OBTENER_VALOR:
-						obtener_valor_compartida(i, men_cpu);
-						break;
-					case GRABAR_VALOR:
-						grabar_valor_compartida(i, men_cpu);
-						break;
-					case WAIT:
-						wait(i ,men_cpu);
-						break;
-					case SIGNAL:
-						signal(i, men_cpu);
-						break;
-					case IO_ID:
-						enviar_IO(i, men_cpu);
-						break;
-					default:
-						printf("ERROR PCP se recibio el tipo de dato:%i\n", men_cpu->tipo);
-						break;
-					}
-					destruir_men_comun(men_cpu);
-				}
+				}else
+					administrar_men_cpus(num_fd);
 			}
 		}
 		usleep(_RETARDO*1000);
 	}
 	return NULL;
+}
+
+void administrar_men_cpus(int32_t soc_cpu){
+	// Sino, es un cpu mandando datos
+	t_men_comun *men_cpu = socket_recv_comun(soc_cpu);
+	switch(men_cpu->tipo){
+	case CONEC_CERRADA:
+		conec_cerrada_cpu(soc_cpu, men_cpu);
+		break;
+	case FIN_QUANTUM:
+		fin_quantum(soc_cpu, men_cpu);
+		break;
+	case FIN_EJECUCION:
+		fin_ejecucion(FIN_EJECUCION,soc_cpu ,men_cpu);
+		break;
+	case SEGMEN_FAULT:
+		fin_ejecucion(SEGMEN_FAULT,soc_cpu , men_cpu);
+		break;
+	case IMPRIMIR_TEXTO:
+		imprimir_texto(soc_cpu, men_cpu);
+		break;
+	case IMPRIMIR_VALOR:
+		imprimir_valor(soc_cpu, men_cpu);
+		break;
+	case OBTENER_VALOR:
+		obtener_valor_compartida(soc_cpu, men_cpu);
+		break;
+	case GRABAR_VALOR:
+		grabar_valor_compartida(soc_cpu, men_cpu);
+		break;
+	case WAIT:
+		wait(soc_cpu ,men_cpu);
+		break;
+	case SIGNAL:
+		signal(soc_cpu, men_cpu);
+		break;
+	case IO_ID:
+		enviar_IO(soc_cpu, men_cpu);
+		break;
+	default:
+		printf("ERROR PCP se recibio el tipo de dato:%i\n", men_cpu->tipo);
+		break;
+	}
+	destruir_men_comun(men_cpu);
 }
 
 int32_t ingresar_new_cpu(int32_t listener_cpu){

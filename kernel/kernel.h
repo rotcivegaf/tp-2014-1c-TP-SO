@@ -90,6 +90,7 @@
 
 	//funciones del pcp
 	int32_t ingresar_new_cpu(int32_t listener_cpu);
+	void administrar_men_cpus(int32_t soc_cpu);
 	void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu);
 	void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu);
 	void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu);
