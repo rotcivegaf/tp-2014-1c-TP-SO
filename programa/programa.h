@@ -7,9 +7,9 @@
 	#include <string.h>
 	#include <unistd.h>
 
-	#include <commons/config.h>
-	#include <commons/collections/dictionary.h>
-	#include <commons/log.h>
+	#include "commons/config.h"
+	#include "commons/collections/dictionary.h"
+	#include "commons/log.h"
 
 	int tamanioArchivo(FILE *archivo);
 	void handshake_kernel();
