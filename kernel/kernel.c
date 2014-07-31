@@ -866,7 +866,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog){
 	int32_t tam = 0, resp;
 
 	//pido mem para el codigo del script
-	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_COD,_CONTADOR_PROGRAMA,men_cod_prog->tam_dato);
+	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_COD,_CONTADOR_PROGRAMA,men_cod_prog->tam_dato +1);
 	resp = gestionar_resp_sol_mem();
 	if(resp == -1)
 		return NULL;
