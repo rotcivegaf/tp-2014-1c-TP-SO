@@ -890,6 +890,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog){
 	resp_sol->dir_indice_codigo = resp;
 
 	//pido mem para el stack
+	usleep(4000*1000);
 	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_STACK , _CONTADOR_PROGRAMA, _TAMANIO_STACK);
 
 	resp = gestionar_resp_sol_mem();

@@ -244,7 +244,7 @@ void gestionar_ped_seg(t_men_seg *men_seg,int32_t tipo_resp){
 		enviar_men_comun_destruir(soc_kernel, MEM_OVERLOAD ,NULL, 0);
 	}else{
 		aux_string = string_itoa(resp_dir_mem);
-		enviar_men_comun_destruir(soc_kernel, tipo_resp ,aux_string, string_length(aux_string));
+		enviar_men_comun_destruir(soc_kernel, tipo_resp ,aux_string, string_length(aux_string)+1);
 		free(aux_string);
 	}
 }
