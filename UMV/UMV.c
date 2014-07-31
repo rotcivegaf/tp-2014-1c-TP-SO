@@ -469,7 +469,7 @@ int32_t crearSegmento(t_men_seg *men_ped){
 	aux_seg->id_proc = men_ped->id_prog;
 	aux_seg->tam_seg = men_ped->tam_seg;
 	aux_seg->dir_fisica = resp;
-	aux_seg->dir_logica = asignarMemoriaAleatoria(men_ped->tam_seg, men_ped->id_prog);
+	aux_seg->dir_logica = (rand());//asignarMemoriaAleatoria(men_ped->tam_seg, men_ped->id_prog);
 	list_add(list_seg, aux_seg);
 	pthread_mutex_unlock(&mutex_list_seg);
 
