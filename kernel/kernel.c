@@ -790,6 +790,7 @@ void *manejador_ready_exec(){
 		}
 
 		enviar_cpu_pcb_destruir(aux_cpu->soc_cpu,aux_pcb_otros->pcb);
+		printf("Dir seg stack: %i \n", aux_pcb_otros->pcb->dir_seg_stack);
 
 		aux_cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 		aux_cpu->soc_prog = aux_pcb_otros->n_socket;
