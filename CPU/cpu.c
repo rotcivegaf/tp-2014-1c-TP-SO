@@ -83,9 +83,8 @@ int main(){
 			analizadorLinea(proxInstrucc, &functions, &kernel_functions);
 			free(proxInstrucc);
 		}
-		if(!fueFinEjecucion){
+		if(!fueFinEjecucion)
 			salirPorQuantum();
-		}
 		free(etiquetas);
 		free(pcb);
 		cambio_PA(0);//lo cambio a 0 asi la UMV puede comprobar q hay un error
@@ -210,8 +209,10 @@ char* solicitarProxSentenciaAUmv(){// revisar si de hecho devuelve la prox instr
 }
 
 void salirPorQuantum(){
-	//mando el pcb con un tipo de mensaje que sali por quantum
-	enviar_men_comun_destruir(soc_kernel, FIN_QUANTUM, NULL, 0);
+	if (quit_sistema == 0)
+		enviar_men_comun_destruir(soc_kernel, FIN_QUANTUM, "", 1);
+	else
+		enviar_men_comun_destruir(soc_kernel, FIN_QUANTUM, NULL, 0);
 	enviar_pcb_destruir();
 }
 
@@ -265,22 +266,6 @@ void finalizarContexto(int32_t tipo_fin){
 	char *aux_string;
 
 	switch(tipo_fin){
-	case SEM_INEX:
-		printf("	ERROR,el semaforo es inexistente\n");
-		fueFinEjecucion=1;
-		break;
-	case SEM_BLOQUEADO:
-		fueFinEjecucion=1;
-		enviar_pcb_destruir();
-		break;
-	case VAR_INEX:
-		printf("	ERROR,la variable global es inexistente\n");
-		fueFinEjecucion=1;
-		break;
-	case ERROR:
-		printf("	ERROR, la etiqueta no se ha encontrado pero creo q esta fuera del alcanse del tp\n");
-		fueFinEjecucion = 1;
-		break;
 	case SEGMEN_FAULT:
 		aux_string = string_itoa(pcb->id);
 		printf("Hubo un error en la solictud de memoria, se finalizará la ejecucion del programa actual %d\n", pcb->id);
@@ -426,9 +411,9 @@ t_valor_variable dereferenciar(t_puntero direccion_variable){
 		txt_write_in_file(cpu_file_log, "y su valor es \n");
 		printf("	Dereferenciar %d, offset:%i y su valor es: %d\n",direccion_variable, offset,valor);
 	}
-	if(men_comun->tipo ==SEGMEN_FAULT){
+	if(men_comun->tipo ==SEGMEN_FAULT)
 		finalizarContexto(SEGMEN_FAULT);
-	}
+
 	destruir_men_comun(men_comun);
 	return valor;
 }
@@ -451,9 +436,9 @@ void asignar(t_puntero direccion_variable, t_valor_variable valor){
 			txt_write_in_file(cpu_file_log, "el valor \n");
 			printf("	Asignando en la direccion %d, offset:%i, el valor %d \n", direccion_variable, offset, valor);
 		}
-		if(r_alm->tipo == SEGMEN_FAULT){
+		if(r_alm->tipo == SEGMEN_FAULT)
 			finalizarContexto(SEGMEN_FAULT);
-		}
+
 		destruir_men_comun(r_alm);
 	}
 }
@@ -472,13 +457,12 @@ t_valor_variable obtenerValorCompartida(t_nombre_compartida variable){
 	if(respuesta->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
 		printf("	Error en acceso a la variable %s, no existe", variable);
-		valor = 0;//todo asigno 0 si la variable no existe
-		finalizarContexto(VAR_INEX);//todo romper
+		valor = 0;
+		fueFinEjecucion=1;
 	}else{
 		valor = atoi(respuesta->dato);
 
-		txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");
-		txt_write_in_file(cpu_file_log, "el valor \n");
+		txt_write_in_file(cpu_file_log, "Obteniendo el valor de compartida \n");txt_write_in_file(cpu_file_log, "el valor \n");
 		printf("	Obteniendo el valor de compartida %s que es %i \n", variable, valor);
 	}
 	destruir_men_comun(respuesta);
@@ -496,7 +480,7 @@ t_valor_variable asignarValorCompartida(t_nombre_compartida variable, t_valor_va
 	if(men_resp->tipo == VAR_INEX){
 		txt_write_in_file(cpu_file_log, "Acceso a variable global inexistente \n");
 		printf("	Error en acceso a la variable %s, no existe", variable);
-		finalizarContexto(VAR_INEX);
+		fueFinEjecucion=1;
 		destruir_men_comun(men_resp);
 		return -1;
 	}
@@ -527,7 +511,7 @@ void irAlLabel(t_nombre_etiqueta nombre_etiqueta){//revisar
 	}else{
 		txt_write_in_file(cpu_file_log, "Hubo un error en la busqueda de la etiqueta\n");
 		printf("	ERROR en la busqueda de la etiqueta:%s \n",etiq_sin_blancos);
-		finalizarContexto(ERROR);
+		fueFinEjecucion = 1;
 	}
 	free(etiq_sin_blancos);
 }
@@ -538,7 +522,7 @@ void llamarSinRetorno(t_nombre_etiqueta etiqueta){
 	preservarContexto();
 
 	//actualizo las estructuras
-	pcb->dir_cont_actual = pcb->dir_cont_actual + (5*pcb->cant_var_cont_actual)+8;//todo probar q ande
+	pcb->dir_cont_actual = pcb->dir_cont_actual + (5*pcb->cant_var_cont_actual)+8;
 	pcb->cant_var_cont_actual = 0;
 	regenerar_dicc_var();
 	pos_retorno = metadata_buscar_etiqueta(etiqueta, etiquetas, pcb->tam_indice_etiquetas);
@@ -699,6 +683,10 @@ void entradaSalida(t_nombre_dispositivo dispositivo, int tiempo){
 	free(aux_tiempo);
 
 	enviar_pcb_destruir();
+	if (quit_sistema == 0)
+		enviar_men_comun_destruir(soc_kernel, WAIT, "", 1);
+	else
+		enviar_men_comun_destruir(soc_kernel, WAIT, NULL, 0);
 	fueFinEjecucion = 1;
 
 	txt_write_in_file(cpu_file_log, "Saliendo a IO en dispositivo\n");
@@ -711,7 +699,6 @@ void wait(t_nombre_semaforo identificador_semaforo){
 	printf("	Haciendo wait a semaforo %s\n", identificador_semaforo);
 
 	t_men_comun *men_resp = socket_recv_comun(soc_kernel);
-
 	switch(men_resp->tipo){
 		case SEM_OK:
 			//El semaforo esta disponible, seguir procesando o lo que sea
@@ -720,7 +707,12 @@ void wait(t_nombre_semaforo identificador_semaforo){
 			//No hago nada, continua con la ejecucion normalmente
 			break;
 		case SEM_BLOQUEADO:
-			finalizarContexto(SEM_BLOQUEADO); // para que no busque la proxima instruccion, y se quede bloqueado
+			fueFinEjecucion=1;
+			enviar_pcb_destruir();
+			if (quit_sistema == 0)
+				enviar_men_comun_destruir(soc_kernel, WAIT, "", 1);
+			else
+				enviar_men_comun_destruir(soc_kernel, WAIT, NULL, 0);
 			// no hace falta mandar nada al kernel, ya que al avisar que lo bloquea lo manda a bloqueado por get_cpu
 			printf("	Se recibio el mensaje SEM_BLOQUEADO del semaforo,se bloquea el programa n° %i\n", pcb->id);
 			txt_write_in_file(cpu_file_log, "Se bloqueo el programa por un semaforo, se desaloja de la cpu.");
@@ -729,7 +721,7 @@ void wait(t_nombre_semaforo identificador_semaforo){
 		case SEM_INEX:
 			printf("	Acceso a semaforo %s inexistente \n",identificador_semaforo);
 			txt_write_in_file(cpu_file_log,"Acceso a semaforo inexistente");
-			finalizarContexto(SEM_INEX);
+			fueFinEjecucion=1;
 			break;
 		default:
 			printf("	El tipo de dato recibido: %i es erroneo\n",men_resp->tipo);
@@ -787,7 +779,7 @@ void handshake_umv(char *puerto, char *ip){
 		destruir_men_comun(mensaje_inicial);
 	}else{
 		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE UMV\n");
-		printf("ERROR HANDSHAKE\n");
+		printf("	ERROR HANDSHAKE\n");
 	}
 }
 
@@ -805,7 +797,7 @@ void handshake_kernel(char *puerto, char *ip){
 		destruir_men_comun(mensaje_inicial);
 	}else{
 		txt_write_in_file(cpu_file_log, "ERROR HANDSHAKE KERNEL \n");
-		printf("ERROR HANDSHAKE\n");
+		printf("	ERROR HANDSHAKE\n");
 	}
 }
 

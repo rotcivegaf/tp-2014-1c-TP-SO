@@ -91,7 +91,7 @@
 	//funciones del pcp
 	int32_t ingresar_new_cpu(int32_t listener_cpu);
 	void administrar_men_cpus(int32_t soc_cpu);
-	void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu);
+	void conec_cerrada_cpu(int32_t soc_cpu);
 	void manejador_sigusr1(int32_t soc_cpu,t_men_comun *men_cpu);
 	void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu);
 	void fin_ejecucion(int32_t tipo,int32_t socket_cpu, t_men_comun *men_cpu);
@@ -115,17 +115,17 @@
 
 	void umv_destrui_pcb(int32_t id_pcb);
 	void enviar_cpu_pcb_destruir(int32_t  soc,t_pcb *pcb);
-	void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado);
+	void recv_actualizar_pcb(int32_t soc_cpu, t_pcb *pcb_actualizar);
 
 	t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog);
 	t_pcb_otros *get_pcb_otros_exec(int32_t  id_proc);
 
 	void moverAblock(t_pcb_otros *pcb_peso);
-	void mover_pcb_exit(int32_t  soc_prog);
+	void mover_pcb_exit(int32_t soc_prog);
 	void pasar_pcb_exit(t_pcb_otros *pcb);
 	void pasar_pcbBlock_ready(int32_t id_pcb);
 
-	t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *cpu);
+	int32_t actualizar_pcb_y_bloq(t_cpu *aux_cpu);
 
 	//menu imprimir
 	void menu_imp();

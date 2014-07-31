@@ -14,10 +14,8 @@ pthread_mutex_t mutex_block = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exec = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_exit = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_uso_lista_cpu= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_io= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dicc_var= PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mutex_dicc_sem= PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t mutex_dispositivos_io= PTHREAD_MUTEX_INITIALIZER;
 
 sem_t cant_new, cant_ready, cant_exit;
 sem_t cant_multiprog, cant_cpu_libres;
@@ -179,11 +177,6 @@ void *pcp(){
 	while(quit_sistema){
 		read_fds = conj_soc_cpus;
 		socket_select(fdmax, &read_fds);
-		/*if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
-			txt_write_in_file(pcp_log,"Error en el select \n");
-			perror("PCP-select");
-			exit(1);
-		}*/
 		for(num_fd = 3; num_fd <= fdmax; num_fd++) {
 			if (FD_ISSET(num_fd, &read_fds)) {
 				if (num_fd == listener_cpu) { // Si los datos son en el srv que escucha cpus(se conecta una nueva cpu)
@@ -204,7 +197,7 @@ void administrar_men_cpus(int32_t soc_cpu){
 	t_men_comun *men_cpu = socket_recv_comun(soc_cpu);
 	switch(men_cpu->tipo){
 	case CONEC_CERRADA:
-		conec_cerrada_cpu(soc_cpu, men_cpu);
+		conec_cerrada_cpu(soc_cpu);
 		break;
 	case FIN_QUANTUM:
 		fin_quantum(soc_cpu, men_cpu);
@@ -267,16 +260,14 @@ int32_t ingresar_new_cpu(int32_t listener_cpu){
 	return new_soc_cpu;
 }
 
-void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
+void conec_cerrada_cpu(int32_t soc_cpu){
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
 
 	FD_CLR(soc_cpu, &conj_soc_cpus);
 	socket_cerrar(soc_cpu);
 
-	txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket nº:");
-	logear_int(pcp_log,soc_cpu);
-	txt_write_in_file(pcp_log,"\n");
+	txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket nº:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	printf("PCP-select: CPU desconectada socket nº%i\n", soc_cpu);
 
 	if (aux_cpu->id_prog_exec != 0){
@@ -285,9 +276,9 @@ void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
 		queue_push(colas->cola_ready,aux_pcb_otros);
 		sem_incre(&cant_ready);
 		pthread_mutex_unlock(&mutex_ready);
-	}else{
+	}else
 		sem_decre(&cant_cpu_libres);
-	}
+
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 	free(aux_cpu);
 }
@@ -295,7 +286,7 @@ void conec_cerrada_cpu(int32_t soc_cpu,t_men_comun *men_cpu){
 void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_semaforo *semaforo;
 	t_cpu *aux_cpu;
-	t_pcb_otros *aux_pcb_otros;
+
 	pthread_mutex_lock(&mutex_dicc_sem);
 
 	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
@@ -304,24 +295,25 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 			(semaforo->valor)--;
 			enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 		}else{
+			(semaforo->valor)--;
+			pthread_mutex_lock(&mutex_block);
 			pthread_mutex_lock(&mutex_uso_lista_cpu);
 			aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
-			pthread_mutex_unlock(&mutex_uso_lista_cpu);
+
 			enviar_men_comun_destruir(soc_cpu, SEM_BLOQUEADO, NULL, 0);
-			txt_write_in_file(pcp_log,"Se bloqueo al programa por un wait, con id ");
-			logear_int(pcp_log,aux_cpu->id_prog_exec);
-			txt_write_in_file(pcp_log,"/n");
-			aux_pcb_otros = actualizar_pcb_y_bloq(aux_cpu);
-			queue_push(semaforo->procesos,aux_pcb_otros);
+
+			txt_write_in_file(pcp_log,"Se bloqueo al programa por un wait, con id ");logear_int(pcp_log,aux_cpu->id_prog_exec);txt_write_in_file(pcp_log,"/n");
+
+			int32_t *id_proc = malloc(sizeof(int32_t));
+			*id_proc = actualizar_pcb_y_bloq(aux_cpu);
+			queue_push(semaforo->procesos,id_proc);
+			pthread_mutex_unlock(&mutex_block);
+			pthread_mutex_unlock(&mutex_uso_lista_cpu);
 		}
-		txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"WAIT por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}else{
 		llamada_erronea(soc_cpu, SEM_INEX);
-		txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"Error en WAIT (semaforo inexistente) por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
@@ -329,26 +321,23 @@ void wait(int32_t soc_cpu,t_men_comun *men_cpu){
 
 void signal(int32_t soc_cpu,t_men_comun *men_cpu){
 	t_semaforo *semaforo;
-	t_pcb_otros *aux_pcb_otros;
+	int32_t *proc_id;
 	pthread_mutex_lock(&mutex_dicc_sem);
 
 	semaforo = dictionary_get(dicc_sem,men_cpu->dato);
 
 	if(semaforo != NULL){
 		(semaforo->valor)++;
-		enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
 		if(queue_size(semaforo->procesos)>0){
-			aux_pcb_otros = queue_pop(semaforo->procesos);
-			pasar_pcbBlock_ready(aux_pcb_otros->pcb->id);
+			proc_id = queue_pop(semaforo->procesos);
+			pasar_pcbBlock_ready(*proc_id);
+			free(proc_id);
 		}
-		txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		enviar_men_comun_destruir(soc_cpu, SEM_OK, NULL, 0);
+		txt_write_in_file(pcp_log,"SIGNAL por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}else{
 		llamada_erronea(soc_cpu, SEM_INEX);
-		txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"Error en SIGNAL (semaforo inexistente) por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_sem);
@@ -369,8 +358,8 @@ void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu){
 	t_IO *aux_IO;
 
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
+	pthread_mutex_lock(&mutex_block);
 	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
-	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 
 	men = socket_recv_comun(soc_cpu);
 	int32_t cant_unidades = atoi(men->dato);
@@ -378,8 +367,6 @@ void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu){
 	t_IO_espera *espera = malloc(sizeof(t_IO_espera));
 	espera->id_prog = aux_cpu->id_prog_exec;
 	espera->unidades = cant_unidades;
-
-	pthread_mutex_lock(&mutex_io);
 
 	aux_IO = dictionary_get(dicc_disp_io, men_cpu->dato);
 	queue_push(aux_IO->procesos, espera);
@@ -389,7 +376,8 @@ void enviar_IO(int32_t soc_cpu, t_men_comun *men_cpu){
 
 	sem_incre(&(aux_IO->cont_cant_proc));
 
-	pthread_mutex_unlock(&mutex_io);
+	pthread_mutex_unlock(&mutex_uso_lista_cpu);
+	pthread_mutex_unlock(&mutex_block);
 
 	destruir_men_comun(men);
 }
@@ -398,31 +386,47 @@ void fin_quantum(int32_t soc_cpu, t_men_comun *men_cpu){
 	t_pcb_otros *aux_pcb_otros;
 
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
+
+	if (men_cpu->tam_dato == 1){//esto me dice que se a matado el cpu
+		t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
+
+		FD_CLR(soc_cpu, &conj_soc_cpus);
+		socket_cerrar(soc_cpu);
+
+		txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket nº:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
+		printf("PCP-select: CPU desconectada socket nº%i\n", soc_cpu);
+
+		t_pcb_otros *aux_pcb_otros = get_pcb_otros_exec(aux_cpu->id_prog_exec);
+		pthread_mutex_lock(&mutex_ready);
+		queue_push(colas->cola_ready,aux_pcb_otros);
+		sem_incre(&cant_ready);
+		pthread_mutex_unlock(&mutex_ready);
+
+		pthread_mutex_unlock(&mutex_uso_lista_cpu);
+		free(aux_cpu);
+		return;
+	}
+
+
 	t_cpu *aux_cpu = get_cpu_soc_cpu_remove(soc_cpu);
-	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 
 	// Actualizacion pcb
 	aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-	t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(soc_cpu);
 
-	actualizar_pcb(aux_pcb_otros->pcb,men_quantum_pcb->pcb);
-	destruir_quantum_pcb(men_quantum_pcb);
+	recv_actualizar_pcb(soc_cpu, aux_pcb_otros->pcb);
 
 	pthread_mutex_lock(&mutex_ready);
 	queue_push(colas->cola_ready,aux_pcb_otros);
 	sem_incre(&cant_ready);
 	pthread_mutex_unlock(&mutex_ready);
 
-	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	aux_cpu->id_prog_exec = 0;
 	aux_cpu->soc_prog = 0;
 	list_add(lista_cpu, aux_cpu);
 	sem_incre(&cant_cpu_libres);
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 
-	txt_write_in_file(pcp_log,"Termino un quantum del programa:");
-	logear_int(pcp_log,aux_pcb_otros->pcb->id);
-	txt_write_in_file(pcp_log,"\n");
+	txt_write_in_file(pcp_log,"Termino un quantum del programa:");logear_int(pcp_log,aux_pcb_otros->pcb->id);txt_write_in_file(pcp_log,"\n");
 }
 
 void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
@@ -436,14 +440,10 @@ void obtener_valor_compartida(int32_t soc_cpu, t_men_comun *men_obt_valor){
 		valor = dictionary_get(dicc_var, key);
 		string_valor = string_itoa(*valor);
 		enviar_men_comun_destruir(soc_cpu ,R_OBTENER_VALOR,string_valor,string_length(string_valor)+1);
-		txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"OBTENER VALOR por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}else{
 		llamada_erronea(soc_cpu, VAR_INEX);
-		txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"Error en OBTENER VALOR (var inexistente) por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 	}
 
 	pthread_mutex_unlock(&mutex_dicc_var);
@@ -468,9 +468,7 @@ void grabar_valor_compartida(int32_t soc_cpu, t_men_comun *men_gra_valor){
 		dictionary_put(dicc_var,key, valor);
 		pthread_mutex_unlock(&mutex_dicc_var);
 
-		txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");
-		logear_int(pcp_log,soc_cpu);
-		txt_write_in_file(pcp_log,"\n");
+		txt_write_in_file(pcp_log,"GRABAR VALOR por cpu con socket n°:");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"\n");
 		destruir_men_comun(men_valor);
 
 		enviar_men_comun_destruir(soc_cpu,R_GRABAR_VALOR,NULL,0);
@@ -507,22 +505,18 @@ void llamada_erronea(int32_t soc_cpu,int32_t tipo_error){
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 }
 
+
 void imprimir_valor(int32_t soc_cpu, t_men_comun *men_imp_valor){
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
 	t_cpu *aux_cpu = get_cpu(soc_cpu);
 	socket_send_comun(aux_cpu->soc_prog, men_imp_valor);
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 
-	txt_write_in_file(pcp_log,"IMPRIMIR_VALOR por cpu con socket");
-	logear_int(pcp_log,soc_cpu);
-	txt_write_in_file(pcp_log,"al programa con id ");
-	logear_int(pcp_log,aux_cpu->id_prog_exec);
-	txt_write_in_file(pcp_log,".Valor impreso: ");
-	logear_int(pcp_log,atoi(men_imp_valor->dato));
-	txt_write_in_file(pcp_log,"\n");
+	txt_write_in_file(pcp_log,"IMPRIMIR_VALOR por cpu con socket");logear_int(pcp_log,soc_cpu);txt_write_in_file(pcp_log,"al programa con id ");logear_int(pcp_log,aux_cpu->id_prog_exec);txt_write_in_file(pcp_log,".Valor impreso: ");logear_int(pcp_log,atoi(men_imp_valor->dato));txt_write_in_file(pcp_log,"\n");
 
 	enviar_men_comun_destruir(soc_cpu, R_IMPRIMIR,NULL,0);
 }
+
 
 void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
@@ -538,6 +532,7 @@ void imprimir_texto(int32_t soc, t_men_comun *men_imp_texto){
 
 	enviar_men_comun_destruir(soc, R_IMPRIMIR,NULL,0);
 }
+
 
 void fin_ejecucion(int32_t tipo,int32_t soc_cpu, t_men_comun *men_cpu){
 	pthread_mutex_lock(&mutex_uso_lista_cpu);
@@ -572,6 +567,7 @@ void fin_ejecucion(int32_t tipo,int32_t soc_cpu, t_men_comun *men_cpu){
 	pthread_mutex_unlock(&mutex_uso_lista_cpu);
 }
 
+
 void pasar_pcbBlock_ready(int32_t id_pcb){
 	int32_t i = 0;
 
@@ -589,9 +585,8 @@ void pasar_pcbBlock_ready(int32_t id_pcb){
 			pthread_mutex_unlock(&mutex_ready);
 			pthread_mutex_unlock(&mutex_block);
 			return;
-		}else {
+		}else
 			queue_push(colas->cola_block,pcb_aux);
-		}
 	}
 	printf("ERROR: No se ha encontrado el pcb del proc IDº%i en la cola block\n",id_pcb);
 	pthread_mutex_unlock(&mutex_block);
@@ -615,7 +610,7 @@ void mover_pcb_exit(int32_t soc_prog){
 	pthread_mutex_lock(&mutex_ready);
 	pthread_mutex_lock(&mutex_block);
 	pthread_mutex_lock(&mutex_exec);
-
+	//todo buscar los pscbs de progs blockeados y aumentar el semaforo
 	aux_pcb = buscar_pcb(colas->cola_new, soc_prog);
 	pasar_pcb_exit(aux_pcb);
 	aux_pcb = buscar_pcb(colas->cola_ready, soc_prog);
@@ -644,23 +639,32 @@ t_pcb_otros *buscar_pcb(t_queue *cola, int32_t soc_prog){
 	return NULL;
 }
 
-t_pcb_otros *actualizar_pcb_y_bloq(t_cpu *aux_cpu){
+int32_t actualizar_pcb_y_bloq(t_cpu *aux_cpu){
 	t_pcb_otros *aux_pcb_otros=get_pcb_otros_exec(aux_cpu->id_prog_exec);
-	t_pcb *pcb_recibido = socket_recv_quantum_pcb(aux_cpu->soc_cpu)->pcb;
-	actualizar_pcb(aux_pcb_otros->pcb,pcb_recibido);
 
-	pthread_mutex_lock(&mutex_uso_lista_cpu);
-	aux_cpu->id_prog_exec = 0;
-	aux_cpu->soc_prog = 0;
-	list_add(lista_cpu, aux_cpu);
-	sem_incre(&cant_cpu_libres);
-	pthread_mutex_unlock(&mutex_uso_lista_cpu);
+	recv_actualizar_pcb(aux_cpu->soc_cpu, aux_pcb_otros->pcb);
 
-	pthread_mutex_lock(&mutex_block);
+	t_men_comun *men_cerrar = socket_recv_comun(aux_cpu->soc_cpu);
+	int32_t cerrar_cpu = men_cerrar->tam_dato;
+
+	if (cerrar_cpu == 0){
+		aux_cpu->id_prog_exec = 0;
+		aux_cpu->soc_prog = 0;
+		list_add(lista_cpu, aux_cpu);
+		sem_incre(&cant_cpu_libres);
+	}else{
+		FD_CLR(aux_cpu->soc_cpu, &conj_soc_cpus);
+		socket_cerrar(aux_cpu->soc_cpu);
+
+		txt_write_in_file(pcp_log,"Cerro la conexion el cpu con socket nº:");logear_int(pcp_log,aux_cpu->soc_cpu);txt_write_in_file(pcp_log,"\n");
+		printf("PCP-select: CPU desconectada socket nº%i\n", aux_cpu->soc_cpu);
+
+		free(aux_cpu);
+	}
+	destruir_men_comun(men_cerrar);
 	queue_push(colas->cola_block,aux_pcb_otros);
-	pthread_mutex_unlock(&mutex_block);
 
-	return aux_pcb_otros;
+	return aux_pcb_otros->pcb->id;
 }
 
 t_pcb_otros *get_pcb_otros_exec(int32_t id_proc){
@@ -924,10 +928,14 @@ void enviar_cpu_pcb_destruir(int32_t soc,t_pcb *pcb){
 	destruir_quantum_pcb(men_pcb);
 }
 
-void actualizar_pcb(t_pcb *pcb, t_pcb *pcb_actualizado){
-	pcb->cant_var_cont_actual = pcb_actualizado->cant_var_cont_actual;
-	pcb->dir_cont_actual = pcb_actualizado->dir_cont_actual;
-	pcb->program_counter = pcb_actualizado->program_counter;
+void recv_actualizar_pcb(int32_t soc_cpu, t_pcb *pcb_actualizar){
+	t_men_quantum_pcb *men_quantum_pcb = socket_recv_quantum_pcb(soc_cpu);
+
+	pcb_actualizar->cant_var_cont_actual = men_quantum_pcb->pcb->cant_var_cont_actual;
+	pcb_actualizar->dir_cont_actual = men_quantum_pcb->pcb->dir_cont_actual;
+	pcb_actualizar->program_counter = men_quantum_pcb->pcb->program_counter;
+
+	destruir_quantum_pcb(men_quantum_pcb);
 }
 
 void imp_variables_compartidas(){
@@ -941,7 +949,7 @@ void imp_variables_compartidas(){
 
 void imp_semaforos(){
 	void _imp_sem(char* key, t_semaforo *un_sem){
-		printf("	ID:%s ,Valor:%i\n", key, un_sem->valor);
+		printf("	ID:%s ,Valor:%i, Cant de procesos:%i\n", key, un_sem->valor, queue_size(un_sem->procesos));
 	}
 	pthread_mutex_lock(&mutex_dicc_sem);
 	dictionary_iterator(dicc_sem, (void *)_imp_sem);
@@ -1067,6 +1075,61 @@ void handshake_umv(){
 	destruir_men_comun(men_hs);
 }
 
+void imprimir_sem_blocks(){
+	if (pthread_mutex_trylock(&mutex_new) != 0)
+		printf("semaforo de la cola: NEW, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_new);
+
+	if (pthread_mutex_trylock(&mutex_ready) != 0)
+		printf("semaforo de la cola: READY, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_ready);
+
+	if (pthread_mutex_trylock(&mutex_block) != 0)
+		printf("semaforo de la cola: BLOCK, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_block);
+
+	if (pthread_mutex_trylock(&mutex_exec) != 0)
+		printf("semaforo de la cola: EXEC, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_exec);
+
+	if (pthread_mutex_trylock(&mutex_exit) != 0)
+		printf("semaforo de la cola: EXIT, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_exit);
+
+	if (pthread_mutex_trylock(&mutex_uso_lista_cpu) != 0)
+		printf("semaforo de la cola: LISTA_CPU, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_uso_lista_cpu);
+
+	if (pthread_mutex_trylock(&mutex_dicc_var) != 0)
+		printf("semaforo de la cola: DICC_VAR, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_dicc_var);
+
+	if (pthread_mutex_trylock(&mutex_dicc_sem) != 0)
+		printf("semaforo de la cola: DICC_SEM, blockeado\n");
+	else
+		pthread_mutex_unlock(&mutex_dicc_sem);
+
+	int valor_sem;
+
+	sem_getvalue(&cant_new, &valor_sem);
+	printf("cant new:%i\n",valor_sem);
+	sem_getvalue(&cant_ready, &valor_sem);
+	printf("cant ready:%i\n",valor_sem);
+	sem_getvalue(&cant_exit, &valor_sem);
+	printf("cant exit:%i\n",valor_sem);
+	sem_getvalue(&cant_multiprog, &valor_sem);
+	printf("cant multiprog:%i\n",valor_sem);
+	sem_getvalue(&cant_cpu_libres, &valor_sem);
+	printf("cant cpu libres:%i\n",valor_sem);
+}
+
 void menu_imp(){
 	char opcion;
 	int un_int;
@@ -1075,8 +1138,11 @@ void menu_imp(){
 		do {
 			scanf("%c", &opcion);
 		} while (opcion != 'e' && opcion != 'c' && opcion != 'v' && opcion != 's' && opcion != 'Q'
-				&& opcion != 'k' && opcion != 'm' && opcion != 'r');
+				&& opcion != 'k' && opcion != 'm' && opcion != 'r' && opcion != 'M');
 		switch (opcion) {
+		case 'M':
+			imprimir_sem_blocks();
+			break;
 		case 'e':
 			quit_sistema = 0;
 			break;
@@ -1121,8 +1187,10 @@ void cambiar_multiprog(int miltiprog_nueva){
 	dif = miltiprog_nueva - miltiprog_actual;
 
 	if (dif > 0){
-		for(i=0;i<dif;i++)
+		for(i=0;i<dif;i++){
+			printf("incre\n");
 			sem_incre(&cant_multiprog);
+		}
 	}else{
 		if ((dif*(-1)) <= valor_sem){
 			for(i=0;i<(dif*(-1));i++)
@@ -1295,10 +1363,8 @@ void finalizo_ejecucion(){
 	pthread_mutex_destroy(&mutex_exec);
 	pthread_mutex_destroy(&mutex_exit);
 	pthread_mutex_destroy(&mutex_uso_lista_cpu);
-	pthread_mutex_destroy(&mutex_io);
 	pthread_mutex_destroy(&mutex_dicc_var);
 	pthread_mutex_destroy(&mutex_dicc_sem);
-	pthread_mutex_destroy(&mutex_dispositivos_io);
 	queue_destroy(colas->cola_block);
 	queue_destroy(colas->cola_exec);
 	queue_destroy(colas->cola_exit);
