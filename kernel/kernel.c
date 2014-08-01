@@ -790,7 +790,6 @@ void *manejador_ready_exec(){
 		}
 
 		enviar_cpu_pcb_destruir(aux_cpu->soc_cpu,aux_pcb_otros->pcb);
-		printf("Dir seg stack: %i \n", aux_pcb_otros->pcb->dir_seg_stack);
 
 		aux_cpu->id_prog_exec = aux_pcb_otros->pcb->id;
 		aux_cpu->soc_prog = aux_pcb_otros->n_socket;
@@ -817,7 +816,7 @@ t_pcb *crear_pcb_escribir_seg_UMV(t_men_comun *men_cod_prog ,t_resp_sol_mem *res
 
 	// Escribe el segmento de codigo
 	enviar_umv_mem_seg_destruir(soc_umv , ESCRIBIR_SEG, _CONTADOR_PROGRAMA, 0);
-	enviar_men_comun_destruir(soc_umv , CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato + 1);
+	enviar_men_comun_destruir(soc_umv , CODIGO_SCRIPT,men_cod_prog->dato,men_cod_prog->tam_dato);
 	recibir_resp_escrbir_seg();
 
 	// Escribe el segmento de indice de etiquetas
@@ -866,7 +865,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog){
 	int32_t tam = 0, resp;
 
 	//pido mem para el codigo del script
-	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_COD,_CONTADOR_PROGRAMA,men_cod_prog->tam_dato +1);
+	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_COD,_CONTADOR_PROGRAMA,men_cod_prog->tam_dato);
 	resp = gestionar_resp_sol_mem();
 	if(resp == -1)
 		return NULL;
@@ -890,9 +889,7 @@ t_resp_sol_mem * solicitar_mem(t_men_comun *men_cod_prog){
 	resp_sol->dir_indice_codigo = resp;
 
 	//pido mem para el stack
-	//usleep(4000*1000);
 	enviar_umv_mem_seg_destruir(soc_umv , PED_MEM_SEG_STACK , _CONTADOR_PROGRAMA, _TAMANIO_STACK);
-
 	resp = gestionar_resp_sol_mem();
 	if(resp == -1)
 		return NULL;
