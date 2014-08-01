@@ -701,6 +701,7 @@ void *manejador_exit(){
 		if (aux_pcb_otros->tipo_fin_ejecucion != -1)
 			enviar_men_comun_destruir(aux_pcb_otros->n_socket, aux_pcb_otros->tipo_fin_ejecucion,NULL,0);
 		umv_destrui_pcb(aux_pcb_otros->pcb->id);
+		socket_cerrar(aux_pcb_otros->soc_prog);
 		free(aux_pcb_otros->pcb);
 		free(aux_pcb_otros);
 	}
